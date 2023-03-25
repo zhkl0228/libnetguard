@@ -1,5 +1,6 @@
 package com.github.netguard;
 
+import eu.faircode.netguard.ServiceSinkhole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +25,9 @@ public class VpnServer {
         this.serverSocket = new ServerSocket(port);
     }
 
-    private final List<ProxyVpnRunnable> clients = new ArrayList<>();
+    private final List<ProxyVpn> clients = new ArrayList<>();
+
+    private boolean useNetguard = true;
 
     public void start() {
         if (thread != null) {
@@ -36,9 +39,21 @@ public class VpnServer {
                 while (!shutdown) {
                     try {
                         Socket socket = serverSocket.accept();
-                        ProxyVpnRunnable runnable = new ProxyVpnRunnable(socket, clients);
-                        new Thread(runnable, "socket: " + socket).start();
-                        clients.add(runnable);
+                        ProxyVpn vpn = null;
+                        if (useNetguard) {
+                            try {
+                                vpn = new ServiceSinkhole(socket, clients);
+                            } catch(UnsatisfiedLinkError e) {
+                                useNetguard = false;
+                            }
+                        }
+                        if (vpn == null) {
+                            vpn = new ProxyVpnRunnable(socket, clients);
+                        }
+                        Thread vpnThread = new Thread(vpn, "socket: " + socket);
+                        vpnThread.setPriority(Thread.MAX_PRIORITY);
+                        vpnThread.start();
+                        clients.add(vpn);
                     } catch (SocketException ignored) {
                     }catch (IOException e) {
                         log.warn("accept", e);
@@ -61,8 +76,8 @@ public class VpnServer {
             serverSocket.close();
         } catch (IOException ignored) {
         }
-        for (ProxyVpnRunnable client : clients) {
-            client.stop();
+        for (ProxyVpn vpn : clients) {
+            vpn.stop();
         }
         if (thread != null) {
             try {

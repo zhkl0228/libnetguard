@@ -1,13 +1,20 @@
 package eu.faircode.netguard;
 
+import com.github.netguard.ProxyVpn;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketImpl;
+import java.util.List;
 
-public class ServiceSinkhole {
+public class ServiceSinkhole extends ProxyVpn {
 
     private static final Logger log = LoggerFactory.getLogger(ServiceSinkhole.class);
 
@@ -18,9 +25,92 @@ public class ServiceSinkhole {
         }
     }
 
-    public ServiceSinkhole() {
+    private static Method getImpl, getFileDescriptor;
+    private static Field fdField;
+
+    private final Socket socket;
+    private final long jni_context;
+    private final int fd;
+
+    public ServiceSinkhole(Socket socket, List<ProxyVpn> clients) {
+        super(clients);
         int mtu = jni_get_mtu();
-        log.debug("mtu={}", mtu);
+
+        this.jni_context = jni_init(19);
+        try {
+            if (getImpl == null) {
+                getImpl = Socket.class.getDeclaredMethod("getImpl");
+                getImpl.setAccessible(true);
+            }
+            if (getFileDescriptor == null) {
+                getFileDescriptor = SocketImpl.class.getDeclaredMethod("getFileDescriptor");
+                getFileDescriptor.setAccessible(true);
+            }
+            if (fdField == null) {
+                fdField = FileDescriptor.class.getDeclaredField("fd");
+                fdField.setAccessible(true);
+            }
+            SocketImpl impl = (SocketImpl) getImpl.invoke(socket);
+            FileDescriptor fileDescriptor = (FileDescriptor) getFileDescriptor.invoke(impl);
+            if (!fileDescriptor.valid()) {
+                throw new IllegalStateException("Invalid fd: " + fileDescriptor);
+            }
+            this.fd = (Integer) fdField.get(fileDescriptor);
+        } catch (Exception e) {
+            throw new IllegalStateException("init ServiceSinkhole", e);
+        }
+        this.socket = socket;
+        jni_start(jni_context, log.isDebugEnabled() ? 3 : 6);
+        log.debug("mtu={}, socket={}, fd={}", mtu, socket, fd);
+    }
+
+    @Override
+    protected synchronized void stop() {
+        if (tunnelThread != null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Stopping tunnel thread: context=0x{}, obj={}", Long.toHexString(jni_context), this);
+            }
+
+            jni_stop(jni_context);
+
+            Thread thread = tunnelThread;
+            if (thread != null) {
+                try {
+                    thread.join();
+                } catch (InterruptedException ignored) {
+                }
+            }
+            tunnelThread = null;
+
+            jni_clear(jni_context);
+
+            log.debug("Stopped tunnel thread");
+        }
+    }
+
+    private Thread tunnelThread;
+
+    @Override
+    public void run() {
+        tunnelThread = Thread.currentThread();
+
+        log.debug("Vpn thread starting");
+
+        log.debug("Running tunnel");
+        jni_run(jni_context, fd, false, 3);
+        log.debug("Tunnel exited");
+
+        try {
+            socket.close();
+        } catch (IOException ignored) {
+        }
+        log.debug("Vpn thread shutting down");
+
+        clients.remove(this);
+
+        tunnelThread = null;
+
+        jni_done(jni_context);
     }
 
     private native long jni_init(int sdk);
@@ -62,7 +152,7 @@ public class ServiceSinkhole {
     // Called from native code
     @SuppressWarnings("unused")
     private void logPacket(Packet packet) {
-        // Log.d(TAG, "logPacket packet " + packet + ", data=" + packet.data);
+         log.debug("logPacket packet {}, data={}", packet, packet.data);
     }
 
     // Called from native code
@@ -87,7 +177,7 @@ public class ServiceSinkhole {
         InetSocketAddress remote = new InetSocketAddress(daddr, dport);
 
         int uid = SYSTEM_UID; // cm.getConnectionOwnerUid(protocol, local, remote);
-        log.info("Get uid local={} remote={}, uid={}", local, remote, uid);
+        log.debug("Get uid local={} remote={}, uid={}", local, remote, uid);
         return uid;
     }
 
@@ -128,7 +218,9 @@ public class ServiceSinkhole {
             }
         }
 
-        log.debug("isAddressAllowed allowed={}, packet: {}, offset={}ms", allowed, packet, (System.currentTimeMillis() - start));
+        if (log.isDebugEnabled()) {
+            log.debug("isAddressAllowed allowed={}, packet: {}, offset={}ms", allowed, packet, (System.currentTimeMillis() - start));
+        }
 
         return allowed;
     }
@@ -141,12 +233,13 @@ public class ServiceSinkhole {
     // Called from native code
     @SuppressWarnings("unused")
     private void accountUsage(Usage usage) {
-        // Log.d(TAG, "accountUsage usage=" + usage);
+         log.debug("accountUsage usage={}", usage);
     }
 
     // Called from native code
     @SuppressWarnings("unused")
     private void notifyPacket(int uid, byte[] packet) {
+        log.debug("notifyPacket uid={}", uid);
     }
 
 }

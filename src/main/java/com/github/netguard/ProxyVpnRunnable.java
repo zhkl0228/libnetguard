@@ -19,7 +19,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-class ProxyVpnRunnable implements Runnable {
+class ProxyVpnRunnable extends ProxyVpn {
 
     private static final Logger log = LoggerFactory.getLogger(ProxyVpnRunnable.class);
 
@@ -38,13 +38,11 @@ class ProxyVpnRunnable implements Runnable {
 
     private final ByteBuffer packet = ByteBuffer.allocate(65536);
 
-    private final List<ProxyVpnRunnable> clients;
-
     private final ExecutorService pingThreadPool;
 
-    ProxyVpnRunnable(Socket socket, List<ProxyVpnRunnable> clients) throws IOException {
+    ProxyVpnRunnable(Socket socket, List<ProxyVpn> clients) throws IOException {
+        super(clients);
         this.socket = socket;
-        this.clients = clients;
         this.vpnReadStream = new DataInputStream(socket.getInputStream());
 
         // Packets from upstream servers, received by this VPN
@@ -69,6 +67,7 @@ class ProxyVpnRunnable implements Runnable {
 
     private boolean running;
 
+    @Override
     public void run() {
         if (running) {
             log.warn("Vpn runnable started, but it's already running");
@@ -117,7 +116,8 @@ class ProxyVpnRunnable implements Runnable {
         clients.remove(this);
     }
 
-    synchronized void stop() {
+    @Override
+    protected synchronized void stop() {
         if (running) {
             running = false;
             try {
