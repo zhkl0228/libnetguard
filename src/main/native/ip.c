@@ -53,7 +53,18 @@ int check_tun(const struct arguments *args,
     // Check tun read
     if (ev->events & EPOLLIN) {
         uint8_t *buffer = ng_malloc(get_mtu(), "tun read");
-        ssize_t length = read(args->tun, buffer, get_mtu());
+        uint16_t count = 0;
+        ssize_t size = read(args->tun, &count, 2);
+        if(size != 2) {
+            // tun eof
+            ng_free(buffer, __FILE__, __LINE__);
+
+            log_android(ANDROID_LOG_ERROR, "tun %d empty read size", args->tun);
+            report_exit(args, "tun %d empty read size", args->tun);
+            return -1;
+        }
+        count = ntohs(count);
+        ssize_t length = read(args->tun, buffer, count);
         if (length < 0) {
             ng_free(buffer, __FILE__, __LINE__);
 
@@ -67,7 +78,7 @@ int check_tun(const struct arguments *args,
                             args->tun, errno, strerror(errno));
                 return -1;
             }
-        } else if (length > 0) {
+        } else if (length == count) {
             if (length > max_tun_msg) {
                 max_tun_msg = length;
                 log_android(ANDROID_LOG_WARN, "Maximum tun msg length %d", max_tun_msg);

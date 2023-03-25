@@ -1097,6 +1097,15 @@ void ng_dump() {
                         ++r, alloc[c].tag, ctime(&alloc[c].time));
 }
 
+ssize_t write_tun(int fd, const void *buffer, size_t size) {
+    uint16_t count = htons((uint16_t) size);
+    ssize_t res = write(fd, &count, 2);
+    if(res != 2) {
+        return -1;
+    }
+    return write(fd, buffer, size);
+}
+
 JNIEXPORT void JNICALL
 Java_eu_faircode_netguard_Util_dump_1memory_1profile(JNIEnv *env, jclass type) {
 #ifdef PROFILE_MEMORY

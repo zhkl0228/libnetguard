@@ -530,7 +530,7 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
                 "UDP sending to tun %d from %s/%u to %s/%u data %u",
                 args->tun, dest, ntohs(cur->dest), source, ntohs(cur->source), len);
 
-    ssize_t res = write(args->tun, buffer, len);
+    ssize_t res = write_tun(args->tun, buffer, len);
 
     // Write PCAP record
     if (res >= 0) {

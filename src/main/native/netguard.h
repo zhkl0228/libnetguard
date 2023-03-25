@@ -604,3 +604,5 @@ void *ng_realloc(void *__ptr, size_t __byte_count, const char *tag);
 void ng_free(void *__ptr, const char *file, int line);
 
 void ng_dump();
+
+ssize_t write_tun(int, const void *, size_t);

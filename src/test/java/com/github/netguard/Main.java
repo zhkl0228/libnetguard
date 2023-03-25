@@ -8,8 +8,12 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) throws IOException {
-        ServiceSinkhole serviceSinkhole = new ServiceSinkhole();
-        System.out.println(serviceSinkhole);
+        try {
+            ServiceSinkhole serviceSinkhole = new ServiceSinkhole();
+            System.out.println(serviceSinkhole);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
         VpnServer vpnServer = new VpnServer();
         vpnServer.start();

@@ -1305,7 +1305,7 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
                 ntohl(tcp->ack_seq) - cur->remote_start,
                 datalen);
 
-    ssize_t res = write(args->tun, buffer, len);
+    ssize_t res = write_tun(args->tun, buffer, len);
 
     // Write pcap record
     if (res >= 0) {
