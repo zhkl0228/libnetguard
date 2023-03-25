@@ -19,8 +19,8 @@ package tech.httptoolkit.android.vpn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
@@ -34,12 +34,12 @@ public class ClientPacketWriter implements Runnable {
 
 	private static final Logger log = LoggerFactory.getLogger(ClientPacketWriter.class);
 
-	private final FileOutputStream clientWriter;
+	private final OutputStream clientWriter;
 
 	private volatile boolean shutdown = false;
 	private final BlockingDeque<byte[]> packetQueue = new LinkedBlockingDeque<>();
 
-	public ClientPacketWriter(FileOutputStream clientWriter) {
+	public ClientPacketWriter(OutputStream clientWriter) {
 		this.clientWriter = clientWriter;
 	}
 

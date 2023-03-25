@@ -20,7 +20,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.socket.DataConst;
 import tech.httptoolkit.android.vpn.socket.ICloseSession;
-import tech.httptoolkit.android.vpn.socket.SocketProtector;
 import tech.httptoolkit.android.vpn.util.PacketUtil;
 
 import java.io.IOException;
@@ -44,7 +43,6 @@ public class SessionManager implements ICloseSession {
 	private static final Logger log = LoggerFactory.getLogger(SessionManager.class);
 
 	private final Map<String, Session> table = new ConcurrentHashMap<>();
-	private final SocketProtector protector = SocketProtector.getInstance();
 
 	/**
 	 * keep java garbage collector from collecting a session
@@ -129,7 +127,6 @@ public class SessionManager implements ICloseSession {
 		channel = DatagramChannel.open();
 		channel.socket().setSoTimeout(0);
 		channel.configureBlocking(false);
-		protector.protect(channel.socket());
 
 		session.setChannel(channel);
 
@@ -171,7 +168,6 @@ public class SessionManager implements ICloseSession {
 		String ips = PacketUtil.intToIPAddress(ip);
 		log.debug("created new SocketChannel for {}", key);
 
-		protector.protect(channel.socket());
 		log.debug("Protected new SocketChannel");
 
 		session.setChannel(channel);
