@@ -103,7 +103,7 @@ class SocketChannelReader {
 		}catch(ClosedChannelException e){
 			log.error("ClosedChannelException reading SocketChannel", e);
 		} catch (IOException e) {
-			log.error("Error reading data from SocketChannel", e);
+			log.debug("Error reading data from SocketChannel", e);
 			session.setAbortingConnection(true);
 		}
 	}

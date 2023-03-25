@@ -57,7 +57,7 @@ public class SocketNIODataService implements Runnable {
 				? ((DatagramChannel) channel).isConnected()
 				: ((SocketChannel) channel).isConnected();
 
-		log.info("Registering new session: {}", session);
+		log.debug("Registering new session: {}", session);
 
 		Lock selectorLock = lockSelector(selector);
 		try {
@@ -112,7 +112,7 @@ public class SocketNIODataService implements Runnable {
 	}
 
 	private void runTask(){
-		log.info("NIO selector is running...");
+		log.debug("NIO selector is running...");
 		
 		while(!shutdown){
 			try {
@@ -164,7 +164,7 @@ public class SocketNIODataService implements Runnable {
 				nioHandlingLock.unlock();
 			}
 		}
-		log.info("NIO selector shutdown");
+		log.debug("NIO selector shutdown");
 	}
 
 	private void processSelectionKey(SelectionKey key) throws IOException {

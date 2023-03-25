@@ -142,7 +142,7 @@ public class SessionHandler {
 			Session session = manager.getSessionByKey(key);
 
 			if (session == null) {
-				log.warn("Ack for unknown session: {}", key);
+				log.debug("Ack for unknown session: {}", key);
 				if (tcpheader.isFIN()) {
 					sendLastAck(ipHeader, tcpheader);
 				} else if (!tcpheader.isRST()) {

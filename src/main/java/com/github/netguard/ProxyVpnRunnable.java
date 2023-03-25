@@ -7,8 +7,9 @@ import tech.httptoolkit.android.vpn.SessionHandler;
 import tech.httptoolkit.android.vpn.SessionManager;
 import tech.httptoolkit.android.vpn.socket.SocketNIODataService;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -22,7 +23,7 @@ class ProxyVpnRunnable implements Runnable {
     private final Socket socket;
 
     // Packets from device apps downstream, heading upstream via this VPN
-    private final InputStream vpnReadStream;
+    private final DataInputStream vpnReadStream;
 
     private final ClientPacketWriter vpnPacketWriter;
     private final Thread vpnPacketWriterThread;
@@ -39,11 +40,11 @@ class ProxyVpnRunnable implements Runnable {
     ProxyVpnRunnable(Socket socket, List<ProxyVpnRunnable> clients) throws IOException {
         this.socket = socket;
         this.clients = clients;
-        this.vpnReadStream = socket.getInputStream();
+        this.vpnReadStream = new DataInputStream(socket.getInputStream());
 
         // Packets from upstream servers, received by this VPN
         OutputStream vpnWriteStream = socket.getOutputStream();
-        this.vpnPacketWriter = new ClientPacketWriter(vpnWriteStream);
+        this.vpnPacketWriter = new ClientPacketWriter(new DataOutputStream(vpnWriteStream));
 
         this.vpnPacketWriterThread = new Thread(vpnPacketWriter);
         this.nioService = new SocketNIODataService(vpnPacketWriter);
@@ -59,7 +60,7 @@ class ProxyVpnRunnable implements Runnable {
             log.warn("Vpn runnable started, but it's already running");
             return;
         }
-        log.info("Vpn thread starting");
+        log.debug("Vpn thread starting");
 
         dataServiceThread.start();
         vpnPacketWriterThread.start();
@@ -69,13 +70,14 @@ class ProxyVpnRunnable implements Runnable {
             try {
                 byte[] data = packet.array();
 
-                int length = vpnReadStream.read(data);
+                int length = vpnReadStream.readUnsignedShort();
+                vpnReadStream.readFully(data, 0, length);
                 if (length > 0) {
                     try {
                         packet.limit(length);
                         handler.handlePacket(packet);
                     } catch (Exception e) {
-                        log.error("handlePacket", e);
+                        log.debug("handlePacket", e);
                     }
 
                     packet.clear();
@@ -85,7 +87,10 @@ class ProxyVpnRunnable implements Runnable {
             } catch (InterruptedException e) {
                 log.info("Sleep interrupted", e);
             } catch (IOException e) {
-                log.info("Read interrupted", e);
+                log.debug("Read interrupted", e);
+                if (running) {
+                    stop();
+                }
             }
         }
 
@@ -93,12 +98,12 @@ class ProxyVpnRunnable implements Runnable {
             socket.close();
         } catch (IOException ignored) {
         }
-        log.info("Vpn thread shutting down");
+        log.debug("Vpn thread shutting down");
 
         clients.remove(this);
     }
 
-    void stop() {
+    synchronized void stop() {
         if (running) {
             running = false;
             try {
@@ -111,7 +116,7 @@ class ProxyVpnRunnable implements Runnable {
             vpnPacketWriter.shutdown();
             vpnPacketWriterThread.interrupt();
         } else {
-            log.warn("Vpn runnable stopped, but it's not running");
+            log.debug("Vpn runnable stopped, but it's not running");
         }
     }
 
