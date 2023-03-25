@@ -1,13 +1,27 @@
 package eu.faircode.netguard;
 
+import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 
 public class ServiceSinkhole {
 
     private static final Logger log = LoggerFactory.getLogger(ServiceSinkhole.class);
+
+    static {
+        try {
+            NativeLoader.loadLibrary("netguard");
+        } catch (IOException ignored) {
+        }
+    }
+
+    public ServiceSinkhole() {
+        int mtu = jni_get_mtu();
+        log.debug("mtu={}", mtu);
+    }
 
     private native long jni_init(int sdk);
 
