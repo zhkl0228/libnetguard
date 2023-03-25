@@ -14,6 +14,9 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 class ProxyVpnRunnable implements Runnable {
@@ -37,6 +40,8 @@ class ProxyVpnRunnable implements Runnable {
 
     private final List<ProxyVpnRunnable> clients;
 
+    private final ExecutorService pingThreadPool;
+
     ProxyVpnRunnable(Socket socket, List<ProxyVpnRunnable> clients) throws IOException {
         this.socket = socket;
         this.clients = clients;
@@ -49,8 +54,17 @@ class ProxyVpnRunnable implements Runnable {
         this.vpnPacketWriterThread = new Thread(vpnPacketWriter);
         this.nioService = new SocketNIODataService(vpnPacketWriter);
         this.dataServiceThread = new Thread(nioService, "Socket NIO thread: " + socket);
+
+        // Pool of threads to synchronously proxy ICMP ping requests in the background. We need to
+        // carefully limit these, or a ping flood can cause us big big problems.
+        this.pingThreadPool = new ThreadPoolExecutor(
+                1, 20, // 1 - 20 parallel pings max
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<Runnable>(),
+                new ThreadPoolExecutor.DiscardPolicy() // Replace running pings if there's too many
+        );
         SessionManager manager = new SessionManager();
-        this.handler = new SessionHandler(manager, nioService, vpnPacketWriter);
+        this.handler = new SessionHandler(manager, nioService, vpnPacketWriter, pingThreadPool);
     }
 
     private boolean running;
@@ -115,6 +129,8 @@ class ProxyVpnRunnable implements Runnable {
 
             vpnPacketWriter.shutdown();
             vpnPacketWriterThread.interrupt();
+
+            pingThreadPool.shutdownNow();
         } else {
             log.debug("Vpn runnable stopped, but it's not running");
         }

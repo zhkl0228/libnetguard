@@ -111,11 +111,7 @@ class SocketChannelReader {
 	private void sendToRequester(ByteBuffer buffer, int dataSize, Session session){
 		// Last piece of data is usually smaller than MAX_RECEIVE_BUFFER_SIZE. We use this as a
 		// trigger to set PSH on the resulting TCP packet that goes to the VPN.
-		if (dataSize < DataConst.MAX_RECEIVE_BUFFER_SIZE) {
-			session.setHasReceivedLastSegment(true);
-		} else {
-			session.setHasReceivedLastSegment(false);
-		}
+		session.setHasReceivedLastSegment(dataSize < DataConst.MAX_RECEIVE_BUFFER_SIZE);
 
 		buffer.limit(dataSize);
 		buffer.flip();

@@ -44,7 +44,9 @@ public class ClientPacketWriter implements Runnable {
 	}
 
 	public void write(byte[] data) {
-		if (data.length > 30000) throw new Error("Packet too large");
+		if (data.length > 30000) {
+			throw new IllegalStateException("Packet too large");
+		}
 		packetQueue.addLast(data);
 	}
 
