@@ -115,6 +115,10 @@ struct context {
     int stopping;
     int sdk;
     struct ng_session *ng_session;
+    uint16_t read; // packet data read count: include 2 bytes header.
+    uint16_t packet_size;
+    uint8_t *packet;
+    uint8_t *packet_ready;
 };
 
 struct arguments {

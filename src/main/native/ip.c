@@ -33,6 +33,67 @@ uint16_t get_default_mss(int version) {
         return (uint16_t) (get_mtu() - sizeof(struct ip6_hdr) - sizeof(struct tcphdr));
 }
 
+int read_packet(const struct arguments *args) {
+    bool check_retry = true;
+    struct context *ctx = args->ctx;
+    if(ctx->read < 2) {
+        ssize_t size = read(args->tun, &ctx->packet[ctx->read], 2 - ctx->read);
+        if(size == 0) {
+            if (errno == EINTR || errno == EAGAIN)
+                // Retry later
+                return 0;
+            else {
+                report_exit(args, "tun %d read size error %d: %s",
+                            args->tun, errno, strerror(errno));
+                return -1;
+            }
+        }
+        check_retry = false;
+        ctx->read += size;
+        if(ctx->read == 2) {
+            uint16_t *ptr = (uint16_t *) ctx->packet;
+            ctx->packet_size = ntohs(*ptr);
+        } else {
+            if(ctx->read > 2) {
+                log_android(ANDROID_LOG_ERROR, "read packet size failed.");
+                report_exit(args, "read packet size failed.");
+                return -1;
+            }
+            return 0;
+        }
+    }
+    ssize_t size = read(args->tun, &ctx->packet[ctx->read - 2], ctx->packet_size + 2 - ctx->read);
+    if(size == 0) {
+        if(check_retry) {
+            if (errno == EINTR || errno == EAGAIN)
+                // Retry later
+                return 0;
+            else {
+                report_exit(args, "tun %d read packet error %d: %s",
+                            args->tun, errno, strerror(errno));
+                return -1;
+            }
+        }
+        return 0;
+    } else if(size < 0) {
+        log_android(ANDROID_LOG_ERROR, "read packet EOF.");
+        report_exit(args, "read packet EOF.");
+        return -1;
+    } else {
+        ctx->read += size;
+        if(ctx->read == ctx->packet_size + 2) {
+            ctx->packet_ready = ctx->packet;
+            return 0;
+        } else if(ctx->read < ctx->packet_size + 2) {
+            return 0;
+        } else {
+            log_android(ANDROID_LOG_ERROR, "read packet failed.");
+            report_exit(args, "read packet failed.");
+            return -1;
+        }
+    }
+}
+
 int check_tun(const struct arguments *args,
               const struct epoll_event *ev,
               const int epoll_fd,
@@ -52,50 +113,18 @@ int check_tun(const struct arguments *args,
 
     // Check tun read
     if (ev->events & EPOLLIN) {
-        uint8_t *buffer = ng_malloc(get_mtu(), "tun read");
-        uint16_t count = 0;
-        ssize_t size = read(args->tun, &count, 2);
-        if(size != 2) {
-            // tun eof
-            ng_free(buffer, __FILE__, __LINE__);
-
-            log_android(ANDROID_LOG_ERROR, "tun %d empty read count=0x%x, size=%d", args->tun, ntohs(count), size);
-            report_exit(args, "tun %d empty read size: 0x%x", args->tun, size);
+        int code = read_packet(args);
+        if(code == -1) {
             return -1;
         }
-        count = ntohs(count);
-        ssize_t length = read(args->tun, buffer, count);
-        log_android(ANDROID_LOG_DEBUG, "read tun %d, count=%d, size=%d, length=%ld", args->tun, count, size, length);
-        if (length < 0) {
-            ng_free(buffer, __FILE__, __LINE__);
-
-            log_android(ANDROID_LOG_ERROR, "tun %d read error %d: %s",
-                        args->tun, errno, strerror(errno));
-            if (errno == EINTR || errno == EAGAIN)
-                // Retry later
-                return 0;
-            else {
-                report_exit(args, "tun %d read error %d: %s",
-                            args->tun, errno, strerror(errno));
-                return -1;
-            }
-        } else if (length == count) {
-            if (length > max_tun_msg) {
-                max_tun_msg = length;
-                log_android(ANDROID_LOG_WARN, "Maximum tun msg length %d", max_tun_msg);
-            }
-
+        struct context *ctx = args->ctx;
+        if(ctx->packet_ready != NULL) {
+            log_android(ANDROID_LOG_DEBUG, "read tun %d, read=%d, packet_size=%d", args->tun, ctx->read, ctx->packet_size);
             // Handle IP from tun
-            handle_ip(args, buffer, (size_t) length, epoll_fd, sessions, maxsessions);
-
-            ng_free(buffer, __FILE__, __LINE__);
-        } else {
-            // tun eof
-            ng_free(buffer, __FILE__, __LINE__);
-
-            log_android(ANDROID_LOG_ERROR, "tun %d empty read", args->tun);
-            report_exit(args, "tun %d empty read", args->tun);
-            return -1;
+            handle_ip(args, ctx->packet_ready, (size_t) ctx->packet_size, epoll_fd, sessions, maxsessions);
+            ctx->read = 0;
+            ctx->packet_size = 0;
+            ctx->packet_ready = NULL;
         }
     }
 

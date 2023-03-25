@@ -112,6 +112,10 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1init(
         JNIEnv *env, jobject instance, jint sdk) {
     struct context *ctx = ng_calloc(1, sizeof(struct context), "init");
     ctx->sdk = sdk;
+    ctx->read = 0;
+    ctx->packet_size = 0;
+    ctx->packet = ng_malloc(get_mtu(), "tun read");
+    ctx->packet_ready = NULL;
 
     loglevel = ANDROID_LOG_WARN;
 
@@ -336,6 +340,8 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1done(
         JNIEnv *env, jobject instance, jlong context) {
     struct context *ctx = (struct context *) (long) context;
     log_android(ANDROID_LOG_INFO, "Done");
+
+    ng_free(ctx->buffer, __FILE__, __LINE__);
 
     clear(ctx);
 
