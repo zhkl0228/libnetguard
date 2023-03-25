@@ -36,7 +36,7 @@ public class ServiceSinkhole extends ProxyVpn {
         super(clients);
         int mtu = jni_get_mtu();
 
-        this.jni_context = jni_init(19);
+        this.jni_context = jni_init(30);
         try {
             if (getImpl == null) {
                 getImpl = Socket.class.getDeclaredMethod("getImpl");
@@ -240,6 +240,13 @@ public class ServiceSinkhole extends ProxyVpn {
     @SuppressWarnings("unused")
     private void notifyPacket(int uid, byte[] packet) {
         log.debug("notifyPacket uid={}", uid);
+    }
+
+    // Called from native code
+    @SuppressWarnings("unused")
+    private boolean protect(int fd) {
+        log.debug("protect fd={}", fd);
+        return true;
     }
 
 }

@@ -62,9 +62,11 @@ int sdk_int(JNIEnv *env) {
 
 void log_android(int prio, const char *fmt, ...) {
     if (prio >= loglevel) {
+        char line[1024];
         va_list argptr;
         va_start(argptr, fmt);
-        vprintf(fmt, argptr);
+        vsprintf(line, fmt, argptr);
+        printf("%s\n", line);
         va_end(argptr);
     }
 }

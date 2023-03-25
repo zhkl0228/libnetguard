@@ -59,12 +59,13 @@ int check_tun(const struct arguments *args,
             // tun eof
             ng_free(buffer, __FILE__, __LINE__);
 
-            log_android(ANDROID_LOG_ERROR, "tun %d empty read size", args->tun);
-            report_exit(args, "tun %d empty read size", args->tun);
+            log_android(ANDROID_LOG_ERROR, "tun %d empty read count=0x%x, size=%d", args->tun, ntohs(count), size);
+            report_exit(args, "tun %d empty read size: 0x%x", args->tun, size);
             return -1;
         }
         count = ntohs(count);
         ssize_t length = read(args->tun, buffer, count);
+        log_android(ANDROID_LOG_DEBUG, "read tun %d, count=%d, size=%d, length=%ld", args->tun, count, size, length);
         if (length < 0) {
             ng_free(buffer, __FILE__, __LINE__);
 
