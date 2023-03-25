@@ -44,6 +44,7 @@ public class VpnServer {
                             try {
                                 vpn = new ServiceSinkhole(socket, clients);
                             } catch(UnsatisfiedLinkError e) {
+                                log.debug("init ServiceSinkhole", e);
                                 useNetguard = false;
                             }
                         }
