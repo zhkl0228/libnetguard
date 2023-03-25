@@ -826,7 +826,7 @@ jboolean handle_tcp(const struct arguments *args,
         // Write pcap record
         write_pcap_rec(args, pkt, (size_t) length, cur->tcp.uid);
 
-        char session[250];
+        char session[350];
         sprintf(session,
                 "%s %s loc %u rem %u acked %u",
                 packet,

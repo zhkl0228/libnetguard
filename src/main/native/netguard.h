@@ -22,7 +22,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <netinet/in6.h>
+#include <linux/in6.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/udp.h>
@@ -30,8 +30,42 @@
 #include <netinet/ip_icmp.h>
 #include <netinet/icmp6.h>
 
-#include <android/log.h>
-#include <sys/system_properties.h>
+#include <signal.h>
+#include <sys/time.h>
+
+/*
+ * Android log priority values, in ascending priority order.
+ */
+typedef enum android_LogPriority {
+  ANDROID_LOG_UNKNOWN = 0,
+  ANDROID_LOG_DEFAULT, /* only for SetMinPriority() */
+  ANDROID_LOG_VERBOSE,
+  ANDROID_LOG_DEBUG,
+  ANDROID_LOG_INFO,
+  ANDROID_LOG_WARN,
+  ANDROID_LOG_ERROR,
+  ANDROID_LOG_FATAL,
+  ANDROID_LOG_SILENT, /* only for SetMinPriority(); must be last */
+} android_LogPriority;
+
+#define IPV6_VERSION		0x60
+#define IPV6_MAXPACKET	65535	/* ip6 max packet size without Jumbo payload*/
+#define SIOCOUTQ TIOCOUTQ
+
+/*
+ * This is the real IPv4 pseudo header, used for computing the TCP and UDP
+ * checksums. For the Internet checksum, struct ipovly can be used instead.
+ * For stronger checksums, the real thing must be used.
+ */
+struct ippseudo {
+	struct    in_addr ippseudo_src;	/* source internet address */
+	struct    in_addr ippseudo_dst;	/* destination internet address */
+	u_int8_t  ippseudo_pad;		/* pad, must be zero */
+	u_int8_t  ippseudo_p;		/* protocol */
+	u_int16_t ippseudo_len;		/* protocol length */
+};
+
+#define __packed __attribute__((packed))
 
 #define TAG "NetGuard.JNI"
 
