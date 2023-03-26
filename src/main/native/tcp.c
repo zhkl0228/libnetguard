@@ -628,6 +628,24 @@ jboolean handle_tcp(const struct arguments *args,
     const struct iphdr *ip4 = (struct iphdr *) pkt;
     const struct ip6_hdr *ip6 = (struct ip6_hdr *) pkt;
     const struct tcphdr *tcphdr = (struct tcphdr *) payload;
+#if defined(__APPLE__)
+    const uint8_t tcpoptlen = (uint8_t) ((tcphdr->th_off - 5) * 4);
+    const uint8_t *tcpoptions = payload + sizeof(struct tcphdr);
+    const uint8_t *data = payload + sizeof(struct tcphdr) + tcpoptlen;
+    const uint16_t datalen = (const uint16_t) (length - (data - pkt));
+
+    // Search session
+    struct ng_session *cur = args->ctx->ng_session;
+    while (cur != NULL &&
+           !(cur->protocol == IPPROTO_TCP &&
+             cur->tcp.version == version &&
+             cur->tcp.source == tcphdr->th_sport && cur->tcp.dest == tcphdr->th_dport &&
+             (version == 4 ? cur->tcp.saddr.ip4 == ip4->saddr &&
+                             cur->tcp.daddr.ip4 == ip4->daddr
+                           : memcmp(&cur->tcp.saddr.ip6, &ip6->ip6_src, 16) == 0 &&
+                             memcmp(&cur->tcp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
+        cur = cur->next;
+#else
     const uint8_t tcpoptlen = (uint8_t) ((tcphdr->doff - 5) * 4);
     const uint8_t *tcpoptions = payload + sizeof(struct tcphdr);
     const uint8_t *data = payload + sizeof(struct tcphdr) + tcpoptlen;
@@ -644,6 +662,7 @@ jboolean handle_tcp(const struct arguments *args,
                            : memcmp(&cur->tcp.saddr.ip6, &ip6->ip6_src, 16) == 0 &&
                              memcmp(&cur->tcp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
         cur = cur->next;
+#endif
 
     // Prepare logging
     char source[INET6_ADDRSTRLEN + 1];
@@ -656,6 +675,39 @@ jboolean handle_tcp(const struct arguments *args,
         inet_ntop(AF_INET6, &ip6->ip6_dst, dest, sizeof(dest));
     }
 
+#if defined(__APPLE__)
+    char flags[10];
+    int flen = 0;
+    if (tcphdr->th_flags & TH_SYN)
+        flags[flen++] = 'S';
+    if (tcphdr->th_flags & TH_ACK)
+        flags[flen++] = 'A';
+    if (tcphdr->th_flags & TH_PUSH)
+        flags[flen++] = 'P';
+    if (tcphdr->th_flags & TH_FIN)
+        flags[flen++] = 'F';
+    if (tcphdr->th_flags & TH_RST)
+        flags[flen++] = 'R';
+    if (tcphdr->th_flags & TH_URG)
+        flags[flen++] = 'U';
+    flags[flen] = 0;
+
+    char packet[250];
+    sprintf(packet,
+            "TCP %s %s/%u > %s/%u seq %u ack %u data %u win %u uid %d",
+            flags,
+            source, ntohs(tcphdr->th_sport),
+            dest, ntohs(tcphdr->th_dport),
+            ntohl(tcphdr->th_seq) - (cur == NULL ? 0 : cur->tcp.remote_start),
+            tcphdr->th_flags & TH_ACK ? ntohl(tcphdr->th_ack) - (cur == NULL ? 0 : cur->tcp.local_start) : 0,
+            datalen, ntohs(tcphdr->th_win), uid);
+    uint8_t urg = tcphdr->th_flags & TH_URG;
+    log_android(urg ? ANDROID_LOG_WARN : ANDROID_LOG_DEBUG, packet);
+
+    // Drop URG data
+    if (urg)
+        return 1;
+#else
     char flags[10];
     int flen = 0;
     if (tcphdr->syn)
@@ -686,13 +738,18 @@ jboolean handle_tcp(const struct arguments *args,
     // Drop URG data
     if (tcphdr->urg)
         return 1;
+#endif
 
     // Check session
     if (cur == NULL) {
         // Write pcap record
         write_pcap_rec(args, pkt, (size_t) length, uid);
 
+#if defined(__APPLE__)
+        if (tcphdr->th_flags & TH_SYN) {
+#else
         if (tcphdr->syn) {
+#endif
             // Decode options
             // http://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml#tcp-parameters-1
             uint16_t mss = get_default_mss(version);
@@ -720,8 +777,13 @@ jboolean handle_tcp(const struct arguments *args,
                 }
             }
 
+#if defined(__APPLE__)
+            log_android(ANDROID_LOG_WARN, "%s new session mss %u ws %u window %u",
+                        packet, mss, ws, ntohs(tcphdr->th_win) << ws);
+#else
             log_android(ANDROID_LOG_WARN, "%s new session mss %u ws %u window %u",
                         packet, mss, ws, ntohs(tcphdr->window) << ws);
+#endif
 
             // Register session
             struct ng_session *s = ng_malloc(sizeof(struct ng_session), "tcp session");
@@ -733,9 +795,15 @@ jboolean handle_tcp(const struct arguments *args,
             s->tcp.mss = mss;
             s->tcp.recv_scale = ws;
             s->tcp.send_scale = ws;
+#if defined(__APPLE__)
+            s->tcp.send_window = ((uint32_t) ntohs(tcphdr->th_win)) << s->tcp.send_scale;
+            s->tcp.unconfirmed = 0;
+            s->tcp.remote_seq = ntohl(tcphdr->th_seq); // ISN remote
+#else
             s->tcp.send_window = ((uint32_t) ntohs(tcphdr->window)) << s->tcp.send_scale;
             s->tcp.unconfirmed = 0;
             s->tcp.remote_seq = ntohl(tcphdr->seq); // ISN remote
+#endif
             s->tcp.local_seq = (uint32_t) rand(); // ISN local
             s->tcp.remote_start = s->tcp.remote_seq;
             s->tcp.local_start = s->tcp.local_seq;
@@ -752,8 +820,13 @@ jboolean handle_tcp(const struct arguments *args,
                 memcpy(&s->tcp.daddr.ip6, &ip6->ip6_dst, 16);
             }
 
+#if defined(__APPLE__)
+            s->tcp.source = tcphdr->th_sport;
+            s->tcp.dest = tcphdr->th_dport;
+#else
             s->tcp.source = tcphdr->source;
             s->tcp.dest = tcphdr->dest;
+#endif
             s->tcp.state = TCP_LISTEN;
             s->tcp.socks5 = SOCKS5_NONE;
             s->tcp.forward = NULL;
@@ -765,7 +838,11 @@ jboolean handle_tcp(const struct arguments *args,
                 s->tcp.forward->seq = s->tcp.remote_seq;
                 s->tcp.forward->len = datalen;
                 s->tcp.forward->sent = 0;
+#if defined(__APPLE__)
+                s->tcp.forward->psh = tcphdr->th_flags & TH_PUSH;
+#else
                 s->tcp.forward->psh = tcphdr->psh;
+#endif
                 s->tcp.forward->data = ng_malloc(datalen, "syn segment data");
                 memcpy(s->tcp.forward->data, data, datalen);
                 s->tcp.forward->next = NULL;
@@ -805,8 +882,13 @@ jboolean handle_tcp(const struct arguments *args,
             struct tcp_session rst;
             memset(&rst, 0, sizeof(struct tcp_session));
             rst.version = version;
+#if defined(__APPLE__)
+            rst.local_seq = ntohl(tcphdr->th_ack);
+            rst.remote_seq = ntohl(tcphdr->th_seq) + datalen + ((tcphdr->th_flags & TH_SYN) || (tcphdr->th_flags & TH_FIN) ? 1 : 0);
+#else
             rst.local_seq = ntohl(tcphdr->ack_seq);
             rst.remote_seq = ntohl(tcphdr->seq) + datalen + (tcphdr->syn || tcphdr->fin ? 1 : 0);
+#endif
 
             if (version == 4) {
                 rst.saddr.ip4 = (__be32) ip4->saddr;
@@ -816,8 +898,13 @@ jboolean handle_tcp(const struct arguments *args,
                 memcpy(&rst.daddr.ip6, &ip6->ip6_dst, 16);
             }
 
+#if defined(__APPLE__)
+            rst.source = tcphdr->th_sport;
+            rst.dest = tcphdr->th_dport;
+#else
             rst.source = tcphdr->source;
             rst.dest = tcphdr->dest;
+#endif
 
             write_rst(args, &rst);
             return 0;
@@ -847,9 +934,16 @@ jboolean handle_tcp(const struct arguments *args,
 
             log_android(ANDROID_LOG_DEBUG, "%s handling", session);
 
+#if defined(__APPLE__)
+            uint8_t syn = tcphdr->th_flags & TH_SYN;
+            if (!syn)
+                cur->tcp.time = time(NULL);
+            cur->tcp.send_window = ((uint32_t) ntohs(tcphdr->th_win)) << cur->tcp.send_scale;
+#else
             if (!tcphdr->syn)
                 cur->tcp.time = time(NULL);
             cur->tcp.send_window = ((uint32_t) ntohs(tcphdr->window)) << cur->tcp.send_scale;
+#endif
             cur->tcp.unconfirmed = 0;
 
             // Do not change the order of the conditions
@@ -869,19 +963,35 @@ jboolean handle_tcp(const struct arguments *args,
                 queue_tcp(args, tcphdr, session, &cur->tcp, data, datalen);
             }
 
+#if defined(__APPLE__)
+            if (tcphdr->th_flags & TH_RST /* +ACK */) {
+#else
             if (tcphdr->rst /* +ACK */) {
+#endif
                 // No sequence check
                 // http://tools.ietf.org/html/rfc1122#page-87
                 log_android(ANDROID_LOG_WARN, "%s received reset", session);
                 cur->tcp.state = TCP_CLOSING;
                 return 0;
             } else {
+#if defined(__APPLE__)
+                uint8_t ack = tcphdr->th_flags & TH_ACK;
+                uint8_t syn = tcphdr->th_flags & TH_SYN;
+                uint8_t fin = tcphdr->th_flags & TH_FIN;
+                if (!ack || ntohl(tcphdr->th_ack) == cur->tcp.local_seq) {
+                    if (syn) {
+                        log_android(ANDROID_LOG_WARN, "%s repeated SYN", session);
+                        // The socket is probably not opened yet
+
+                    } else if (fin /* +ACK */) {
+#else
                 if (!tcphdr->ack || ntohl(tcphdr->ack_seq) == cur->tcp.local_seq) {
                     if (tcphdr->syn) {
                         log_android(ANDROID_LOG_WARN, "%s repeated SYN", session);
                         // The socket is probably not opened yet
 
                     } else if (tcphdr->fin /* +ACK */) {
+#endif
                         if (cur->tcp.state == TCP_ESTABLISHED) {
                             log_android(ANDROID_LOG_WARN, "%s FIN received", session);
                             if (cur->tcp.forward == NULL) {
@@ -903,8 +1013,13 @@ jboolean handle_tcp(const struct arguments *args,
                             return 0;
                         }
 
+#if defined(__APPLE__)
+                    } else if (ack) {
+                        cur->tcp.acked = ntohl(tcphdr->th_ack);
+#else
                     } else if (tcphdr->ack) {
                         cur->tcp.acked = ntohl(tcphdr->ack_seq);
+#endif
 
                         if (cur->tcp.state == TCP_SYN_RECV)
                             cur->tcp.state = TCP_ESTABLISHED;
@@ -927,7 +1042,11 @@ jboolean handle_tcp(const struct arguments *args,
                         return 0;
                     }
                 } else {
+#if defined(__APPLE__)
+                    uint32_t ack = ntohl(tcphdr->th_ack);
+#else
                     uint32_t ack = ntohl(tcphdr->ack_seq);
+#endif
                     if ((uint32_t) (ack + 1) == cur->tcp.local_seq) {
                         // Keep alive
                         if (cur->tcp.state == TCP_ESTABLISHED) {
@@ -982,7 +1101,11 @@ void queue_tcp(const struct arguments *args,
                const struct tcphdr *tcphdr,
                const char *session, struct tcp_session *cur,
                const uint8_t *data, uint16_t datalen) {
+#if defined(__APPLE__)
+    uint32_t seq = ntohl(tcphdr->th_seq);
+#else
     uint32_t seq = ntohl(tcphdr->seq);
+#endif
     if (compare_u32(seq, cur->remote_seq) < 0)
         log_android(ANDROID_LOG_WARN, "%s already forwarded %u..%u",
                     session,
@@ -1003,7 +1126,11 @@ void queue_tcp(const struct arguments *args,
             n->seq = seq;
             n->len = datalen;
             n->sent = 0;
+#if defined(__APPLE__)
+            n->psh = (tcphdr->th_flags & TH_PUSH) ? 1 : 0;
+#else
             n->psh = tcphdr->psh;
+#endif
             n->data = ng_malloc(datalen, "tcp segment");
             memcpy(n->data, data, datalen);
             n->next = s;
@@ -1253,6 +1380,29 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
 
     // Build TCP header
     memset(tcp, 0, sizeof(struct tcphdr));
+#if defined(__APPLE__)
+    tcp->th_sport = cur->dest;
+    tcp->th_dport = cur->source;
+    tcp->th_seq = htonl(cur->local_seq);
+    tcp->th_ack = htonl((uint32_t) (cur->remote_seq));
+    tcp->th_off = (__u16) ((sizeof(struct tcphdr) + optlen) >> 2);
+    if(syn) {
+        tcp->th_flags |= TH_SYN;
+    }
+    if(ack) {
+        tcp->th_flags |= TH_ACK;
+    }
+    if(fin) {
+        tcp->th_flags |= TH_FIN;
+    }
+    if(rst) {
+        tcp->th_flags |= TH_RST;
+    }
+    tcp->th_win = htons(cur->recv_window >> cur->recv_scale);
+
+    if (!ack)
+        tcp->th_ack = 0;
+#else
     tcp->source = cur->dest;
     tcp->dest = cur->source;
     tcp->seq = htonl(cur->local_seq);
@@ -1266,6 +1416,7 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
 
     if (!tcp->ack)
         tcp->ack_seq = 0;
+#endif
 
     // TCP options
     if (syn) {
@@ -1284,7 +1435,11 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
     csum = calc_checksum(csum, (uint8_t *) tcp, sizeof(struct tcphdr));
     csum = calc_checksum(csum, options, (size_t) optlen);
     csum = calc_checksum(csum, data, datalen);
+#if defined(__APPLE__)
+    tcp->th_sum = ~csum;
+#else
     tcp->check = ~csum;
+#endif
 
     inet_ntop(cur->version == 4 ? AF_INET : AF_INET6,
               cur->version == 4 ? (const void *) &cur->saddr.ip4 : (const void *) &cur->saddr.ip6,
@@ -1293,6 +1448,19 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
               cur->version == 4 ? (const void *) &cur->daddr.ip4 : (const void *) &cur->daddr.ip6,
               dest, sizeof(dest));
 
+#if defined(__APPLE__)
+    // Send packet
+    log_android(ANDROID_LOG_DEBUG,
+                "TCP sending%s%s%s%s to tun %s/%u seq %u ack %u data %u",
+                (tcp->th_flags & TH_SYN ? " SYN" : ""),
+                (tcp->th_flags & TH_ACK ? " ACK" : ""),
+                (tcp->th_flags & TH_FIN ? " FIN" : ""),
+                (tcp->th_flags & TH_RST ? " RST" : ""),
+                dest, ntohs(tcp->th_dport),
+                ntohl(tcp->th_seq) - cur->local_start,
+                ntohl(tcp->th_ack) - cur->remote_start,
+                datalen);
+#else
     // Send packet
     log_android(ANDROID_LOG_DEBUG,
                 "TCP sending%s%s%s%s to tun %s/%u seq %u ack %u data %u",
@@ -1304,6 +1472,7 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
                 ntohl(tcp->seq) - cur->local_start,
                 ntohl(tcp->ack_seq) - cur->remote_start,
                 datalen);
+#endif
 
     ssize_t res = write_tun(args->tun, buffer, len);
 
@@ -1311,6 +1480,15 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
     if (res >= 0) {
         write_pcap_rec(args, buffer, (size_t) res, cur->uid);
     } else
+#if defined(__APPLE__)
+        log_android(ANDROID_LOG_ERROR, "TCP write%s%s%s%s data %d error %d: %s",
+                    (tcp->th_flags & TH_SYN ? " SYN" : ""),
+                    (tcp->th_flags & TH_ACK ? " ACK" : ""),
+                    (tcp->th_flags & TH_FIN ? " FIN" : ""),
+                    (tcp->th_flags & TH_RST ? " RST" : ""),
+                    datalen,
+                    errno, strerror((errno)));
+#else
         log_android(ANDROID_LOG_ERROR, "TCP write%s%s%s%s data %d error %d: %s",
                     (tcp->syn ? " SYN" : ""),
                     (tcp->ack ? " ACK" : ""),
@@ -1318,6 +1496,7 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
                     (tcp->rst ? " RST" : ""),
                     datalen,
                     errno, strerror((errno)));
+#endif
 
     ng_free(buffer, __FILE__, __LINE__);
 

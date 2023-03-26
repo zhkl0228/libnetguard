@@ -171,6 +171,7 @@ public class ServiceSinkhole extends ProxyVpn {
     }
 
     // Called from native code
+    @SuppressWarnings("unused")
     private int getUidQ(int version, int protocol, String saddr, int sport, String daddr, int dport) {
         if (protocol != 6 /* TCP */ && protocol != 17 /* UDP */)
             return -1;
@@ -199,7 +200,7 @@ public class ServiceSinkhole extends ProxyVpn {
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
             // Allow unknown system traffic
             packet.allowed = true;
-            // Log.w(TAG, "Allowing unknown system " + packet);
+            log.debug("Allowing unknown system {}", packet);
         }
 
         Allowed allowed = null;
@@ -245,7 +246,6 @@ public class ServiceSinkhole extends ProxyVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private void notifyPacket(int uid, byte[] packet) {
-        log.debug("notifyPacket uid={}", uid);
     }
 
     // Called from native code

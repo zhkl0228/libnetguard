@@ -45,9 +45,9 @@ void *handle_events(void *a) {
         log_android(ANDROID_LOG_WARN, "getrlimit error %d: %s", errno, strerror(errno));
     else {
         maxsessions = (int) (rlim.rlim_cur * SESSION_LIMIT / 100);
-        if (maxsessions > SESSION_MAX)
+        if (maxsessions > SESSION_MAX || maxsessions <= 0)
             maxsessions = SESSION_MAX;
-        log_android(ANDROID_LOG_WARN, "getrlimit soft %d hard %d max sessions %d",
+        log_android(ANDROID_LOG_WARN, "getrlimit soft %lu hard %lu max sessions %d",
                     rlim.rlim_cur, rlim.rlim_max, maxsessions);
     }
 

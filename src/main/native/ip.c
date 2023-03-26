@@ -276,8 +276,13 @@ void handle_ip(const struct arguments *args,
 
         struct udphdr *udp = (struct udphdr *) payload;
 
+#if defined(__APPLE__)
+        sport = ntohs(udp->uh_sport);
+        dport = ntohs(udp->uh_dport);
+#else
         sport = ntohs(udp->source);
         dport = ntohs(udp->dest);
+#endif
 
         // TODO checksum (IPv6)
 
@@ -291,6 +296,23 @@ void handle_ip(const struct arguments *args,
 
         struct tcphdr *tcp = (struct tcphdr *) payload;
 
+#if defined(__APPLE__)
+        sport = ntohs(tcp->th_sport);
+        dport = ntohs(tcp->th_dport);
+
+        if (tcp->th_flags & TH_SYN) {
+            syn = 1;
+            flags[flen++] = 'S';
+        }
+        if (tcp->th_flags & TH_ACK)
+            flags[flen++] = 'A';
+        if (tcp->th_flags & TH_PUSH)
+            flags[flen++] = 'P';
+        if (tcp->th_flags & TH_FIN)
+            flags[flen++] = 'F';
+        if (tcp->th_flags & TH_RST)
+            flags[flen++] = 'R';
+#else
         sport = ntohs(tcp->source);
         dport = ntohs(tcp->dest);
 
@@ -306,10 +328,15 @@ void handle_ip(const struct arguments *args,
             flags[flen++] = 'F';
         if (tcp->rst)
             flags[flen++] = 'R';
+#endif
 
         // TODO checksum
 
+#if defined(__APPLE__)
+        const uint8_t tcpoptlen = (uint8_t) ((tcp->th_off - 5) * 4);
+#else
         const uint8_t tcpoptlen = (uint8_t) ((tcp->doff - 5) * 4);
+#endif
         p_payload = payload + sizeof(struct tcphdr) + tcpoptlen;
         p_payload_size = (const uint16_t) (length - (p_payload - pkt));
     } else if (protocol != IPPROTO_HOPOPTS && protocol != IPPROTO_IGMP && protocol != IPPROTO_ESP)

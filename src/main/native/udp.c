@@ -152,6 +152,22 @@ int has_udp_session(const struct arguments *args, const uint8_t *pkt, const uint
     const struct ip6_hdr *ip6 = (struct ip6_hdr *) pkt;
     const struct udphdr *udphdr = (struct udphdr *) payload;
 
+#if defined(__APPLE__)
+    if (ntohs(udphdr->uh_dport) == 53 && !args->fwd53)
+        return 1;
+
+    // Search session
+    struct ng_session *cur = args->ctx->ng_session;
+    while (cur != NULL &&
+           !(cur->protocol == IPPROTO_UDP &&
+             cur->udp.version == version &&
+             cur->udp.source == udphdr->uh_sport && cur->udp.dest == udphdr->uh_dport &&
+             (version == 4 ? cur->udp.saddr.ip4 == ip4->saddr &&
+                             cur->udp.daddr.ip4 == ip4->daddr
+                           : memcmp(&cur->udp.saddr.ip6, &ip6->ip6_src, 16) == 0 &&
+                             memcmp(&cur->udp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
+        cur = cur->next;
+#else
     if (ntohs(udphdr->dest) == 53 && !args->fwd53)
         return 1;
 
@@ -166,6 +182,7 @@ int has_udp_session(const struct arguments *args, const uint8_t *pkt, const uint
                            : memcmp(&cur->udp.saddr.ip6, &ip6->ip6_src, 16) == 0 &&
                              memcmp(&cur->udp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
         cur = cur->next;
+#endif
 
     return (cur != NULL);
 }
@@ -190,8 +207,13 @@ void block_udp(const struct arguments *args,
         inet_ntop(AF_INET6, &ip6->ip6_dst, dest, sizeof(dest));
     }
 
+#if defined(__APPLE__)
+    log_android(ANDROID_LOG_INFO, "UDP blocked session from %s/%u to %s/%u",
+                source, ntohs(udphdr->uh_sport), dest, ntohs(udphdr->uh_dport));
+#else
     log_android(ANDROID_LOG_INFO, "UDP blocked session from %s/%u to %s/%u",
                 source, ntohs(udphdr->source), dest, ntohs(udphdr->dest));
+#endif
 
     // Register session
     struct ng_session *s = ng_malloc(sizeof(struct ng_session), "udp session block");
@@ -209,8 +231,13 @@ void block_udp(const struct arguments *args,
         memcpy(&s->udp.daddr.ip6, &ip6->ip6_dst, 16);
     }
 
+#if defined(__APPLE__)
+    s->udp.source = udphdr->uh_sport;
+    s->udp.dest = udphdr->uh_dport;
+#else
     s->udp.source = udphdr->source;
     s->udp.dest = udphdr->dest;
+#endif
     s->udp.state = UDP_BLOCKED;
     s->socket = -1;
 
@@ -233,6 +260,17 @@ jboolean handle_udp(const struct arguments *args,
 
     // Search session
     struct ng_session *cur = args->ctx->ng_session;
+#if defined(__APPLE__)
+    while (cur != NULL &&
+           !(cur->protocol == IPPROTO_UDP &&
+             cur->udp.version == version &&
+             cur->udp.source == udphdr->uh_sport && cur->udp.dest == udphdr->uh_dport &&
+             (version == 4 ? cur->udp.saddr.ip4 == ip4->saddr &&
+                             cur->udp.daddr.ip4 == ip4->daddr
+                           : memcmp(&cur->udp.saddr.ip6, &ip6->ip6_src, 16) == 0 &&
+                             memcmp(&cur->udp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
+        cur = cur->next;
+#else
     while (cur != NULL &&
            !(cur->protocol == IPPROTO_UDP &&
              cur->udp.version == version &&
@@ -242,6 +280,7 @@ jboolean handle_udp(const struct arguments *args,
                            : memcmp(&cur->udp.saddr.ip6, &ip6->ip6_src, 16) == 0 &&
                              memcmp(&cur->udp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
         cur = cur->next;
+#endif
 
     char source[INET6_ADDRSTRLEN + 1];
     char dest[INET6_ADDRSTRLEN + 1];
@@ -254,15 +293,25 @@ jboolean handle_udp(const struct arguments *args,
     }
 
     if (cur != NULL && cur->udp.state != UDP_ACTIVE) {
+#if defined(__APPLE__)
+        log_android(ANDROID_LOG_INFO, "UDP ignore session from %s/%u to %s/%u state %d",
+                    source, ntohs(udphdr->uh_sport), dest, ntohs(udphdr->uh_dport), cur->udp.state);
+#else
         log_android(ANDROID_LOG_INFO, "UDP ignore session from %s/%u to %s/%u state %d",
                     source, ntohs(udphdr->source), dest, ntohs(udphdr->dest), cur->udp.state);
+#endif
         return 0;
     }
 
     // Create new session if needed
     if (cur == NULL) {
+#if defined(__APPLE__)
+        log_android(ANDROID_LOG_INFO, "UDP new session from %s/%u to %s/%u",
+                    source, ntohs(udphdr->uh_sport), dest, ntohs(udphdr->uh_dport));
+#else
         log_android(ANDROID_LOG_INFO, "UDP new session from %s/%u to %s/%u",
                     source, ntohs(udphdr->source), dest, ntohs(udphdr->dest));
+#endif
 
         // Register session
         struct ng_session *s = ng_malloc(sizeof(struct ng_session), "udp session");
@@ -290,8 +339,13 @@ jboolean handle_udp(const struct arguments *args,
             memcpy(&s->udp.daddr.ip6, &ip6->ip6_dst, 16);
         }
 
+#if defined(__APPLE__)
+        s->udp.source = udphdr->uh_sport;
+        s->udp.dest = udphdr->uh_dport;
+#else
         s->udp.source = udphdr->source;
         s->udp.dest = udphdr->dest;
+#endif
         s->udp.state = UDP_ACTIVE;
         s->next = NULL;
 
@@ -318,6 +372,15 @@ jboolean handle_udp(const struct arguments *args,
     }
 
     // Check for DHCP (tethering)
+#if defined(__APPLE__)
+    if (ntohs(udphdr->uh_sport) == 68 || ntohs(udphdr->uh_dport) == 67) {
+        if (check_dhcp(args, &cur->udp, data, datalen) >= 0)
+            return 1;
+    }
+
+    log_android(ANDROID_LOG_INFO, "UDP forward from tun %s/%u to %s/%u data %d",
+                source, ntohs(udphdr->uh_sport), dest, ntohs(udphdr->uh_dport), datalen);
+#else
     if (ntohs(udphdr->source) == 68 || ntohs(udphdr->dest) == 67) {
         if (check_dhcp(args, &cur->udp, data, datalen) >= 0)
             return 1;
@@ -325,6 +388,7 @@ jboolean handle_udp(const struct arguments *args,
 
     log_android(ANDROID_LOG_INFO, "UDP forward from tun %s/%u to %s/%u data %d",
                 source, ntohs(udphdr->source), dest, ntohs(udphdr->dest), datalen);
+#endif
 
     cur->udp.time = time(NULL);
 
@@ -507,6 +571,16 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
 
     // Build UDP header
     memset(udp, 0, sizeof(struct udphdr));
+#if defined(__APPLE__)
+    udp->uh_sport = cur->dest;
+    udp->uh_dport = cur->source;
+    udp->uh_ulen = htons(sizeof(struct udphdr) + datalen);
+
+    // Continue checksum
+    csum = calc_checksum(csum, (uint8_t *) udp, sizeof(struct udphdr));
+    csum = calc_checksum(csum, data, datalen);
+    udp->uh_sum = ~csum;
+#else
     udp->source = cur->dest;
     udp->dest = cur->source;
     udp->len = htons(sizeof(struct udphdr) + datalen);
@@ -515,6 +589,7 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
     csum = calc_checksum(csum, (uint8_t *) udp, sizeof(struct udphdr));
     csum = calc_checksum(csum, data, datalen);
     udp->check = ~csum;
+#endif
 
     inet_ntop(cur->version == 4 ? AF_INET : AF_INET6,
               (cur->version == 4 ? (const void *) &cur->saddr.ip4 : (const void *) &cur->saddr.ip6),

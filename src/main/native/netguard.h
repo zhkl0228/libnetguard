@@ -22,7 +22,6 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <linux/in6.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/udp.h>
@@ -32,6 +31,43 @@
 
 #include <signal.h>
 #include <sys/time.h>
+
+#if defined(__APPLE__)
+#define __be16 uint16_t
+#define __be32 uint32_t
+typedef uint16_t __u16;
+#define SOL_TCP 6
+#define MSG_MORE 0x8000
+struct iphdr {
+	uint8_t  ihl    :4,
+		 version:4;
+	uint8_t	  tos;
+	uint16_t  tot_len;
+	uint16_t  id;
+	uint16_t  frag_off;
+	uint8_t   ttl;
+	uint8_t   protocol;
+	uint16_t  check;
+	int32_t   saddr;
+	int32_t   daddr;
+};
+enum {
+  TCP_ESTABLISHED = 1,
+  TCP_SYN_SENT,
+  TCP_SYN_RECV,
+  TCP_FIN_WAIT1,
+  TCP_FIN_WAIT2,
+  TCP_TIME_WAIT,
+  TCP_CLOSE,
+  TCP_CLOSE_WAIT,
+  TCP_LAST_ACK,
+  TCP_LISTEN,
+  TCP_CLOSING
+};
+#define IPV6_ADD_MEMBERSHIP 20
+#else
+#include <linux/in6.h>
+#endif
 
 /*
  * Android log priority values, in ascending priority order.
@@ -96,7 +132,7 @@ struct ippseudo {
 #define TCP_KEEP_TIMEOUT 300 // seconds
 // https://en.wikipedia.org/wiki/Maximum_segment_lifetime
 
-#define SESSION_LIMIT 40 // percent
+#define SESSION_LIMIT 60 // percent
 #define SESSION_MAX (1024 * SESSION_LIMIT / 100) // number
 
 #define SEND_BUF_DEFAULT 163840 // bytes
