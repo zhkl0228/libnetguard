@@ -147,6 +147,11 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1start(
         JNIEnv *env, jobject instance, jlong context, jint loglevel_) {
     struct context *ctx = (struct context *) context;
 
+    if(loglevel_ <= ANDROID_LOG_DEBUG) {
+        setvbuf(stdout, NULL, _IONBF, 0);
+        setvbuf(stderr, NULL, _IONBF, 0);
+    }
+
     loglevel = loglevel_;
     max_tun_msg = 0;
     ctx->stopping = 0;
@@ -341,7 +346,7 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1done(
     struct context *ctx = (struct context *) (long) context;
     log_android(ANDROID_LOG_INFO, "Done");
 
-    ng_free(ctx->buffer, __FILE__, __LINE__);
+    ng_free(ctx->packet, __FILE__, __LINE__);
 
     clear(ctx);
 

@@ -34,7 +34,7 @@ uint16_t get_default_mss(int version) {
 }
 
 int read_packet(const struct arguments *args) {
-    bool check_retry = true;
+    int check_retry = 1;
     struct context *ctx = args->ctx;
     if(ctx->read < 2) {
         ssize_t size = read(args->tun, &ctx->packet[ctx->read], 2 - ctx->read);
@@ -48,7 +48,7 @@ int read_packet(const struct arguments *args) {
                 return -1;
             }
         }
-        check_retry = false;
+        check_retry = 0;
         ctx->read += size;
         if(ctx->read == 2) {
             uint16_t *ptr = (uint16_t *) ctx->packet;
@@ -113,12 +113,15 @@ int check_tun(const struct arguments *args,
 
     // Check tun read
     if (ev->events & EPOLLIN) {
-        int code = read_packet(args);
-        if(code == -1) {
-            return -1;
-        }
         struct context *ctx = args->ctx;
-        if(ctx->packet_ready != NULL) {
+        while(1) {
+            int code = read_packet(args);
+            if(code == -1) {
+                return -1;
+            }
+            if(ctx->packet_ready == NULL) {
+                return 0;
+            }
             log_android(ANDROID_LOG_DEBUG, "read tun %d, read=%d, packet_size=%d", args->tun, ctx->read, ctx->packet_size);
             // Handle IP from tun
             handle_ip(args, ctx->packet_ready, (size_t) ctx->packet_size, epoll_fd, sessions, maxsessions);

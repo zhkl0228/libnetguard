@@ -60,7 +60,9 @@ public class ServiceSinkhole extends ProxyVpn {
             throw new IllegalStateException("init ServiceSinkhole", e);
         }
         this.socket = socket;
-        jni_start(jni_context, log.isDebugEnabled() ? 3 : 6);
+        final int ANDROID_LOG_DEBUG = 3;
+        final int ANDROID_LOG_ERROR = 6;
+        jni_start(jni_context, log.isTraceEnabled() ? ANDROID_LOG_DEBUG : ANDROID_LOG_ERROR);
         log.debug("mtu={}, socket={}, fd={}", mtu, socket, fd);
     }
 
@@ -140,7 +142,7 @@ public class ServiceSinkhole extends ProxyVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private void nativeExit(String reason) {
-        log.warn("Native exit reason={}", reason);
+        log.debug("Native exit reason={}", reason);
     }
 
     // Called from native code
@@ -210,6 +212,10 @@ public class ServiceSinkhole extends ProxyVpn {
             }
         } catch (Exception e) {
             log.debug("mitm failed: {}", packet, e);
+        }
+
+        if(allowed == null && packet.allowed) {
+            allowed = new Allowed();
         }
 
         if (allowed != null) {
