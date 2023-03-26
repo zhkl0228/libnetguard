@@ -1,5 +1,8 @@
 package com.github.netguard;
 
+import cn.banny.auxiliary.Inspector;
+import cn.banny.utils.IOUtils;
+import com.github.netguard.vpn.IPacketCapture;
 import eu.faircode.netguard.ServiceSinkhole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +45,11 @@ public class VpnServer {
                         ProxyVpn vpn = null;
                         if (useNetguard) {
                             try {
-                                vpn = new ServiceSinkhole(socket, clients);
+                                ServiceSinkhole sinkhole = new ServiceSinkhole(socket, clients);
+                                if (log.isDebugEnabled()) {
+                                    sinkhole.setPacketCapture(new DebugPacketCapture());
+                                }
+                                vpn = sinkhole;
                             } catch(UnsatisfiedLinkError e) {
                                 log.debug("init ServiceSinkhole", e);
                                 useNetguard = false;
@@ -73,11 +80,8 @@ public class VpnServer {
             throw new IllegalStateException("Already shutdown.");
         }
         shutdown = true;
-        try {
-            serverSocket.close();
-        } catch (IOException ignored) {
-        }
-        for (ProxyVpn vpn : clients) {
+        IOUtils.close(serverSocket);
+        for (ProxyVpn vpn : clients.toArray(new ProxyVpn[0])) {
             vpn.stop();
         }
         if (thread != null) {
@@ -92,4 +96,23 @@ public class VpnServer {
         return serverSocket.getLocalPort();
     }
 
+    private static class DebugPacketCapture implements IPacketCapture {
+        @Override
+        public void onPacket(byte[] packetData, String type, int datalink) {
+        }
+        @Override
+        public void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort) {
+        }
+        @Override
+        public void onSSLProxyTX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+            Inspector.inspect(data, String.format("onSSLProxyTX %s:%d => %s:%d", clientIp, clientPort, serverIp, serverPort));
+        }
+        @Override
+        public void onSSLProxyRX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+            Inspector.inspect(data, String.format("onSSLProxyRX %s:%d => %s:%d", clientIp, clientPort, serverIp, serverPort));
+        }
+        @Override
+        public void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort) {
+        }
+    }
 }

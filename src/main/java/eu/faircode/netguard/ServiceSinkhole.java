@@ -1,24 +1,35 @@
 package eu.faircode.netguard;
 
+import cn.banny.utils.IOUtils;
+import com.fuzhu8.tcpcap.PcapDLT;
 import com.github.netguard.ProxyVpn;
+import com.github.netguard.vpn.IPacketCapture;
+import com.github.netguard.vpn.InspectorVpn;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketImpl;
+import java.security.KeyStore;
+import java.security.PrivateKey;
+import java.security.Security;
+import java.security.cert.X509Certificate;
 import java.util.List;
 
-public class ServiceSinkhole extends ProxyVpn {
+public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     private static final Logger log = LoggerFactory.getLogger(ServiceSinkhole.class);
 
     static {
+        Security.addProvider(new BouncyCastleProvider());
         try {
             NativeLoader.loadLibrary("netguard");
         } catch (IOException ignored) {
@@ -56,6 +67,15 @@ public class ServiceSinkhole extends ProxyVpn {
                 throw new IllegalStateException("Invalid fd: " + fileDescriptor);
             }
             this.fd = (Integer) fdField.get(fileDescriptor);
+
+            // use Charles export key store
+            KeyStore keyStore = KeyStore.getInstance("PKCS12", "BC");
+            String alias = "charles";
+            try (InputStream inputStream = ServiceSinkhole.class.getResourceAsStream("/charles-ssl-proxying.p12")) {
+                keyStore.load(inputStream, alias.toCharArray());
+            }
+            rootCert = (X509Certificate) keyStore.getCertificate(alias);
+            privateKey = (PrivateKey) keyStore.getKey(alias, null);
         } catch (Exception e) {
             throw new IllegalStateException("init ServiceSinkhole", e);
         }
@@ -90,6 +110,12 @@ public class ServiceSinkhole extends ProxyVpn {
         }
     }
 
+    private IPacketCapture packetCapture;
+
+    public void setPacketCapture(IPacketCapture packetCapture) {
+        this.packetCapture = packetCapture;
+    }
+
     private Thread tunnelThread;
 
     @Override
@@ -102,10 +128,7 @@ public class ServiceSinkhole extends ProxyVpn {
         jni_run(jni_context, fd, false, 3);
         log.debug("Tunnel exited");
 
-        try {
-            socket.close();
-        } catch (IOException ignored) {
-        }
+        IOUtils.close(socket);
         log.debug("Vpn thread shutting down");
 
         clients.remove(this);
@@ -232,9 +255,21 @@ public class ServiceSinkhole extends ProxyVpn {
         return allowed;
     }
 
+    @Override
+    public IPacketCapture getPacketCapture() {
+        return packetCapture;
+    }
+
+    private final X509Certificate rootCert;
+    private final PrivateKey privateKey;
+
     private Allowed mitm(Packet packet) {
-        // return SSLProxy.create(this, rootCert, privateKey, packet, mitmTimeout);
-        return new Allowed();
+        if (log.isTraceEnabled()) {
+            int mitmTimeout = 10000; // default 10 seconds;
+            return SSLProxy.create(this, rootCert, privateKey, packet, mitmTimeout);
+        } else {
+            return new Allowed();
+        }
     }
 
     // Called from native code
@@ -246,6 +281,9 @@ public class ServiceSinkhole extends ProxyVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private void notifyPacket(int uid, byte[] packet) {
+        if (packetCapture != null) {
+            packetCapture.onPacket(packet, "Netguard", PcapDLT.CONST_RAW_IP);
+        }
     }
 
     // Called from native code

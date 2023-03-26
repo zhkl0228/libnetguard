@@ -1,5 +1,6 @@
 package com.github.netguard;
 
+import cn.banny.utils.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
@@ -107,10 +108,7 @@ class ProxyVpnRunnable extends ProxyVpn {
             }
         }
 
-        try {
-            socket.close();
-        } catch (IOException ignored) {
-        }
+        IOUtils.close(socket);
         log.debug("Vpn thread shutting down");
 
         clients.remove(this);
@@ -120,10 +118,7 @@ class ProxyVpnRunnable extends ProxyVpn {
     protected synchronized void stop() {
         if (running) {
             running = false;
-            try {
-                vpnReadStream.close();
-            } catch (IOException ignored) {
-            }
+            IOUtils.close(vpnReadStream);
             nioService.shutdown();
             dataServiceThread.interrupt();
 

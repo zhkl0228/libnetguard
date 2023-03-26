@@ -1,11 +1,11 @@
 package tech.httptoolkit.android.vpn.socket;
 
+import cn.banny.utils.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
 import tech.httptoolkit.android.vpn.Session;
 import tech.httptoolkit.android.vpn.transport.tcp.TCPPacketFactory;
-import tech.httptoolkit.android.vpn.util.PacketUtil;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -49,26 +49,7 @@ public class SocketChannelWriter {
 			log.debug("removing aborted connection -> {}", session);
 			session.cancelKey();
 
-			if (channel instanceof SocketChannel) {
-				try {
-					SocketChannel socketChannel = (SocketChannel) channel;
-					if (socketChannel.isConnected()) {
-						socketChannel.close();
-					}
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			} else {
-				try {
-					DatagramChannel datagramChannel = (DatagramChannel) channel;
-					if (datagramChannel.isConnected()) {
-						datagramChannel.close();
-					}
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-
+			IOUtils.close(channel);
 			session.closeSession();
 		}
 	}

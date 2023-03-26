@@ -1,5 +1,6 @@
 package tech.httptoolkit.android.vpn.socket;
 
+import cn.banny.utils.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
@@ -51,25 +52,7 @@ class SocketChannelReader {
 		if (session.isAbortingConnection()) {
 			log.debug("removing aborted connection -> {}", session);
 			session.cancelKey();
-			if (channel instanceof SocketChannel){
-				try {
-					SocketChannel socketChannel = (SocketChannel) channel;
-					if (socketChannel.isConnected()) {
-						socketChannel.close();
-					}
-				} catch (IOException e) {
-					log.error("read", e);
-				}
-			} else {
-				try {
-					DatagramChannel datagramChannel = (DatagramChannel) channel;
-					if (datagramChannel.isConnected()) {
-						datagramChannel.close();
-					}
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
+			IOUtils.close(channel);
 			session.closeSession();
 		}
 	}
