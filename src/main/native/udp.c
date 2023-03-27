@@ -426,7 +426,7 @@ jboolean handle_udp(const struct arguments *args,
                (rversion == 4 ? (const struct sockaddr *) &addr4
                               : (const struct sockaddr *) &addr6),
                (socklen_t) (rversion == 4 ? sizeof(addr4) : sizeof(addr6))) != datalen) {
-        log_android(ANDROID_LOG_ERROR, "UDP sendto error %d: %s", errno, strerror(errno));
+        log_android(ANDROID_LOG_DEBUG, "UDP sendto error %d: %s", errno, strerror(errno));
         if (errno != EINTR && errno != EAGAIN) {
             cur->udp.state = UDP_FINISHING;
             return 0;

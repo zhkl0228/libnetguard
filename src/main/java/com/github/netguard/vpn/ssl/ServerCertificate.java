@@ -46,7 +46,7 @@ public class ServerCertificate {
         String commonName = getCommonName(peerCertificate);
         SSLContext serverContext = proxyCertMap.get(commonName);
         if (serverContext == null) {
-            log.debug("createSSLContext serverAddress={}, peerCertificate={}", serverAddress, peerCertificate);
+            log.trace("createSSLContext serverAddress={}, peerCertificate={}", serverAddress, peerCertificate);
             SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
             subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
             log.debug("Subject Alternative Names: {}", subjectAlternativeNames);
@@ -73,8 +73,8 @@ public class ServerCertificate {
         Authority authority = new Authority(null, alias, alias.toCharArray(), "TCPcap Proxy SSL Proxying", "XML", "XML Ltd", "XML", "XML Ltd");
         KeyStore ks = CertificateHelper.createServerCertificate(commonName,
                 subjectAlternativeNames, authority, rootCert, privateKey);
-        if (log.isDebugEnabled()) {
-            log.debug("generateServerContext: {}", ks.getCertificate(alias));
+        if (log.isTraceEnabled()) {
+            log.trace("generateServerContext: {}", ks.getCertificate(alias));
         }
         KeyManager[] keyManagers = CertificateHelper.getKeyManagers(ks, authority);
         return CertificateHelper.newServerContext(keyManagers);

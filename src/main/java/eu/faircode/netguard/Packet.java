@@ -38,6 +38,8 @@ public class Packet {
     public byte[] payload;
     public boolean allowed;
 
+    public String hostName;
+
     public Packet() {
         super();
     }

@@ -2,13 +2,23 @@ package eu.faircode.netguard;
 
 import cn.banny.auxiliary.Inspector;
 import cn.banny.utils.IOUtils;
+import com.fuzhu8.tcpcap.kraken.ssl.ExtensionType;
+import com.fuzhu8.tcpcap.kraken.ssl.Version;
+import com.fuzhu8.tcpcap.kraken.ssl.handshake.DefaultHandshake;
+import com.fuzhu8.tcpcap.kraken.ssl.handshake.Handshake;
+import com.fuzhu8.tcpcap.kraken.ssl.handshake.HandshakeType;
+import com.fuzhu8.tcpcap.kraken.ssl.record.ContentType;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.ServerCertificate;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import org.apache.commons.codec.binary.Hex;
+import org.krakenapps.pcap.util.Buffer;
+import org.krakenapps.pcap.util.ChainBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ServerSocketFactory;
 import javax.net.ssl.HandshakeCompletedEvent;
 import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.SSLContext;
@@ -16,17 +26,24 @@ import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
+import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
+import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -40,7 +57,8 @@ public class SSLProxy implements Runnable {
         handshaking, // 正在握手
         failed1, // 握手失败一次
         failed2, // 握手失败两次
-        success // 握手成功
+        success, // 握手成功,
+        not_tls // 不是 TLS 协议
     }
 
     private SSLSocket socket;
@@ -56,35 +74,22 @@ public class SSLProxy implements Runnable {
             final HandshakeStatus status = handshakeStatusMap.get(server);
             if (status == null || status == HandshakeStatus.failed1) {
                 handshakeStatusMap.put(server, HandshakeStatus.handshaking);
-                Thread thread = new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        try (Socket socket = connectServer(new ServerCertificateNotifier() {
-                            @Override
-                            public void handshakeCompleted(ServerCertificate serverCertificate) {
-                                try {
-                                    serverCertificate.createSSLContext(rootCert, privateKey, server);
-                                } catch (Exception e) {
-                                    log.warn("create ssl context failed", e);
-                                }
-                            }
-                        }, timeout, packet, vpn)) {
-                            log.debug("handshake success: socket={}", socket);
-                            handshakeStatusMap.put(server, HandshakeStatus.success);
-                        } catch (Exception e) {
-                            log.debug("handshake failed: {}", server, e);
-                            handshakeStatusMap.put(server, status == null ? HandshakeStatus.failed1 : HandshakeStatus.failed2);
-                        }
-                    }
-                });
+                HandshakeThread handshakeThread = new HandshakeThread(rootCert, privateKey, server, timeout, packet, status == null ? HandshakeStatus.failed1 : HandshakeStatus.failed2);
+                Thread thread = new Thread(handshakeThread);
                 thread.setDaemon(true);
                 thread.start();
-                return null;
+                int port = handshakeThread.getServerPort();
+                if (port == 0) {
+                    return null;
+                } else {
+                    return new Allowed("127.0.0.1", port);
+                }
             }
             switch (status) {
                 case handshaking: // 正在进行SSL握手
                     return null;
                 case failed2: // 两次握手失败：连接失败，或者不是SSL协议
+                case not_tls:
                     return new Allowed(); // Disable mitm
                 case success: // 握手成功
                     SSLContext serverContext = ServerCertificate.getSSLContext(server);
@@ -125,7 +130,7 @@ public class SSLProxy implements Runnable {
         void handshakeCompleted(ServerCertificate serverCertificate);
     }
 
-    private static SSLSocket connectServer(final ServerCertificateNotifier notifier, int timeout, Packet packet, InspectorVpn vpn) throws Exception {
+    private static SSLSocket connectServer(final ServerCertificateNotifier notifier, int timeout, Packet packet, String host) throws Exception {
         Socket app = null;
         SSLSocket socket = null;
         try {
@@ -136,12 +141,16 @@ public class SSLProxy implements Runnable {
             app = new Socket();
             app.bind(null);
             app.setSoTimeout(timeout);
-            app.connect(packet.createServerAddress(), 5000);
+            InetSocketAddress server = packet.createServerAddress();
+            app.connect(server, 5000);
 
-            IPacketCapture packetCapture = vpn.getPacketCapture();
-            String host = packetCapture == null ? null : packetCapture.resolveHost(packet.daddr);
+            if (host == null) {
+                host = addressHostNameMap.get(server);
+            }
             if (host == null) {
                 host = packet.daddr;
+            } else {
+                packet.hostName = host;
             }
             socket = (SSLSocket) context.getSocketFactory().createSocket(app, host, packet.dport, true);
             final CountDownLatch countDownLatch = new CountDownLatch(1);
@@ -154,7 +163,8 @@ public class SSLProxy implements Runnable {
                             notifier.handshakeCompleted(new ServerCertificate(peerCertificate));
                         }
                         countDownLatch.countDown();
-                        log.debug("handshakeCompleted event={}", event);
+                        SSLSession session = event.getSession();
+                        log.debug("handshakeCompleted event={}, peerHost={}", event, session.getPeerHost());
                     } catch (SSLPeerUnverifiedException e) {
                         log.warn("handshakeCompleted failed", e);
                     }
@@ -179,6 +189,186 @@ public class SSLProxy implements Runnable {
     }
 
     private Throwable socketException;
+
+    private static final Map<InetSocketAddress, String> addressHostNameMap = new ConcurrentHashMap<>();
+
+    private static class HandshakeThread implements Runnable {
+        private final X509Certificate rootCert;
+        private final PrivateKey privateKey;
+        private final InetSocketAddress server;
+        private final int timeout;
+        private final Packet packet;
+        private final HandshakeStatus status;
+
+        private final ServerSocket serverSocket;
+
+        public HandshakeThread(X509Certificate rootCert, PrivateKey privateKey, InetSocketAddress server, int timeout, Packet packet, HandshakeStatus status) throws IOException {
+            this.rootCert = rootCert;
+            this.privateKey = privateKey;
+            this.server = server;
+            this.timeout = timeout;
+            this.packet = packet;
+            this.status = status;
+
+            this.serverSocket = addressHostNameMap.containsKey(server) ? null : ServerSocketFactory.getDefault().createServerSocket(0);
+        }
+
+        int getServerPort() {
+            return serverSocket == null ? 0 : serverSocket.getLocalPort();
+        }
+
+        private Version getVersion(short version) {
+            Version tlsVer = Version.NONE;
+            for (Version ver : Version.values()) {
+                if (ver.getValue() == version) {
+                    tlsVer = ver;
+                    break;
+                }
+            }
+            return tlsVer;
+        }
+
+        @Override
+        public void run() {
+            if (serverSocket == null) {
+                tryCertificate(null);
+                return;
+            }
+
+            try (Socket socket = serverSocket.accept()) {
+                try (InputStream inputStream = socket.getInputStream()) {
+                    DataInput dataInput = new DataInputStream(inputStream);
+                    byte contentType = dataInput.readByte();
+                    if (contentType != ContentType.Handshake.getValue()) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(String.format("Not handshake record: contentType=0x%x, server=%s", contentType, server));
+                        }
+                        handshakeStatusMap.put(server, HandshakeStatus.not_tls);
+                        return;
+                    }
+                    short version = dataInput.readShort();
+                    Version tlsVer = getVersion(version);
+                    if (tlsVer == Version.NONE || tlsVer == Version.MM_TLS) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(String.format("Tls version=0x%x, server=%s", version, server));
+                        }
+                        handshakeStatusMap.put(server, HandshakeStatus.not_tls);
+                        return;
+                    }
+                    int length = dataInput.readUnsignedShort();
+                    if(length >= 0x800) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(String.format("Tls length=0x%x, server=%s", length, server));
+                        }
+                        handshakeStatusMap.put(server, HandshakeStatus.not_tls);
+                        return;
+                    }
+
+                    byte[] data = new byte[length];
+                    dataInput.readFully(data);
+                    try {
+                        Handshake handshake = DefaultHandshake.parseHandshake(new ChainBuffer(data));
+                        if (handshake.getType() != HandshakeType.ClientHello) {
+                            log.debug("Not tls: handshakeType={}, server={}", handshake.getType(), server);
+                            handshakeStatusMap.put(server, HandshakeStatus.not_tls);
+                            return;
+                        }
+
+                        Buffer buffer = handshake.getBuffer();
+                        version = buffer.getShort();
+                        tlsVer = getVersion(version);
+                        if (tlsVer == Version.NONE || tlsVer == Version.MM_TLS) {
+                            if (log.isDebugEnabled()) {
+                                log.debug(String.format("Tls handshake version=0x%x, server=%s", version, server));
+                            }
+                            handshakeStatusMap.put(server, HandshakeStatus.not_tls);
+                            return;
+                        }
+                        byte[] clientRandom = new byte[32];
+                        buffer.gets(clientRandom);
+                        byte[] sessionId = new byte[buffer.get() & 0xff];
+                        buffer.gets(sessionId);
+                        int cipherSuitesLength = buffer.getUnsignedShort() / 2;
+                        log.debug("handleClientHello sessionIdLength={}, cipherSuitesLength={}", sessionId.length, cipherSuitesLength);
+                        buffer.skip(cipherSuitesLength * 2); // skip cipher suites
+                        buffer.skip(buffer.get()); // compression methods
+                        if (buffer.readableBytes() < 1) {
+                            log.debug("Not tls: extension data is empty: server={}", server);
+                            handshakeStatusMap.put(server, HandshakeStatus.not_tls);
+                            return;
+                        }
+                        int extensionLength = buffer.getUnsignedShort();
+                        byte[] extensionData = new byte[extensionLength];
+                        buffer.gets(extensionData);
+
+                        buffer = new ChainBuffer(extensionData); // extensionData
+
+                        List<String> serverNames = new ArrayList<>(3);
+                        while(buffer.readableBytes() > 0) {
+                            short type = buffer.getShort();
+                            length = buffer.getUnsignedShort();
+                            data = new byte[length];
+                            buffer.gets(data);
+
+                            if (type == ExtensionType.EXT_SERVER_NAME.getType()) {
+                                Buffer nb = new ChainBuffer(data);
+                                nb.getUnsignedShort(); // name length
+                                byte nameType = nb.get();
+                                if (nameType == 0) {
+                                    int nameLength = nb.getUnsignedShort();
+                                    String name = nb.getString(nameLength, StandardCharsets.UTF_8);
+                                    serverNames.add(name);
+                                } else {
+                                    log.warn("Unsupported name type: {}, data={}, server={}", nameType, Hex.encodeHexString(data), server);
+                                }
+                            }
+                            if(log.isDebugEnabled()) {
+                                log.trace(Inspector.inspectString(data, "parseExtensions type=0x" + Integer.toHexString(type) + ", length=" + length));
+                            }
+                        }
+                        log.debug("parseExtensions names={}, server={}", serverNames, server);
+
+                        if (serverNames.isEmpty()) {
+                            log.debug("Not tls: extension name is empty: server={}", server);
+                            handshakeStatusMap.put(server, HandshakeStatus.not_tls);
+                            return;
+                        }
+
+                        String hostName = serverNames.get(0);
+                        addressHostNameMap.put(server, hostName);
+
+                        tryCertificate(hostName);
+                    } catch (IllegalArgumentException e) {
+                        log.debug("Not tls: server={}", server, e);
+                        handshakeStatusMap.put(server, HandshakeStatus.not_tls);
+                    }
+                }
+            } catch (Exception e) {
+                log.trace("handshake failed: packet={}", packet, e);
+            } finally {
+                IOUtils.close(serverSocket);
+            }
+        }
+
+        private void tryCertificate(String hostName) {
+            try (Socket socket = connectServer(new ServerCertificateNotifier() {
+                @Override
+                public void handshakeCompleted(ServerCertificate serverCertificate) {
+                    try {
+                        serverCertificate.createSSLContext(rootCert, privateKey, server);
+                    } catch (Exception e) {
+                        log.warn("create ssl context failed", e);
+                    }
+                }
+            }, timeout, packet, hostName)) {
+                log.debug("handshake success: socket={}", socket);
+                handshakeStatusMap.put(server, HandshakeStatus.success);
+            } catch (Exception e) {
+                log.trace("handshake failed: {}", server, e);
+                handshakeStatusMap.put(server, status);
+            }
+        }
+    }
 
     private class StreamForward implements Runnable {
         private final InputStream inputStream;
@@ -238,7 +428,7 @@ public class SSLProxy implements Runnable {
                 log.info(String.format("handshake with %s/%d failed: {}", serverIp, serverPort), e.getMessage());
                 socketException = e;
             } catch (Throwable e) {
-                log.debug("stream forward exception: socket={}", socket, e);
+                log.trace("stream forward exception: socket={}", socket, e);
                 socketException = e;
             } finally {
                 IOUtils.close(inputStream);
@@ -255,7 +445,8 @@ public class SSLProxy implements Runnable {
         Runnable runnable = null;
         try {
             local = (SSLSocket) serverSocket.accept();
-            this.socket = connectServer(null, timeout, packet, vpn);
+            local.startHandshake();
+            this.socket = connectServer(null, timeout, packet, null);
             local.setSoTimeout(timeout);
             log.debug("connect ssl: local={}, socket={}, packet={}", local, socket, packet);
 
@@ -268,7 +459,7 @@ public class SSLProxy implements Runnable {
 
             IPacketCapture packetCapture = vpn.getPacketCapture();
             if (packetCapture != null) {
-                packetCapture.onSSLProxyEstablish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort());
+                packetCapture.onSSLProxyEstablish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), packet.hostName);
             }
             final CountDownLatch countDownLatch = new CountDownLatch(2);
             new StreamForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local);
@@ -291,7 +482,7 @@ public class SSLProxy implements Runnable {
                 }
             };
         } catch (Exception e) {
-            log.debug("accept failed: {}, local_port={}", packet, serverSocket.getLocalPort(), e);
+            log.trace("accept failed: {}, local_port={}", packet, serverSocket.getLocalPort(), e);
 
             IOUtils.close(socket);
             IOUtils.close(local);
