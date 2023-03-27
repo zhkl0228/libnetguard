@@ -29,7 +29,7 @@ public class ServerCertificate {
 
     private static final Logger log = LoggerFactory.getLogger(ServerCertificate.class);
 
-    private static final Map<X509Certificate, SSLContext> proxyCertMap = new ConcurrentHashMap<>();
+    private static final Map<String, SSLContext> proxyCertMap = new ConcurrentHashMap<>();
     private static final Map<InetSocketAddress, SSLContext> serverSSLContextMap = new ConcurrentHashMap<>();
 
     private final X509Certificate peerCertificate;
@@ -43,14 +43,17 @@ public class ServerCertificate {
     }
 
     public void createSSLContext(X509Certificate rootCert, PrivateKey privateKey, InetSocketAddress serverAddress) throws Exception {
-        SSLContext serverContext = proxyCertMap.get(peerCertificate);
+        String commonName = getCommonName(peerCertificate);
+        SSLContext serverContext = proxyCertMap.get(commonName);
         if (serverContext == null) {
-            serverContext = this.generateServerContext(peerCertificate, rootCert, privateKey);
-            proxyCertMap.put(peerCertificate, serverContext);
-            log.debug("createSSLContext peerCertificate={}, serverContext={}", peerCertificate, serverContext);
+            log.debug("createSSLContext serverAddress={}, peerCertificate={}", serverAddress, peerCertificate);
+            SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
+            subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
+            log.debug("Subject Alternative Names: {}", subjectAlternativeNames);
+            serverContext = this.generateServerContext(commonName, subjectAlternativeNames, rootCert, privateKey);
+            proxyCertMap.put(commonName, serverContext);
         }
         serverSSLContextMap.put(serverAddress, serverContext);
-        log.debug("createSSLContext serverAddress={}, serverContext={}", serverAddress, serverContext);
     }
 
     private String getCommonName(X509Certificate c) {
@@ -62,19 +65,12 @@ public class ServerCertificate {
                 return result;
             }
         }
-        throw new IllegalStateException("Missed CN in Subject DN: "
-                + c.getSubjectDN());
+        throw new IllegalStateException("Missed CN in Subject DN: " + c.getSubjectDN());
     }
 
-    private SSLContext generateServerContext(X509Certificate peerCertificate, X509Certificate rootCert, PrivateKey privateKey) throws CertificateException, OperatorCreationException, IOException, NoSuchAlgorithmException, NoSuchProviderException, KeyManagementException, SignatureException, KeyStoreException, InvalidKeyException, UnrecoverableKeyException {
-        String commonName = getCommonName(peerCertificate);
-        SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
-        subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
-
-        log.debug("Subject Alternative Names: {}", subjectAlternativeNames);
-
-        String alias = "charles";
-        Authority authority = new Authority(null, alias, alias.toCharArray(), "NetGuard Proxy SSL Proxying", "MTX", "MTX Ltd", "MTX", "MTX Ltd");
+    private SSLContext generateServerContext(String commonName, SubjectAlternativeNameHolder subjectAlternativeNames, X509Certificate rootCert, PrivateKey privateKey) throws CertificateException, OperatorCreationException, IOException, NoSuchAlgorithmException, NoSuchProviderException, KeyManagementException, SignatureException, KeyStoreException, InvalidKeyException, UnrecoverableKeyException {
+        String alias = "tcpcap";
+        Authority authority = new Authority(null, alias, alias.toCharArray(), "TCPcap Proxy SSL Proxying", "XML", "XML Ltd", "XML", "XML Ltd");
         KeyStore ks = CertificateHelper.createServerCertificate(commonName,
                 subjectAlternativeNames, authority, rootCert, privateKey);
         if (log.isDebugEnabled()) {

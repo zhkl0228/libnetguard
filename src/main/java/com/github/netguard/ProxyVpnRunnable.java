@@ -131,4 +131,8 @@ class ProxyVpnRunnable extends ProxyVpn {
         }
     }
 
+    @Override
+    public void enableMitm(int... sslPorts) {
+        throw new UnsupportedOperationException();
+    }
 }

@@ -5,18 +5,19 @@ import cn.banny.utils.IOUtils;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.ServerCertificate;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.HandshakeCompletedEvent;
 import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -24,7 +25,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.security.PrivateKey;
-import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Map;
@@ -68,7 +68,7 @@ public class SSLProxy implements Runnable {
                                     log.warn("create ssl context failed", e);
                                 }
                             }
-                        }, timeout, packet)) {
+                        }, timeout, packet, vpn)) {
                             log.debug("handshake success: socket={}", socket);
                             handshakeStatusMap.put(server, HandshakeStatus.success);
                         } catch (Exception e) {
@@ -85,7 +85,7 @@ public class SSLProxy implements Runnable {
                 case handshaking: // 正在进行SSL握手
                     return null;
                 case failed2: // 两次握手失败：连接失败，或者不是SSL协议
-                    return new Allowed();
+                    return new Allowed(); // Disable mitm
                 case success: // 握手成功
                     SSLContext serverContext = ServerCertificate.getSSLContext(server);
                     if (serverContext != null) {
@@ -95,8 +95,7 @@ public class SSLProxy implements Runnable {
                     throw new IllegalStateException("server=" + server + ", status=" + status);
             }
         } catch (IOException e) {
-            log.warn("mitm failed", e);
-            return null;
+            throw new IllegalStateException("mitm failed", e);
         }
     }
 
@@ -126,33 +125,25 @@ public class SSLProxy implements Runnable {
         void handshakeCompleted(ServerCertificate serverCertificate);
     }
 
-    private static SSLSocket connectServer(final ServerCertificateNotifier notifier, int timeout, Packet packet) throws Exception {
+    private static SSLSocket connectServer(final ServerCertificateNotifier notifier, int timeout, Packet packet, InspectorVpn vpn) throws Exception {
         Socket app = null;
         SSLSocket socket = null;
         try {
-            SSLContext context = SSLContext.getInstance("TLS");
-            X509TrustManager trustManager = new X509TrustManager() {
-                @Override
-                public X509Certificate[] getAcceptedIssuers() {
-                    return new X509Certificate[0];
-                }
-                @Override
-                public void checkServerTrusted(X509Certificate[] chain,
-                                               String authType) {
-                }
-                @Override
-                public void checkClientTrusted(X509Certificate[] chain,
-                                               String authType) {
-                }
-            };
-            context.init(null, new TrustManager[]{trustManager}, new SecureRandom());
+            SSLContext context = SSLContext.getInstance("TLSv1.2");
+            TrustManager[] trustManagers = InsecureTrustManagerFactory.INSTANCE.getTrustManagers();
+            context.init(null, trustManagers, null);
 
             app = new Socket();
             app.bind(null);
             app.setSoTimeout(timeout);
             app.connect(packet.createServerAddress(), 5000);
 
-            socket = (SSLSocket) context.getSocketFactory().createSocket(app, packet.daddr, packet.dport, true);
+            IPacketCapture packetCapture = vpn.getPacketCapture();
+            String host = packetCapture == null ? null : packetCapture.resolveHost(packet.daddr);
+            if (host == null) {
+                host = packet.daddr;
+            }
+            socket = (SSLSocket) context.getSocketFactory().createSocket(app, host, packet.dport, true);
             final CountDownLatch countDownLatch = new CountDownLatch(1);
             socket.addHandshakeCompletedListener(new HandshakeCompletedListener() {
                 @Override
@@ -165,7 +156,7 @@ public class SSLProxy implements Runnable {
                         countDownLatch.countDown();
                         log.debug("handshakeCompleted event={}", event);
                     } catch (SSLPeerUnverifiedException e) {
-                        log.debug("handshakeCompleted failed", e);
+                        log.warn("handshakeCompleted failed", e);
                     }
                 }
             });
@@ -243,6 +234,9 @@ public class SSLProxy implements Runnable {
                         break;
                     } catch(SocketTimeoutException ignored) {}
                 }
+            } catch (SSLHandshakeException e) {
+                log.info(String.format("handshake with %s/%d failed: {}", serverIp, serverPort), e.getMessage());
+                socketException = e;
             } catch (Throwable e) {
                 log.debug("stream forward exception: socket={}", socket, e);
                 socketException = e;
@@ -261,8 +255,8 @@ public class SSLProxy implements Runnable {
         Runnable runnable = null;
         try {
             local = (SSLSocket) serverSocket.accept();
-            local.setSoTimeout(1000);
-            this.socket = connectServer(null, timeout, packet);
+            this.socket = connectServer(null, timeout, packet, vpn);
+            local.setSoTimeout(timeout);
             log.debug("connect ssl: local={}, socket={}, packet={}", local, socket, packet);
 
             final InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();

@@ -10,4 +10,6 @@ public interface IPacketCapture {
     void onSSLProxyRX(java.lang.String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
     void onSSLProxyFinish(java.lang.String clientIp, java.lang.String serverIp, int clientPort, int serverPort);
 
+    String resolveHost(String ip);
+
 }

@@ -1,8 +1,7 @@
 package com.github.netguard;
 
-import cn.banny.auxiliary.Inspector;
 import cn.banny.utils.IOUtils;
-import com.github.netguard.vpn.IPacketCapture;
+import com.github.netguard.vpn.VpnListener;
 import eu.faircode.netguard.ServiceSinkhole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +27,12 @@ public class VpnServer {
         this.serverSocket = new ServerSocket(port);
     }
 
+    private VpnListener vpnListener;
+
+    public void setVpnListener(VpnListener vpnListener) {
+        this.vpnListener = vpnListener;
+    }
+
     private final List<ProxyVpn> clients = new ArrayList<>();
 
     private boolean useNetguard = true;
@@ -45,11 +50,7 @@ public class VpnServer {
                         ProxyVpn vpn = null;
                         if (useNetguard) {
                             try {
-                                ServiceSinkhole sinkhole = new ServiceSinkhole(socket, clients);
-                                if (log.isDebugEnabled()) {
-                                    sinkhole.setPacketCapture(new DebugPacketCapture());
-                                }
-                                vpn = sinkhole;
+                                vpn = new ServiceSinkhole(socket, clients);
                             } catch(UnsatisfiedLinkError e) {
                                 log.debug("init ServiceSinkhole", e);
                                 useNetguard = false;
@@ -57,6 +58,9 @@ public class VpnServer {
                         }
                         if (vpn == null) {
                             vpn = new ProxyVpnRunnable(socket, clients);
+                        }
+                        if (vpnListener != null) {
+                            vpnListener.onConnectClient(vpn);
                         }
                         Thread vpnThread = new Thread(vpn, "socket: " + socket);
                         vpnThread.setPriority(Thread.MAX_PRIORITY);
@@ -94,25 +98,5 @@ public class VpnServer {
 
     public int getPort() {
         return serverSocket.getLocalPort();
-    }
-
-    private static class DebugPacketCapture implements IPacketCapture {
-        @Override
-        public void onPacket(byte[] packetData, String type, int datalink) {
-        }
-        @Override
-        public void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort) {
-        }
-        @Override
-        public void onSSLProxyTX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
-            Inspector.inspect(data, String.format("onSSLProxyTX %s:%d => %s:%d", clientIp, clientPort, serverIp, serverPort));
-        }
-        @Override
-        public void onSSLProxyRX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
-            Inspector.inspect(data, String.format("onSSLProxyRX %s:%d => %s:%d", clientIp, clientPort, serverIp, serverPort));
-        }
-        @Override
-        public void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort) {
-        }
     }
 }

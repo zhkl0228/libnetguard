@@ -1,6 +1,6 @@
 package com.github.netguard.vpn;
 
-public interface InspectorVpn {
+public interface InspectorVpn extends Vpn {
 
     IPacketCapture getPacketCapture();
 

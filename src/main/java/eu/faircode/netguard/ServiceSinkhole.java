@@ -3,7 +3,6 @@ package eu.faircode.netguard;
 import cn.banny.utils.IOUtils;
 import com.fuzhu8.tcpcap.PcapDLT;
 import com.github.netguard.ProxyVpn;
-import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.scijava.nativelib.NativeLoader;
@@ -68,11 +67,10 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
             }
             this.fd = (Integer) fdField.get(fileDescriptor);
 
-            // use Charles export key store
             KeyStore keyStore = KeyStore.getInstance("PKCS12", "BC");
-            String alias = "charles";
-            try (InputStream inputStream = ServiceSinkhole.class.getResourceAsStream("/charles-ssl-proxying.p12")) {
-                keyStore.load(inputStream, alias.toCharArray());
+            String alias = "tcpcap-ssl-proxying";
+            try (InputStream inputStream = ServiceSinkhole.class.getResourceAsStream("/tcpcap-ssl-proxying.p12")) {
+                keyStore.load(inputStream, "tcpcap".toCharArray());
             }
             rootCert = (X509Certificate) keyStore.getCertificate(alias);
             privateKey = (PrivateKey) keyStore.getKey(alias, null);
@@ -108,12 +106,6 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
             log.debug("Stopped tunnel thread");
         }
-    }
-
-    private IPacketCapture packetCapture;
-
-    public void setPacketCapture(IPacketCapture packetCapture) {
-        this.packetCapture = packetCapture;
     }
 
     private Thread tunnelThread;
@@ -214,6 +206,13 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
                 protocol == 17 /* UDP */);
     }
 
+    private int[] sslPorts;
+
+    @Override
+    public void enableMitm(int... sslPorts) {
+        this.sslPorts = sslPorts;
+    }
+
     private static final int SYSTEM_UID = 2000;
 
     // Called from native code
@@ -229,17 +228,17 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         Allowed allowed = null;
         long start = System.currentTimeMillis();
         try {
-            if (packet.allowed) {
-                if (packet.protocol == 6 && packet.version == 4 && packet.isSSL(new int[] { 443 })) { // ipv4
+            if(packet.allowed) {
+                allowed = new Allowed();
+
+                if (packet.protocol == 6 && packet.version == 4
+                        && sslPorts != null
+                        && packet.isSSL(sslPorts)) { // ipv4
                     allowed = mitm(packet);
                 }
             }
         } catch (Exception e) {
-            log.debug("mitm failed: {}", packet, e);
-        }
-
-        if(allowed == null && packet.allowed) {
-            allowed = new Allowed();
+            log.warn("mitm failed: {}", packet, e);
         }
 
         if (allowed != null) {
@@ -255,21 +254,12 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         return allowed;
     }
 
-    @Override
-    public IPacketCapture getPacketCapture() {
-        return packetCapture;
-    }
-
     private final X509Certificate rootCert;
     private final PrivateKey privateKey;
 
     private Allowed mitm(Packet packet) {
-        if (log.isTraceEnabled()) {
-            int mitmTimeout = 10000; // default 10 seconds;
-            return SSLProxy.create(this, rootCert, privateKey, packet, mitmTimeout);
-        } else {
-            return new Allowed();
-        }
+        int mitmTimeout = 10000; // default 10 seconds;
+        return SSLProxy.create(this, rootCert, privateKey, packet, mitmTimeout);
     }
 
     // Called from native code

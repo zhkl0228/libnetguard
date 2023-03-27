@@ -268,7 +268,7 @@ void check_tcp_socket(const struct arguments *args,
             log_android(ANDROID_LOG_ERROR, "%s getsockopt error %d: %s",
                         session, errno, strerror(errno));
         else if (serr)
-            log_android(ANDROID_LOG_ERROR, "%s SO_ERROR %d: %s",
+            log_android(ANDROID_LOG_DEBUG, "%s SO_ERROR %d: %s",
                         session, serr, strerror(serr));
 
         write_rst(args, &s->tcp);
@@ -951,7 +951,7 @@ jboolean handle_tcp(const struct arguments *args,
             // Queue data to forward
             if (datalen) {
                 if (cur->socket < 0) {
-                    log_android(ANDROID_LOG_ERROR, "%s data while local closed", session);
+                    log_android(ANDROID_LOG_DEBUG, "%s data while local closed", session);
                     write_rst(args, &cur->tcp);
                     return 0;
                 }
@@ -1252,7 +1252,14 @@ int open_tcp_socket(const struct arguments *args,
                                    ? sizeof(struct sockaddr_in)
                                    : sizeof(struct sockaddr_in6)));
     if (err < 0 && errno != EINPROGRESS) {
-        log_android(ANDROID_LOG_ERROR, "connect error %d: %s", errno, strerror(errno));
+        char dest[INET6_ADDRSTRLEN + 1];
+        if (version == 4) {
+            inet_ntop(AF_INET, &addr4.sin_addr, dest, sizeof(dest));
+        } else {
+            inet_ntop(AF_INET6, &addr6.sin6_addr, dest, sizeof(dest));
+        }
+        uint16_t dport = version == 4 ? addr4.sin_port : addr6.sin6_port;
+        log_android(ANDROID_LOG_DEBUG, "connect %s/%d error %d: %s", dest, dport, errno, strerror(errno));
         return -1;
     }
 
