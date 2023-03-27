@@ -1,9 +1,13 @@
 package com.github.netguard;
 
 import cn.banny.utils.IOUtils;
+import eu.faircode.netguard.Allowed;
+import eu.faircode.netguard.Packet;
+import eu.faircode.netguard.SSLProxy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
+import tech.httptoolkit.android.vpn.Mitm;
 import tech.httptoolkit.android.vpn.SessionHandler;
 import tech.httptoolkit.android.vpn.SessionManager;
 import tech.httptoolkit.android.vpn.socket.SocketNIODataService;
@@ -12,7 +16,9 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -20,7 +26,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-class ProxyVpnRunnable extends ProxyVpn {
+class ProxyVpnRunnable extends ProxyVpn implements Mitm {
 
     private static final Logger log = LoggerFactory.getLogger(ProxyVpnRunnable.class);
 
@@ -48,7 +54,7 @@ class ProxyVpnRunnable extends ProxyVpn {
 
         // Packets from upstream servers, received by this VPN
         OutputStream vpnWriteStream = socket.getOutputStream();
-        this.vpnPacketWriter = new ClientPacketWriter(new DataOutputStream(vpnWriteStream));
+        this.vpnPacketWriter = new ClientPacketWriter(new DataOutputStream(vpnWriteStream), packetCapture);
 
         this.vpnPacketWriterThread = new Thread(vpnPacketWriter);
         this.nioService = new SocketNIODataService(vpnPacketWriter);
@@ -62,8 +68,8 @@ class ProxyVpnRunnable extends ProxyVpn {
                 new SynchronousQueue<Runnable>(),
                 new ThreadPoolExecutor.DiscardPolicy() // Replace running pings if there's too many
         );
-        SessionManager manager = new SessionManager();
-        this.handler = new SessionHandler(manager, nioService, vpnPacketWriter, pingThreadPool);
+        SessionManager manager = new SessionManager(this);
+        this.handler = new SessionHandler(manager, nioService, vpnPacketWriter, pingThreadPool, packetCapture);
     }
 
     private boolean running;
@@ -91,7 +97,7 @@ class ProxyVpnRunnable extends ProxyVpn {
                         packet.limit(length);
                         handler.handlePacket(packet);
                     } catch (Exception e) {
-                        log.debug("handlePacket", e);
+                        log.trace("handlePacket", e);
                     }
 
                     packet.clear();
@@ -132,7 +138,37 @@ class ProxyVpnRunnable extends ProxyVpn {
     }
 
     @Override
-    public void enableMitm(int... sslPorts) {
-        throw new UnsupportedOperationException();
+    public SocketAddress mitm(String ip, int port) {
+        if (sslPorts == null) {
+            return null;
+        } else {
+            boolean mitm = false;
+            if (sslPorts.length == 0 && port == 443) {
+                mitm = true;
+            } else {
+                for (int p : sslPorts) {
+                    if (p == port) {
+                        mitm = true;
+                        break;
+                    }
+                }
+            }
+            if (mitm) {
+                int mitmTimeout = 10000; // default 10 seconds;
+                Packet packet = new Packet();
+                packet.daddr = ip;
+                packet.dport = port;
+                Allowed allowed = SSLProxy.create(this, rootCert, privateKey, packet, mitmTimeout);
+                if (allowed == null) {
+                    return new InetSocketAddress("127.0.0.1", 222);
+                } else if (allowed.raddr != null && allowed.rport > 0) {
+                    return new InetSocketAddress(allowed.raddr, allowed.rport);
+                } else {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
     }
 }

@@ -178,7 +178,7 @@ class SocketChannelReader {
 					//write to client
 					writer.write(packetData);
 
-					log.debug("SDR: sent {} bytes to UDP client, packetData.length: {}", len, packetData.length);
+					log.trace("SDR: sent {} bytes to UDP client, packetData.length: {}", len, packetData.length);
 					buffer.clear();
 				}
 			} while(len > 0);

@@ -16,6 +16,8 @@
 
 package tech.httptoolkit.android.vpn;
 
+import com.fuzhu8.tcpcap.PcapDLT;
+import com.github.netguard.vpn.IPacketCapture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,8 +41,11 @@ public class ClientPacketWriter implements Runnable {
 	private volatile boolean shutdown = false;
 	private final BlockingDeque<byte[]> packetQueue = new LinkedBlockingDeque<>();
 
-	public ClientPacketWriter(DataOutput clientWriter) {
+	private final IPacketCapture packetCapture;
+
+	public ClientPacketWriter(DataOutput clientWriter, IPacketCapture packetCapture) {
 		this.clientWriter = clientWriter;
+		this.packetCapture = packetCapture;
 	}
 
 	public void write(byte[] data) {
@@ -62,6 +67,9 @@ public class ClientPacketWriter implements Runnable {
 				try {
 					this.clientWriter.writeShort(data.length);
 					this.clientWriter.write(data);
+					if (packetCapture != null) {
+						packetCapture.onPacket(data, "ToyShark", PcapDLT.CONST_RAW_IP);
+					}
 				} catch (IOException e) {
 					log.error("Error writing {} bytes to the VPN", data.length);
 					e.printStackTrace();

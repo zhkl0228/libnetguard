@@ -68,7 +68,7 @@ public class SSLProxy implements Runnable {
 
     private static final Map<InetSocketAddress, HandshakeStatus> handshakeStatusMap = new ConcurrentHashMap<>();
 
-    static Allowed create(final InspectorVpn vpn, final X509Certificate rootCert, final PrivateKey privateKey, final Packet packet, final int timeout) {
+    public static Allowed create(final InspectorVpn vpn, final X509Certificate rootCert, final PrivateKey privateKey, final Packet packet, final int timeout) {
         try {
             final InetSocketAddress server = packet.createServerAddress();
             final HandshakeStatus status = handshakeStatusMap.get(server);

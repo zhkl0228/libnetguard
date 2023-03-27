@@ -30,7 +30,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.AbstractSelectableChannel;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -44,6 +43,12 @@ public class SessionManager implements ICloseSession {
 	private static final Logger log = LoggerFactory.getLogger(SessionManager.class);
 
 	private final Map<String, Session> table = new ConcurrentHashMap<>();
+
+	private final Mitm mitm;
+
+	public SessionManager(Mitm mitm) {
+		this.mitm = mitm;
+	}
 
 	/**
 	 * keep java garbage collector from collecting a session
@@ -170,9 +175,10 @@ public class SessionManager implements ICloseSession {
 		// Initiate connection straight away, to reduce latency
 		// We use the real address, unless tcpPortRedirection redirects us to a different
 		// target address for traffic on this port.
-		SocketAddress socketAddress = tcpPortRedirection.get(port) != null
-			? tcpPortRedirection.get(port)
-			: new InetSocketAddress(ips, port);
+		SocketAddress socketAddress = mitm.mitm(ips, port);
+		if (socketAddress == null) {
+			socketAddress = new InetSocketAddress(ips, port);
+		}
 
 		log.debug("Initiate connecting to remote tcp server: {}", socketAddress);
 		boolean connected = channel.connect(socketAddress);
@@ -181,11 +187,5 @@ public class SessionManager implements ICloseSession {
 		table.put(key, session);
 
 		return session;
-	}
-
-	private Map<Integer, InetSocketAddress> tcpPortRedirection = new HashMap<>();
-
-	public void setTcpPortRedirections(Map<Integer, InetSocketAddress> tcpPortRedirection) {
-		this.tcpPortRedirection = tcpPortRedirection;
 	}
 }

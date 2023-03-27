@@ -37,6 +37,10 @@ public class VpnServer {
 
     private boolean useNetguard = true;
 
+    public void disableNetguard() {
+        useNetguard = false;
+    }
+
     public void start() {
         if (thread != null) {
             throw new IllegalStateException("Already started.");

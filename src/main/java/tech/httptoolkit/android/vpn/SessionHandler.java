@@ -16,6 +16,8 @@
 
 package tech.httptoolkit.android.vpn;
 
+import com.fuzhu8.tcpcap.PcapDLT;
+import com.github.netguard.vpn.IPacketCapture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.socket.SocketNIODataService;
@@ -48,14 +50,15 @@ public class SessionHandler {
 	private final SessionManager manager;
 	private final SocketNIODataService nioService;
 	private final ClientPacketWriter writer;
-
 	private final ExecutorService pingThreadPool;
+	private final IPacketCapture packetCapture;
 
-	public SessionHandler(SessionManager manager, SocketNIODataService nioService, ClientPacketWriter writer, ExecutorService pingThreadPool) {
+	public SessionHandler(SessionManager manager, SocketNIODataService nioService, ClientPacketWriter writer, ExecutorService pingThreadPool, IPacketCapture packetCapture) {
 		this.manager = manager;
 		this.nioService = nioService;
 		this.writer = writer;
 		this.pingThreadPool = pingThreadPool;
+		this.packetCapture = packetCapture;
 	}
 
 	/**
@@ -70,14 +73,21 @@ public class SessionHandler {
 
 		final IPv4Header ipHeader = IPPacketFactory.createIPv4Header(stream);
 
+		boolean handled = false;
 		if (ipHeader.getProtocol() == 6) {
 			handleTCPPacket(stream, ipHeader);
+			handled = true;
 		} else if (ipHeader.getProtocol() == 17) {
 			handleUDPPacket(stream, ipHeader);
+			handled = true;
 		} else if (ipHeader.getProtocol() == 1) {
 			handleICMPPacket(stream, ipHeader);
+			handled = true;
 		} else {
 			log.warn("Unsupported IP protocol: {}", ipHeader.getProtocol());
+		}
+		if (handled && packetCapture != null) {
+			packetCapture.onPacket(rawPacket, "ToyShark", PcapDLT.CONST_RAW_IP);
 		}
 	}
 
