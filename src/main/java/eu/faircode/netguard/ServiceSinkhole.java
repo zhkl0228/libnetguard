@@ -255,7 +255,6 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private boolean protect(int fd) {
-        log.debug("protect fd={}", fd);
         return true;
     }
 

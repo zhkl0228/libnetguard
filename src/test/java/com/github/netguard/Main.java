@@ -3,6 +3,7 @@ package com.github.netguard;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
+import com.github.netguard.vpn.ssl.SSLProxyV2;
 import eu.faircode.netguard.ServiceSinkhole;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -13,7 +14,8 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) throws IOException {
-        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
+        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.DEBUG);
+        Logger.getLogger(SSLProxyV2.class).setLevel(Level.TRACE);
         VpnServer vpnServer = new VpnServer();
         vpnServer.setVpnListener(new VpnListener() {
             @Override
@@ -51,8 +53,8 @@ public class Main {
         public void onSSLProxyRX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
         }
         @Override
-        public void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort) {
-            System.out.printf("onSSLProxyFinish %s:%d => %s:%d%n", clientIp, clientPort, serverIp, serverPort);
+        public void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName) {
+            System.out.printf("onSSLProxyFinish %s:%d => %s:%d, hostName=%s%n", clientIp, clientPort, serverIp, serverPort, hostName);
         }
     }
 

@@ -25,6 +25,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -41,8 +42,12 @@ public class SSLProxyV2 implements Runnable {
 
     public static Allowed create(final InspectorVpn vpn, final X509Certificate rootCert, final PrivateKey privateKey, final Packet packet, final int timeout) {
         try {
+            log.debug("create mitm packet={}", packet);
             IPacketCapture packetCapture = vpn.getPacketCapture();
-            return new SSLProxyV2(rootCert, privateKey, packetCapture, packet, timeout).redirect();
+            SSLProxyV2 proxy = new SSLProxyV2(rootCert, privateKey, packetCapture, packet, timeout);
+            Allowed allowed = proxy.redirect();
+            log.debug("create mitm packet={}, allowed={}", packet, allowed);
+            return allowed;
         } catch (IOException e) {
             log.warn("create SSLProxy failed", e);
             return null;
@@ -69,7 +74,7 @@ public class SSLProxyV2 implements Runnable {
         this.hostName = null;
 
         ServerSocketFactory factory = ServerSocketFactory.getDefault();
-        this.serverSocket = factory.createServerSocket(0);
+        this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLocalHost());
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
 
         Thread thread = new Thread(this, "Proxy for " + packet);
@@ -90,7 +95,7 @@ public class SSLProxyV2 implements Runnable {
         this.hostName = hostName;
 
         SSLServerSocketFactory factory = context.getServerSocketFactory();
-        this.serverSocket = factory.createServerSocket(0);
+        this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLocalHost());
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
 
         Thread thread = new Thread(this, "SSLProxy for " + packet);
@@ -110,9 +115,13 @@ public class SSLProxyV2 implements Runnable {
                 }
             }
         } catch (IOException e) {
-            log.trace("proxy failed: {}, hostName={}, serverSocket={}", packet, hostName, serverSocket, e);
+            if (hostName == null) {
+                log.trace("proxy failed: serverSocket={}, packet={}", serverSocket, packet, e);
+            } else {
+                log.debug("proxy failed: hostName={}, serverSocket={}, packet={}", hostName, serverSocket, packet, e);
+            }
         } catch (Exception e) {
-            log.warn("proxy failed: {}, hostName={}, serverSocket={}", packet, hostName, serverSocket, e);
+            log.warn("proxy failed: hostName={}, serverSocket={}, packet={}", hostName, serverSocket, packet, e);
         } finally {
             IOUtils.close(secureSocket);
             IOUtils.close(serverSocket);
@@ -120,32 +129,33 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private void handleSSLSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName) throws IOException, InterruptedException {
-        log.debug("ssl proxy remote={}, socket={}, packetCapture={}", remote, socket, packetCapture);
+        log.debug("ssl proxy remote={}, socket={}, local={}, hostName={}", remote, socket, local, hostName);
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
             doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName);
         }
     }
 
     private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, IPacketCapture packetCapture, String hostName) throws InterruptedException {
+        log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
         if (packetCapture != null) {
             packetCapture.onSSLProxyEstablish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName);
         }
         CountDownLatch countDownLatch = new CountDownLatch(2);
-        new StreamForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture);
-        new StreamForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture);
+        new StreamForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName);
+        new StreamForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName);
         countDownLatch.await();
 
         if (packetCapture != null) {
-            packetCapture.onSSLProxyFinish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort());
+            packetCapture.onSSLProxyFinish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName);
         }
     }
 
     private void handleSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local) throws Exception {
         DataInput dataInput = new DataInputStream(localIn);
         ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
-        log.debug("proxy remote={}, record={}", remote, record);
+        log.debug("proxy remote={}, record={}, local={}", remote, record, local);
         if (record.hostName == null) {
             try (Socket socket = new Socket()) {
                 socket.connect(remote, timeout);

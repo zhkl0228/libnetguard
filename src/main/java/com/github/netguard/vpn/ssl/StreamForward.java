@@ -26,9 +26,10 @@ class StreamForward implements Runnable {
     private final CountDownLatch countDownLatch;
     private final Socket socket;
     private final IPacketCapture packetCapture;
+    private final String hostName;
 
     StreamForward(InputStream inputStream, OutputStream outputStream, boolean send, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket,
-                  IPacketCapture packetCapture) {
+                  IPacketCapture packetCapture, String hostName) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.send = send;
@@ -39,8 +40,9 @@ class StreamForward implements Runnable {
         this.countDownLatch = countDownLatch;
         this.socket = socket;
         this.packetCapture = packetCapture;
+        this.hostName = hostName;
 
-        Thread thread = new Thread(this);
+        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + socket);
         thread.setDaemon(true);
         thread.start();
     }
@@ -75,7 +77,7 @@ class StreamForward implements Runnable {
                 }
             }
         } catch (SSLHandshakeException e) {
-            log.debug(String.format("handshake with %s/%d failed: {}", serverIp, serverPort), e.getMessage());
+            log.info(String.format("handshake with %s => %s/%d failed: {}", hostName, serverIp, serverPort), e.getMessage());
             socketException = e;
         } catch (IOException e) {
             log.trace("stream forward exception: socket={}", socket, e);
