@@ -13,7 +13,10 @@ import org.krakenapps.pcap.util.ChainBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -35,53 +38,48 @@ class ExtensionServerName {
         return tlsVer;
     }
 
-    static class ClientHelloRecord {
-        final Version version;
-        final byte[] data;
-        final String hostName;
-        public ClientHelloRecord(Version version, byte[] data, String hostName) {
-            this.version = version;
-            this.data = data;
-            this.hostName = hostName;
-        }
-    }
-
     static ClientHelloRecord parseServerNames(DataInput dataInput, InetSocketAddress server) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutput dataOutput = new DataOutputStream(baos);
         byte contentType = dataInput.readByte();
+        dataOutput.writeByte(contentType);
         if (contentType != ContentType.Handshake.getValue()) {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Not handshake record: contentType=0x%x, server=%s", contentType, server));
             }
-            return null;
+            return new ClientHelloRecord(baos);
         }
         short version = dataInput.readShort();
+        dataOutput.writeShort(version);
         Version recordVersion = getVersion(version);
         if (recordVersion == Version.NONE || recordVersion == Version.MM_TLS) {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls version=0x%x, server=%s", version, server));
             }
-            return null;
+            return new ClientHelloRecord(baos);
         }
         int length = dataInput.readUnsignedShort();
+        dataOutput.writeShort(length);
         if(length >= 0x800) {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls length=0x%x, server=%s", length, server));
             }
-            return null;
+            return new ClientHelloRecord(baos);
         }
 
         byte[] clientHelloData = new byte[length];
         dataInput.readFully(clientHelloData);
+        dataOutput.write(clientHelloData);
         Handshake handshake;
         try {
             handshake = DefaultHandshake.parseHandshake(new ChainBuffer(clientHelloData));
         } catch (IllegalArgumentException e) {
             log.debug("Not tls: server={}", server, e);
-            return null;
+            return new ClientHelloRecord(baos);
         }
         if (handshake.getType() != HandshakeType.ClientHello) {
             log.debug("Not tls: handshakeType={}, server={}", handshake.getType(), server);
-            return null;
+            return new ClientHelloRecord(baos);
         }
 
         Buffer buffer = handshake.getBuffer();
@@ -91,7 +89,7 @@ class ExtensionServerName {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls handshake version=0x%x, server=%s", version, server));
             }
-            return null;
+            return new ClientHelloRecord(baos);
         }
         buffer.skip(32); // clientRandom
         buffer.skip(buffer.get() & 0xff); // sessionId
@@ -99,7 +97,7 @@ class ExtensionServerName {
         buffer.skip(buffer.get()); // compression methods
         if (buffer.readableBytes() < 2) {
             log.debug("Not tls: extension data is empty: server={}", server);
-            return null;
+            return new ClientHelloRecord(baos);
         }
         int extensionLength = buffer.getUnsignedShort();
         byte[] extensionData = new byte[extensionLength];
@@ -133,10 +131,10 @@ class ExtensionServerName {
 
         if (serverNames.isEmpty()) {
             log.debug("Not tls: extension name is empty: server={}", server);
-            return null;
+            return new ClientHelloRecord(baos);
         } else {
             String hostName = serverNames.get(0);
-            return new ClientHelloRecord(recordVersion, clientHelloData, hostName);
+            return new ClientHelloRecord(baos, hostName);
         }
     }
 

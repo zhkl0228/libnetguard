@@ -1,12 +1,12 @@
 package com.github.netguard.vpn.ssl;
 
-import cn.banny.auxiliary.Inspector;
 import cn.banny.utils.IOUtils;
 import com.github.netguard.vpn.IPacketCapture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLHandshakeException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
@@ -68,10 +68,6 @@ class StreamForward implements Runnable {
                             } else {
                                 packetCapture.onSSLProxyRX(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
                             }
-                        } else {
-                            if (log.isDebugEnabled()) {
-                                log.debug(Inspector.inspectString(Arrays.copyOf(buf, read), socket.toString()));
-                            }
                         }
                     }
                     break;
@@ -79,10 +75,13 @@ class StreamForward implements Runnable {
                 }
             }
         } catch (SSLHandshakeException e) {
-            log.info(String.format("handshake with %s/%d failed: {}", serverIp, serverPort), e.getMessage());
+            log.debug(String.format("handshake with %s/%d failed: {}", serverIp, serverPort), e.getMessage());
             socketException = e;
-        } catch (Throwable e) {
+        } catch (IOException e) {
             log.trace("stream forward exception: socket={}", socket, e);
+            socketException = e;
+        } catch (Exception e) {
+            log.debug("stream forward exception: socket={}", socket, e);
             socketException = e;
         } finally {
             IOUtils.close(inputStream);

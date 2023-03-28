@@ -1,9 +1,9 @@
 package com.github.netguard;
 
 import cn.banny.utils.IOUtils;
+import com.github.netguard.vpn.ssl.SSLProxyV2;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
-import com.github.netguard.vpn.ssl.SSLProxy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
@@ -158,7 +158,7 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
                 Packet packet = new Packet();
                 packet.daddr = ip;
                 packet.dport = port;
-                Allowed allowed = SSLProxy.create(this, rootCert, privateKey, packet, mitmTimeout);
+                Allowed allowed = SSLProxyV2.create(this, rootCert, privateKey, packet, mitmTimeout);
                 if (allowed == null) {
                     return new InetSocketAddress("127.0.0.1", 222);
                 } else if (allowed.raddr != null && allowed.rport > 0) {

@@ -13,7 +13,7 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) throws IOException {
-        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.DEBUG);
+        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
         VpnServer vpnServer = new VpnServer();
         vpnServer.setVpnListener(new VpnListener() {
             @Override

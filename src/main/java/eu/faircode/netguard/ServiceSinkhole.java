@@ -4,7 +4,7 @@ import cn.banny.utils.IOUtils;
 import com.fuzhu8.tcpcap.PcapDLT;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.InspectorVpn;
-import com.github.netguard.vpn.ssl.SSLProxy;
+import com.github.netguard.vpn.ssl.SSLProxyV2;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -161,7 +161,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private void dnsResolved(ResourceRecord rr) {
-        log.info("dnsResolved rr={}", rr);
+        log.debug("dnsResolved rr={}", rr);
     }
 
     // Called from native code
@@ -235,7 +235,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     private Allowed mitm(Packet packet) {
         int mitmTimeout = 10000; // default 10 seconds;
-        return SSLProxy.create(this, rootCert, privateKey, packet, mitmTimeout);
+        return SSLProxyV2.create(this, rootCert, privateKey, packet, mitmTimeout);
     }
 
     // Called from native code

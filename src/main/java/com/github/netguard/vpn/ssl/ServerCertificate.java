@@ -10,7 +10,6 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.security.InvalidKeyException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
@@ -25,12 +24,11 @@ import java.security.cert.X509Certificate;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class ServerCertificate {
+class ServerCertificate {
 
     private static final Logger log = LoggerFactory.getLogger(ServerCertificate.class);
 
     private static final Map<String, SSLContext> proxyCertMap = new ConcurrentHashMap<>();
-    static final Map<InetSocketAddress, SSLContext> serverSSLContextMap = new ConcurrentHashMap<>();
 
     private final X509Certificate peerCertificate;
 
@@ -38,27 +36,17 @@ public class ServerCertificate {
         this.peerCertificate = peerCertificate;
     }
 
-    public static SSLContext getSSLContext(InetSocketAddress serverAddress, String hostName) {
-        SSLContext context = serverSSLContextMap.get(serverAddress);
-        if (context == null && hostName != null) {
-            context = proxyCertMap.get(hostName);
-        }
-        return context;
-    }
-
-    public void createSSLContext(X509Certificate rootCert, PrivateKey privateKey, InetSocketAddress serverAddress, String hostName) throws Exception {
+    SSLContext createSSLContext(X509Certificate rootCert, PrivateKey privateKey) throws Exception {
         String commonName = getCommonName(peerCertificate);
-        String key = hostName == null ? commonName : hostName;
-        SSLContext serverContext = proxyCertMap.get(key);
+        SSLContext serverContext = proxyCertMap.get(commonName);
         if (serverContext == null) {
-            log.debug("createSSLContext serverAddress={}, hostName={}", serverAddress, hostName);
             SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
             subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
             log.debug("Subject Alternative Names: {}", subjectAlternativeNames);
             serverContext = this.generateServerContext(commonName, subjectAlternativeNames, rootCert, privateKey);
-            proxyCertMap.put(key, serverContext);
+            proxyCertMap.put(commonName, serverContext);
         }
-        serverSSLContextMap.put(serverAddress, serverContext);
+        return serverContext;
     }
 
     private String getCommonName(X509Certificate c) {
