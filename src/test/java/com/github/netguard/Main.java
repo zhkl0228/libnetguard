@@ -14,11 +14,11 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
-        final IPacketCapture packetCapture = new DebugPacketCapture();
         VpnServer vpnServer = new VpnServer();
         vpnServer.setVpnListener(new VpnListener() {
             @Override
             public void onConnectClient(Vpn vpn) {
+                IPacketCapture packetCapture = new DebugPacketCapture();
                 vpn.setPacketCapture(packetCapture);
                 vpn.enableMitm();
             }
@@ -37,7 +37,6 @@ public class Main {
     }
 
     private static class DebugPacketCapture implements IPacketCapture {
-
         @Override
         public void onPacket(byte[] packetData, String type, int datalink) {
         }

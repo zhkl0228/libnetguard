@@ -4,6 +4,7 @@ import cn.banny.utils.IOUtils;
 import com.fuzhu8.tcpcap.PcapDLT;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.ssl.SSLProxy;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -35,6 +35,7 @@ public class Packet {
     public int dport;
     public String data;
     public int uid;
+    @SuppressWarnings("unused")
     public byte[] payload;
     public boolean allowed;
 
@@ -59,12 +60,12 @@ public class Packet {
         return false;
     }
 
-    InetSocketAddress createClientAddress() throws UnknownHostException {
-        return new InetSocketAddress(InetAddress.getByName(saddr), sport);
-    }
-
-    InetSocketAddress createServerAddress() throws UnknownHostException {
-        return new InetSocketAddress(InetAddress.getByName(daddr), dport);
+    public InetSocketAddress createServerAddress() {
+        try {
+            return new InetSocketAddress(InetAddress.getByName(daddr), dport);
+        } catch (UnknownHostException e) {
+            throw new IllegalStateException("createServerAddress daddr=" + daddr + ", dport=" + dport, e);
+        }
     }
 
     @Override

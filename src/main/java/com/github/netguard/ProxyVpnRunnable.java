@@ -3,7 +3,7 @@ package com.github.netguard;
 import cn.banny.utils.IOUtils;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
-import eu.faircode.netguard.SSLProxy;
+import com.github.netguard.vpn.ssl.SSLProxy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
