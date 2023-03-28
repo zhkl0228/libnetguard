@@ -103,7 +103,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         log.debug("Vpn thread starting");
 
         log.debug("Running tunnel");
-        jni_run(jni_context, fd, false, 3);
+        jni_run(jni_context, fd, true, 3);
         log.debug("Tunnel exited");
 
         IOUtils.close(socket);

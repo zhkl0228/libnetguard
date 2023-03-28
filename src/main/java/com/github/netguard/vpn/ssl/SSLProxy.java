@@ -47,16 +47,8 @@ public class SSLProxy implements Runnable {
             final HandshakeStatus status = handshakeStatusMap.get(server);
             if (status == null || status == HandshakeStatus.failed1) {
                 handshakeStatusMap.put(server, HandshakeStatus.handshaking);
-                PeerCertificateFetcher peerCertificateFetcher = new PeerCertificateFetcher(rootCert, privateKey, server, timeout, packet, status == null ? HandshakeStatus.failed1 : HandshakeStatus.failed2);
-                Thread thread = new Thread(peerCertificateFetcher);
-                thread.setDaemon(true);
-                thread.start();
-                int port = peerCertificateFetcher.getServerPort();
-                if (port == 0) {
-                    return null;
-                } else {
-                    return new Allowed("127.0.0.1", port);
-                }
+                return PeerCertificateFetcher.tryPeerCertificate(rootCert, privateKey, server, timeout, packet, status == null ? HandshakeStatus.failed1 : HandshakeStatus.failed2,
+                        vpn);
             }
             switch (status) {
                 case handshaking: // 正在进行SSL握手
@@ -65,7 +57,7 @@ public class SSLProxy implements Runnable {
                 case not_tls:
                     return new Allowed(); // Disable mitm
                 case success: // 握手成功
-                    SSLContext serverContext = ServerCertificate.getSSLContext(server);
+                    SSLContext serverContext = ServerCertificate.getSSLContext(server, null);
                     if (serverContext != null) {
                         return new SSLProxy(vpn, serverContext, packet, timeout).redirect();
                     }
@@ -79,7 +71,7 @@ public class SSLProxy implements Runnable {
 
     private final int timeout;
 
-    private SSLProxy(InspectorVpn vpn, SSLContext serverContext, Packet packet, int timeout) throws IOException {
+    SSLProxy(InspectorVpn vpn, SSLContext serverContext, Packet packet, int timeout) throws IOException {
         this.vpn = vpn;
         this.packet = packet;
         this.timeout = timeout;
