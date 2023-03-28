@@ -35,7 +35,18 @@ class ExtensionServerName {
         return tlsVer;
     }
 
-    static String parseServerNames(DataInput dataInput, InetSocketAddress server) throws IOException {
+    static class ClientHelloRecord {
+        final Version version;
+        final byte[] data;
+        final String hostName;
+        public ClientHelloRecord(Version version, byte[] data, String hostName) {
+            this.version = version;
+            this.data = data;
+            this.hostName = hostName;
+        }
+    }
+
+    static ClientHelloRecord parseServerNames(DataInput dataInput, InetSocketAddress server) throws IOException {
         byte contentType = dataInput.readByte();
         if (contentType != ContentType.Handshake.getValue()) {
             if (log.isDebugEnabled()) {
@@ -44,8 +55,8 @@ class ExtensionServerName {
             return null;
         }
         short version = dataInput.readShort();
-        Version tlsVer = getVersion(version);
-        if (tlsVer == Version.NONE || tlsVer == Version.MM_TLS) {
+        Version recordVersion = getVersion(version);
+        if (recordVersion == Version.NONE || recordVersion == Version.MM_TLS) {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls version=0x%x, server=%s", version, server));
             }
@@ -59,11 +70,11 @@ class ExtensionServerName {
             return null;
         }
 
-        byte[] data = new byte[length];
-        dataInput.readFully(data);
+        byte[] clientHelloData = new byte[length];
+        dataInput.readFully(clientHelloData);
         Handshake handshake;
         try {
-            handshake = DefaultHandshake.parseHandshake(new ChainBuffer(data));
+            handshake = DefaultHandshake.parseHandshake(new ChainBuffer(clientHelloData));
         } catch (IllegalArgumentException e) {
             log.debug("Not tls: server={}", server, e);
             return null;
@@ -75,7 +86,7 @@ class ExtensionServerName {
 
         Buffer buffer = handshake.getBuffer();
         version = buffer.getShort();
-        tlsVer = getVersion(version);
+        Version tlsVer = getVersion(version);
         if (tlsVer == Version.NONE || tlsVer == Version.MM_TLS) {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls handshake version=0x%x, server=%s", version, server));
@@ -99,7 +110,7 @@ class ExtensionServerName {
         while (buffer.readableBytes() > 0) {
             short type = buffer.getShort();
             length = buffer.getUnsignedShort();
-            data = new byte[length];
+            byte[] data = new byte[length];
             buffer.gets(data);
 
             if (type == ExtensionType.EXT_SERVER_NAME.getType()) {
@@ -124,7 +135,8 @@ class ExtensionServerName {
             log.debug("Not tls: extension name is empty: server={}", server);
             return null;
         } else {
-            return serverNames.get(0);
+            String hostName = serverNames.get(0);
+            return new ClientHelloRecord(recordVersion, clientHelloData, hostName);
         }
     }
 

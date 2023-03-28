@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -78,10 +79,11 @@ class PeerCertificateFetcher implements Runnable {
         try (Socket socket = serverSocket.accept()) {
             try (InputStream inputStream = socket.getInputStream()) {
                 DataInput dataInput = new DataInputStream(inputStream);
-                this.hostName = ExtensionServerName.parseServerNames(dataInput, server);
-                if (hostName == null) {
+                ExtensionServerName.ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, server);
+                if (record == null) {
                     SSLProxy.handshakeStatusMap.put(server, HandshakeStatus.not_tls);
                 } else {
+                    hostName = record.hostName;
                     SSLProxy.addressHostNameMap.put(server, hostName);
                     tryCertificate();
                 }
@@ -94,7 +96,7 @@ class PeerCertificateFetcher implements Runnable {
     }
 
     private void tryCertificate() {
-        try (Socket socket = SSLProxy.connectServer(new ServerCertificateNotifier() {
+        try (SSLSocket socket = SSLProxy.connectServer(new ServerCertificateNotifier() {
             @Override
             public void handshakeCompleted(ServerCertificate serverCertificate) {
                 try {
