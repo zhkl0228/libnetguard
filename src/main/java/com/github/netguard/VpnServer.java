@@ -1,15 +1,22 @@
 package com.github.netguard;
 
+import cn.banny.auxiliary.Inspector;
 import cn.banny.utils.IOUtils;
 import com.github.netguard.vpn.VpnListener;
 import eu.faircode.netguard.ServiceSinkhole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,10 +24,12 @@ public class VpnServer {
 
     private static final Logger log = LoggerFactory.getLogger(VpnServer.class);
 
+    private static final int UDP_PORT = 20230;
+
     private final ServerSocket serverSocket;
 
     public VpnServer() throws IOException {
-        this(20230);
+        this(UDP_PORT);
     }
 
     public VpnServer(int port) throws IOException {
@@ -35,10 +44,19 @@ public class VpnServer {
 
     private final List<ProxyVpn> clients = new ArrayList<>();
 
-    private boolean useNetguard = true;
+    private boolean useNetGuardCore = true;
 
-    public void disableNetguard() {
-        useNetguard = false;
+    @SuppressWarnings("unused")
+    public void disableNetGuard() {
+        useNetGuardCore = false;
+    }
+
+    private boolean broadcast;
+
+    @SuppressWarnings("unused")
+    public void enableBroadcast(int broadcastSeconds) throws SocketException {
+        broadcast = true;
+        serverSocket.setSoTimeout(broadcastSeconds * 1000);
     }
 
     public void start() {
@@ -52,12 +70,12 @@ public class VpnServer {
                     try {
                         Socket socket = serverSocket.accept();
                         ProxyVpn vpn = null;
-                        if (useNetguard) {
+                        if (useNetGuardCore) {
                             try {
                                 vpn = new ServiceSinkhole(socket, clients);
                             } catch(UnsatisfiedLinkError e) {
                                 log.debug("init ServiceSinkhole", e);
-                                useNetguard = false;
+                                useNetGuardCore = false;
                             }
                         }
                         if (vpn == null) {
@@ -70,8 +88,12 @@ public class VpnServer {
                         vpnThread.setPriority(Thread.MAX_PRIORITY);
                         vpnThread.start();
                         clients.add(vpn);
+                    } catch (SocketTimeoutException e) {
+                        if (broadcast) {
+                            sendBroadcast();
+                        }
                     } catch (SocketException ignored) {
-                    }catch (IOException e) {
+                    } catch (IOException e) {
                         log.warn("accept", e);
                     }
                 }
@@ -100,7 +122,46 @@ public class VpnServer {
         }
     }
 
+    private final byte[] buffer = new byte[128];
+
+    private void sendBroadcast() {
+        DatagramSocket datagramSocket = null;
+        ByteArrayOutputStream baos = null;
+        DataOutputStream dos = null;
+        try {
+            baos = new ByteArrayOutputStream();
+            dos = new DataOutputStream(baos);
+            datagramSocket = new DatagramSocket();
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+
+            dos.writeUTF("vpn");
+            dos.writeShort(serverSocket.getLocalPort());
+
+            byte[] data = baos.toByteArray();
+            if (log.isDebugEnabled()) {
+                log.debug(Inspector.inspectString(data, "sendBroadcast"));
+            }
+            packet.setData(data);
+            packet.setLength(data.length);
+            packet.setPort(UDP_PORT);
+
+            InetAddress broadcastAddr = InetAddress.getByName("255.255.255.255");
+            packet.setAddress(broadcastAddr);
+            datagramSocket.send(packet);
+        } catch (IOException ignored) {
+        } catch (Exception e) {
+            log.warn("sendBroadcast", e);
+        } finally {
+            IOUtils.close(dos);
+            IOUtils.close(baos);
+            if (datagramSocket != null) {
+                datagramSocket.close();
+            }
+        }
+    }
+
     public int getPort() {
         return serverSocket.getLocalPort();
     }
+
 }

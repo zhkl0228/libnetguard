@@ -17,6 +17,7 @@ public class Main {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.DEBUG);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.TRACE);
         VpnServer vpnServer = new VpnServer();
+        vpnServer.enableBroadcast(10);
         vpnServer.setVpnListener(new VpnListener() {
             @Override
             public void onConnectClient(Vpn vpn) {
