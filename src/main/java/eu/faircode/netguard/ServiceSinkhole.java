@@ -214,6 +214,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
                         && sslPorts != null
                         && packet.isSSL(sslPorts)) { // ipv4
                     allowed = mitm(packet);
+                } else if (packet.isInstallRootCert()) {
+                    allowed = mitm(packet);
                 }
             }
         } catch (Exception e) {
@@ -235,7 +237,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     private Allowed mitm(Packet packet) {
         int mitmTimeout = 10000; // default 10 seconds;
-        return SSLProxyV2.create(this, rootCert, privateKey, packet, mitmTimeout);
+        return SSLProxyV2.create(this, rootCert, packet, mitmTimeout);
     }
 
     // Called from native code

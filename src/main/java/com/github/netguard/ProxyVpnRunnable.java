@@ -139,10 +139,8 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
 
     @Override
     public SocketAddress mitm(String ip, int port) {
-        if (sslPorts == null) {
-            return null;
-        } else {
-            boolean mitm = false;
+        boolean mitm = false;
+        if (sslPorts != null) {
             if (sslPorts.length == 0 && port == 443) {
                 mitm = true;
             } else {
@@ -153,22 +151,22 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
                     }
                 }
             }
-            if (mitm) {
-                int mitmTimeout = 10000; // default 10 seconds;
-                Packet packet = new Packet();
-                packet.daddr = ip;
-                packet.dport = port;
-                Allowed allowed = SSLProxyV2.create(this, rootCert, privateKey, packet, mitmTimeout);
-                if (allowed == null) {
-                    return new InetSocketAddress("127.0.0.1", 222);
-                } else if (allowed.raddr != null && allowed.rport > 0) {
-                    return new InetSocketAddress(allowed.raddr, allowed.rport);
-                } else {
-                    return null;
-                }
+        }
+        Packet packet = new Packet();
+        packet.daddr = ip;
+        packet.dport = port;
+        if (mitm || packet.isInstallRootCert()) {
+            int mitmTimeout = 10000; // default 10 seconds;
+            Allowed allowed = SSLProxyV2.create(this, rootCert, packet, mitmTimeout);
+            if (allowed == null) {
+                return new InetSocketAddress("127.0.0.1", 222);
+            } else if (allowed.raddr != null && allowed.rport > 0) {
+                return new InetSocketAddress(allowed.raddr, allowed.rport);
             } else {
                 return null;
             }
+        } else {
+            return null;
         }
     }
 }

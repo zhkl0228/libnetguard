@@ -34,6 +34,13 @@ public class CharlesTest extends TestCase {
         PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, null);
         assertNotNull(privateKey);
         System.out.println(privateKey);
+
+        {
+            Object[] certs = keyStore.getCertificateChain(alias);
+            StringWriter writer = new StringWriter();
+            exportPem(writer, certs);
+            System.out.println(writer);
+        }
     }
 
     public void testPrivateKey() throws Exception {

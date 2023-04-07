@@ -139,7 +139,7 @@ public class VpnServer {
 
             byte[] data = baos.toByteArray();
             if (log.isDebugEnabled()) {
-                log.debug(Inspector.inspectString(data, "sendBroadcast"));
+                log.trace(Inspector.inspectString(data, "sendBroadcast"));
             }
             packet.setData(data);
             packet.setLength(data.length);

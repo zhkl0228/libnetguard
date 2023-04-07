@@ -1,11 +1,17 @@
 package com.github.netguard.vpn.ssl;
 
 import cn.banny.utils.IOUtils;
+import cn.banny.utils.StringUtils;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
+import com.google.common.net.HttpHeaders;
+import eu.bitwalker.useragentutils.Browser;
+import eu.bitwalker.useragentutils.UserAgent;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import org.apache.commons.codec.EncoderException;
+import org.apache.commons.codec.net.URLCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,16 +26,20 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.security.PrivateKey;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -40,11 +50,11 @@ public class SSLProxyV2 implements Runnable {
 
     private static final int SERVER_SO_TIMEOUT = (int) TimeUnit.MINUTES.toMillis(1);
 
-    public static Allowed create(final InspectorVpn vpn, final X509Certificate rootCert, final PrivateKey privateKey, final Packet packet, final int timeout) {
+    public static Allowed create(final InspectorVpn vpn, RootCert rootCert, final Packet packet, final int timeout) {
         try {
             log.debug("create mitm packet={}", packet);
             IPacketCapture packetCapture = vpn.getPacketCapture();
-            SSLProxyV2 proxy = new SSLProxyV2(rootCert, privateKey, packetCapture, packet, timeout);
+            SSLProxyV2 proxy = new SSLProxyV2(rootCert, packetCapture, packet, timeout);
             Allowed allowed = proxy.redirect();
             log.debug("create mitm packet={}, allowed={}", packet, allowed);
             return allowed;
@@ -54,8 +64,7 @@ public class SSLProxyV2 implements Runnable {
         }
     }
 
-    private final X509Certificate rootCert;
-    private final PrivateKey privateKey;
+    private final RootCert rootCert;
 
     private final Packet packet;
     private final IPacketCapture packetCapture;
@@ -63,9 +72,8 @@ public class SSLProxyV2 implements Runnable {
     private final ServerSocket serverSocket;
     private final SSLSocket secureSocket;
 
-    private SSLProxyV2(X509Certificate rootCert, PrivateKey privateKey, IPacketCapture packetCapture, Packet packet, int timeout) throws IOException {
+    private SSLProxyV2(RootCert rootCert, IPacketCapture packetCapture, Packet packet, int timeout) throws IOException {
         this.rootCert = rootCert;
-        this.privateKey = privateKey;
 
         this.packetCapture = packetCapture;
         this.packet = packet;
@@ -86,7 +94,6 @@ public class SSLProxyV2 implements Runnable {
 
     private SSLProxyV2(IPacketCapture packetCapture, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket, String hostName) throws IOException {
         this.rootCert = null;
-        this.privateKey = null;
 
         this.packetCapture = packetCapture;
         this.packet = packet;
@@ -108,10 +115,14 @@ public class SSLProxyV2 implements Runnable {
         InetSocketAddress remote = packet.createServerAddress();
         try (Socket local = serverSocket.accept()) {
             try (InputStream localIn = local.getInputStream(); OutputStream localOut = local.getOutputStream()) {
-                if (secureSocket != null) {
-                    handleSSLSocket(remote, localIn, localOut, local, secureSocket, hostName);
+                if (packet.isInstallRootCert()) {
+                    downloadRootCert(localIn, localOut);
                 } else {
-                    handleSocket(remote, localIn, localOut, local);
+                    if (secureSocket != null) {
+                        handleSSLSocket(remote, localIn, localOut, local, secureSocket, hostName);
+                    } else {
+                        handleSocket(remote, localIn, localOut, local);
+                    }
                 }
             }
         } catch (IOException e) {
@@ -126,6 +137,64 @@ public class SSLProxyV2 implements Runnable {
             IOUtils.close(secureSocket);
             IOUtils.close(serverSocket);
         }
+    }
+
+    private void downloadRootCert(InputStream localIn, OutputStream localOut) throws IOException, EncoderException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(localIn));
+        String line;
+        String userAgentString = null;
+        while ((line = reader.readLine()) != null) {
+            log.debug("installRootCert: userAgent={}, line={}", userAgentString, line);
+            if (line.toLowerCase().startsWith("user-agent")) {
+                int index = line.indexOf(':');
+                if (index != -1) {
+                    userAgentString = line.substring(index + 1).trim();
+                }
+            }
+            if (line.isEmpty()) {
+                break;
+            }
+        }
+        String pem = rootCert.pem;
+        StringBuilder builder = new StringBuilder();
+        builder.append("HTTP/1.1 200 OK\r\n");
+        builder.append(HttpHeaders.CONNECTION).append(": close\r\n");
+        builder.append(HttpHeaders.PRAGMA).append(": no-cache\r\n");
+        builder.append(HttpHeaders.CONTENT_TYPE).append(": application/x-pem-file\r\n");
+        builder.append(HttpHeaders.CONTENT_LENGTH).append(": ").append(pem.length()).append("\r\n");
+        builder.append(HttpHeaders.SERVER).append(": ").append(getClass().getSimpleName()).append("\r\n");
+
+        {
+            String fileName = "NetGuard.pem";
+            UserAgent userAgent = StringUtils.isEmpty(userAgentString) ? null : UserAgent.parseUserAgentString(userAgentString);
+            Browser browser = userAgent == null ? null : userAgent.getBrowser();
+            String str = null;
+            if (browser != null) {
+                switch (browser.getGroup()) {
+                    case OPERA:
+                    case MOZILLA:
+                    case CHROME:
+                    case FIREFOX:
+                    case EDGE:
+                        str = "filename*=UTF-8''" + new URLCodec().encode(fileName);
+                        break;
+                    case SAFARI:
+                        str = "filename=\"" + new String(fileName.getBytes(StandardCharsets.UTF_8), "ISO8859-1") + "\"";
+                        break;
+                }
+            }
+            if (str == null) {
+                str = "filename=\"" + new URLCodec().encode(fileName) + "\"";
+            }
+            builder.append(HttpHeaders.CONTENT_DISPOSITION).append(": attachment; ").append(str).append("\r\n");
+        }
+
+        builder.append("\r\n");
+        builder.append(pem);
+        log.debug("installRootCert response: {}", builder);
+        BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(localOut));
+        writer.write(builder.toString());
+        writer.flush();
     }
 
     private void handleSSLSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName) throws IOException, InterruptedException {
@@ -198,7 +267,7 @@ public class SSLProxyV2 implements Runnable {
                 }
 
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
-                SSLContext serverContext = serverCertificate.createSSLContext(rootCert, privateKey);
+                SSLContext serverContext = serverCertificate.createSSLContext(rootCert);
                 SSLProxyV2 proxy = new SSLProxyV2(packetCapture, packet, timeout, serverContext, secureSocket, record.hostName);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
