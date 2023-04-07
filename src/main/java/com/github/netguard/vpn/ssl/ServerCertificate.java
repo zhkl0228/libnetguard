@@ -201,7 +201,7 @@ class ServerCertificate {
     private static final String SECURE_RANDOM_ALGORITHM = "SHA1PRNG";
 
     private static KeyPair generateKeyPair()
-            throws NoSuchAlgorithmException, NoSuchProviderException {
+            throws NoSuchAlgorithmException {
         KeyPairGenerator generator = KeyPairGenerator
                 .getInstance(KEYGEN_ALGORITHM/* , PROVIDER_NAME */);
         SecureRandom secureRandom = SecureRandom
