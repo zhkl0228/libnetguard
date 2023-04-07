@@ -114,21 +114,19 @@ int check_tun(const struct arguments *args,
     // Check tun read
     if (ev->events & EPOLLIN) {
         struct context *ctx = args->ctx;
-        while(1) {
-            int code = read_packet(args);
-            if(code == -1) {
-                return -1;
-            }
-            if(ctx->packet_ready == NULL) {
-                return 0;
-            }
-            log_android(ANDROID_LOG_DEBUG, "read tun %d, read=%d, packet_size=%d", args->tun, ctx->read, ctx->packet_size);
-            // Handle IP from tun
-            handle_ip(args, ctx->packet_ready, (size_t) ctx->packet_size, epoll_fd, sessions, maxsessions);
-            ctx->read = 0;
-            ctx->packet_size = 0;
-            ctx->packet_ready = NULL;
+        int code = read_packet(args);
+        if(code == -1) {
+            return -1;
         }
+        if(ctx->packet_ready == NULL) {
+            return 0;
+        }
+        log_android(ANDROID_LOG_DEBUG, "read tun %d, read=%d, packet_size=%d", args->tun, ctx->read, ctx->packet_size);
+        // Handle IP from tun
+        handle_ip(args, ctx->packet_ready, (size_t) ctx->packet_size, epoll_fd, sessions, maxsessions);
+        ctx->read = 0;
+        ctx->packet_size = 0;
+        ctx->packet_ready = NULL;
     }
 
     return 0;
