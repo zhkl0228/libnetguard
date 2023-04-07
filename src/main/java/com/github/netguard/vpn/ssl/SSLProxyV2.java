@@ -82,7 +82,7 @@ public class SSLProxyV2 implements Runnable {
         this.hostName = null;
 
         ServerSocketFactory factory = ServerSocketFactory.getDefault();
-        this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLocalHost());
+        this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
 
         Thread thread = new Thread(this, "Proxy for " + packet);
@@ -102,7 +102,7 @@ public class SSLProxyV2 implements Runnable {
         this.hostName = hostName;
 
         SSLServerSocketFactory factory = context.getServerSocketFactory();
-        this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLocalHost());
+        this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
 
         Thread thread = new Thread(this, "SSLProxy for " + packet);
