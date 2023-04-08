@@ -1,5 +1,6 @@
 package com.github.netguard;
 
+import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
@@ -14,14 +15,15 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) throws IOException {
-        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.DEBUG);
-        Logger.getLogger(SSLProxyV2.class).setLevel(Level.DEBUG);
+        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
+        Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
+        Logger.getLogger(PacketDecoder.class).setLevel(Level.TRACE);
         VpnServer vpnServer = new VpnServer();
         vpnServer.enableBroadcast(10);
         vpnServer.setVpnListener(new VpnListener() {
             @Override
             public void onConnectClient(Vpn vpn) {
-                IPacketCapture packetCapture = new DebugPacketCapture();
+                IPacketCapture packetCapture = new PacketDecoder();
                 vpn.setPacketCapture(packetCapture);
                 vpn.enableMitm();
             }
@@ -37,26 +39,6 @@ public class Main {
             }
         }
         vpnServer.shutdown();
-    }
-
-    private static class DebugPacketCapture implements IPacketCapture {
-        @Override
-        public void onPacket(byte[] packetData, String type) {
-        }
-        @Override
-        public void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName) {
-            System.out.printf("onSSLProxyEstablish %s:%d => %s:%d, hostName=%s%n", clientIp, clientPort, serverIp, serverPort, hostName);
-        }
-        @Override
-        public void onSSLProxyTX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
-        }
-        @Override
-        public void onSSLProxyRX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
-        }
-        @Override
-        public void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName) {
-            System.out.printf("onSSLProxyFinish %s:%d => %s:%d, hostName=%s%n", clientIp, clientPort, serverIp, serverPort, hostName);
-        }
     }
 
 }

@@ -38,7 +38,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
-import java.security.Security;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
@@ -52,10 +51,6 @@ import java.util.concurrent.ConcurrentHashMap;
 class ServerCertificate {
 
     private static final Logger log = LoggerFactory.getLogger(ServerCertificate.class);
-
-    static {
-        Security.addProvider(new BouncyCastleProvider());
-    }
 
     private static final Map<String, SSLContext> proxyCertMap = new ConcurrentHashMap<>();
 
@@ -159,7 +154,7 @@ class ServerCertificate {
 
     private static KeyStore createServerCertificate(String commonName,
                                                    SubjectAlternativeNameHolder subjectAlternativeNames,
-                                                   Authority authority, Certificate caCert, PrivateKey caPrivKey)
+                                                   Authority authority, Certificate caCert, PrivateKey caPrivateKey)
             throws NoSuchAlgorithmException, NoSuchProviderException,
             IOException, OperatorCreationException, CertificateException,
             InvalidKeyException, SignatureException, KeyStoreException {
@@ -187,7 +182,7 @@ class ServerCertificate {
 
         subjectAlternativeNames.fillInto(builder);
 
-        X509Certificate cert = signCertificate(builder, caPrivKey);
+        X509Certificate cert = signCertificate(builder, caPrivateKey);
 
         cert.checkValidity(new Date());
         cert.verify(caCert.getPublicKey());

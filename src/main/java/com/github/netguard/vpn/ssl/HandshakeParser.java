@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
  * @author zhkl0228
  *
  */
-class DefaultHandshake implements Handshake {
+class HandshakeParser implements Handshake {
 
     private static int readThreeByteInt(ByteBuffer buffer) {
         int ch1 = buffer.get() & 0xff;
@@ -21,13 +21,13 @@ class DefaultHandshake implements Handshake {
         byte[] data = new byte[length];
         buffer.get(data);
         HandshakeType handshakeType = HandshakeType.parseType(type);
-        return new DefaultHandshake(handshakeType, data);
+        return new HandshakeParser(handshakeType, data);
     }
 
     private final HandshakeType type;
     private final ByteBuffer buffer;
 
-    private DefaultHandshake(HandshakeType type, byte[] data) {
+    private HandshakeParser(HandshakeType type, byte[] data) {
         super();
         this.type = type;
         this.buffer = ByteBuffer.wrap(data);

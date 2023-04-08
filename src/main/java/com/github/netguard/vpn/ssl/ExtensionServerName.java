@@ -63,7 +63,7 @@ class ExtensionServerName {
         byte[] clientHelloData = new byte[length];
         dataInput.readFully(clientHelloData);
         dataOutput.write(clientHelloData);
-        Handshake handshake = DefaultHandshake.parseHandshake(ByteBuffer.wrap(clientHelloData));
+        Handshake handshake = HandshakeParser.parseHandshake(ByteBuffer.wrap(clientHelloData));
         if (handshake.getType() != HandshakeType.ClientHello) {
             log.debug("Not tls: handshakeType={}, server={}", handshake.getType(), server);
             return new ClientHelloRecord(baos);
