@@ -16,7 +16,7 @@
 
 package tech.httptoolkit.android.vpn;
 
-import cn.banny.utils.IOUtils;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.socket.DataConst;
@@ -100,8 +100,8 @@ public class SessionManager implements ICloseSession {
 		Session session = table.remove(key);
 
 		if(session != null){
-			final AbstractSelectableChannel channel = session.getChannel();
-			IOUtils.close(channel);
+			AbstractSelectableChannel channel = session.getChannel();
+			IOUtils.closeQuietly(channel);
 			log.debug("closed session -> {}", key);
 		}
 	}

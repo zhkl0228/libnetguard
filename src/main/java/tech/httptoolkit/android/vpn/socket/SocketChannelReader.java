@@ -1,6 +1,6 @@
 package tech.httptoolkit.android.vpn.socket;
 
-import cn.banny.utils.IOUtils;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
@@ -52,7 +52,7 @@ class SocketChannelReader {
 		if (session.isAbortingConnection()) {
 			log.debug("removing aborted connection -> {}", session);
 			session.cancelKey();
-			IOUtils.close(channel);
+			IOUtils.closeQuietly(channel);
 			session.closeSession();
 		}
 	}

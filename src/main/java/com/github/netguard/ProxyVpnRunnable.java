@@ -1,9 +1,9 @@
 package com.github.netguard;
 
-import cn.banny.utils.IOUtils;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
@@ -114,7 +114,7 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
             }
         }
 
-        IOUtils.close(socket);
+        IOUtils.closeQuietly(socket);
         log.debug("Vpn thread shutting down");
 
         clients.remove(this);
@@ -124,7 +124,7 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
     protected synchronized void stop() {
         if (running) {
             running = false;
-            IOUtils.close(vpnReadStream);
+            IOUtils.closeQuietly(vpnReadStream);
             nioService.shutdown();
             dataServiceThread.interrupt();
 

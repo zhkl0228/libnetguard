@@ -1,14 +1,11 @@
 package com.github.netguard;
 
-import cn.banny.auxiliary.Inspector;
-import cn.banny.utils.IOUtils;
 import com.github.netguard.vpn.VpnListener;
 import eu.faircode.netguard.ServiceSinkhole;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -17,6 +14,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -110,7 +108,7 @@ public class VpnServer {
             throw new IllegalStateException("Already shutdown.");
         }
         shutdown = true;
-        IOUtils.close(serverSocket);
+        IOUtils.closeQuietly(serverSocket);
         for (ProxyVpn vpn : clients.toArray(new ProxyVpn[0])) {
             vpn.stop();
         }
@@ -122,27 +120,19 @@ public class VpnServer {
         }
     }
 
-    private final byte[] buffer = new byte[128];
-
     private void sendBroadcast() {
-        DatagramSocket datagramSocket = null;
-        ByteArrayOutputStream baos = null;
-        DataOutputStream dos = null;
-        try {
-            baos = new ByteArrayOutputStream();
-            dos = new DataOutputStream(baos);
-            datagramSocket = new DatagramSocket();
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+        try (DatagramSocket datagramSocket = new DatagramSocket()) {
+            byte[] magic = "vpn".getBytes();
+            ByteBuffer buffer = ByteBuffer.allocate(7);
+            buffer.putShort((short) magic.length);
+            buffer.put(magic);
+            buffer.putShort((short) serverSocket.getLocalPort());
 
-            dos.writeUTF("vpn");
-            dos.writeShort(serverSocket.getLocalPort());
-
-            byte[] data = baos.toByteArray();
-            if (log.isDebugEnabled()) {
+            byte[] data = buffer.array();
+            if (log.isTraceEnabled()) {
                 log.trace(Inspector.inspectString(data, "sendBroadcast"));
             }
-            packet.setData(data);
-            packet.setLength(data.length);
+            DatagramPacket packet = new DatagramPacket(data, data.length);
             packet.setPort(UDP_PORT);
 
             InetAddress broadcastAddr = InetAddress.getByName("255.255.255.255");
@@ -151,12 +141,6 @@ public class VpnServer {
         } catch (IOException ignored) {
         } catch (Exception e) {
             log.warn("sendBroadcast", e);
-        } finally {
-            IOUtils.close(dos);
-            IOUtils.close(baos);
-            if (datagramSocket != null) {
-                datagramSocket.close();
-            }
         }
     }
 

@@ -1,7 +1,7 @@
 package com.github.netguard.vpn.ssl;
 
-import cn.banny.utils.IOUtils;
 import com.github.netguard.vpn.IPacketCapture;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,8 +86,7 @@ class StreamForward implements Runnable {
             log.debug("stream forward exception: socket={}", socket, e);
             socketException = e;
         } finally {
-            IOUtils.close(inputStream);
-            IOUtils.close(outputStream);
+            IOUtils.closeQuietly(inputStream, outputStream);
             countDownLatch.countDown();
         }
     }

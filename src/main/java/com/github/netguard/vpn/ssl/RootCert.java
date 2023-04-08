@@ -1,7 +1,6 @@
 package com.github.netguard.vpn.ssl;
 
 import eu.faircode.netguard.ServiceSinkhole;
-import org.apache.commons.io.IOUtils;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 
 import java.io.IOException;
@@ -45,15 +44,11 @@ public class RootCert {
 
     private static void exportPem(Writer writer, Object... certs)
             throws IOException {
-        JcaPEMWriter pw = null;
-        try {
-            pw = new JcaPEMWriter(writer);
+        try (JcaPEMWriter pw = new JcaPEMWriter(writer)) {
             for (Object cert : certs) {
                 pw.writeObject(cert);
                 pw.flush();
             }
-        } finally {
-            IOUtils.closeQuietly(pw);
         }
     }
 

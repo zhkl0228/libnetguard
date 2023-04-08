@@ -1,6 +1,5 @@
 package com.github.netguard.vpn.ssl;
 
-import org.apache.commons.io.IOUtils;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -19,13 +18,11 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.littleshoot.proxy.mitm.Authority;
-import org.littleshoot.proxy.mitm.CertificateHelper;
-import org.littleshoot.proxy.mitm.SubjectAlternativeNameHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.KeyManager;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -101,8 +98,61 @@ class ServerCertificate {
         if (log.isTraceEnabled()) {
             log.trace("generateServerContext: {}", ks.getCertificate(alias));
         }
-        KeyManager[] keyManagers = CertificateHelper.getKeyManagers(ks, authority);
-        return CertificateHelper.newServerContext(keyManagers);
+        KeyManager[] keyManagers = getKeyManagers(ks, authority);
+        return newServerContext(keyManagers);
+    }
+
+    private static KeyManager[] getKeyManagers(KeyStore keyStore,
+                                              Authority authority) throws NoSuchAlgorithmException,
+            UnrecoverableKeyException,
+            KeyStoreException {
+        String keyManAlg = KeyManagerFactory.getDefaultAlgorithm();
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(keyManAlg
+                /* , PROVIDER_NAME */);
+        kmf.init(keyStore, authority.password());
+        return kmf.getKeyManagers();
+    }
+
+    private static SSLContext newServerContext(KeyManager[] keyManagers)
+            throws NoSuchAlgorithmException,
+            KeyManagementException {
+        SSLContext result = newSSLContext();
+        SecureRandom random = new SecureRandom();
+        random.setSeed(System.currentTimeMillis());
+        result.init(keyManagers, null, random);
+        return result;
+    }
+
+    /**
+     * Enforce TLS 1.2 if available, since it's not default up to Java 8.
+     * <p>
+     * Java 7 disables TLS 1.1 and 1.2 for clients. From <a href=
+     * "http://docs.oracle.com/javase/7/docs/technotes/guides/security/SunProviders.html"
+     * >Java Cryptography Architecture Oracle Providers Documentation:</a>
+     * Although SunJSSE in the Java SE 7 release supports TLS 1.1 and TLS 1.2,
+     * neither version is enabled by default for client connections. Some
+     * servers do not implement forward compatibility correctly and refuse to
+     * talk to TLS 1.1 or TLS 1.2 clients. For interoperability, SunJSSE does
+     * not enable TLS 1.1 or TLS 1.2 by default for client connections.
+     */
+    private static final String SSL_CONTEXT_PROTOCOL = "TLSv1.2";
+    /**
+     * {@link SSLContext}: Every implementation of the Java platform is required
+     * to support the following standard SSLContext protocol: TLSv1
+     */
+    private static final String SSL_CONTEXT_FALLBACK_PROTOCOL = "TLSv1";
+
+    private static SSLContext newSSLContext() throws NoSuchAlgorithmException {
+        try {
+            log.debug("Using protocol {}", SSL_CONTEXT_PROTOCOL);
+            return SSLContext.getInstance(SSL_CONTEXT_PROTOCOL
+                    /* , PROVIDER_NAME */);
+        } catch (NoSuchAlgorithmException e) {
+            log.warn("Protocol {} not available, falling back to {}", SSL_CONTEXT_PROTOCOL,
+                    SSL_CONTEXT_FALLBACK_PROTOCOL);
+            return SSLContext.getInstance(SSL_CONTEXT_FALLBACK_PROTOCOL
+                    /* , PROVIDER_NAME */);
+        }
     }
 
     private static final int FAKE_KEYSIZE = 2048;
@@ -156,14 +206,10 @@ class ServerCertificate {
     private static SubjectKeyIdentifier createSubjectKeyIdentifier(Key key)
             throws IOException {
         ByteArrayInputStream bIn = new ByteArrayInputStream(key.getEncoded());
-        ASN1InputStream is = null;
-        try {
-            is = new ASN1InputStream(bIn);
+        try (ASN1InputStream is = new ASN1InputStream(bIn)) {
             ASN1Sequence seq = (ASN1Sequence) is.readObject();
             SubjectPublicKeyInfo info = new SubjectPublicKeyInfo(seq);
             return new BcX509ExtensionUtils().createSubjectKeyIdentifier(info);
-        } finally {
-            IOUtils.closeQuietly(is);
         }
     }
 

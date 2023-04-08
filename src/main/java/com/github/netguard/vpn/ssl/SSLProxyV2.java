@@ -1,17 +1,13 @@
 package com.github.netguard.vpn.ssl;
 
-import cn.banny.utils.IOUtils;
-import cn.banny.utils.StringUtils;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
-import com.google.common.net.HttpHeaders;
 import eu.bitwalker.useragentutils.Browser;
 import eu.bitwalker.useragentutils.UserAgent;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import org.apache.commons.codec.EncoderException;
-import org.apache.commons.codec.net.URLCodec;
+import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +22,7 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.DataInput;
@@ -39,6 +36,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.CountDownLatch;
@@ -134,12 +132,11 @@ public class SSLProxyV2 implements Runnable {
         } catch (Exception e) {
             log.warn("proxy failed: hostName={}, serverSocket={}, packet={}", hostName, serverSocket, packet, e);
         } finally {
-            IOUtils.close(secureSocket);
-            IOUtils.close(serverSocket);
+            IOUtils.closeQuietly(secureSocket, serverSocket);
         }
     }
 
-    private void downloadRootCert(InputStream localIn, OutputStream localOut) throws IOException, EncoderException {
+    private void downloadRootCert(InputStream localIn, OutputStream localOut) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(localIn));
         String line;
         String userAgentString = null;
@@ -166,7 +163,7 @@ public class SSLProxyV2 implements Runnable {
 
         {
             String fileName = "NetGuard.pem";
-            UserAgent userAgent = StringUtils.isEmpty(userAgentString) ? null : UserAgent.parseUserAgentString(userAgentString);
+            UserAgent userAgent = userAgentString == null ? null : UserAgent.parseUserAgentString(userAgentString);
             Browser browser = userAgent == null ? null : userAgent.getBrowser();
             String str = null;
             if (browser != null) {
@@ -176,7 +173,7 @@ public class SSLProxyV2 implements Runnable {
                     case CHROME:
                     case FIREFOX:
                     case EDGE:
-                        str = "filename*=UTF-8''" + new URLCodec().encode(fileName);
+                        str = "filename*=UTF-8''" + URLEncoder.encode(fileName, "UTF-8");
                         break;
                     case SAFARI:
                         str = "filename=\"" + new String(fileName.getBytes(StandardCharsets.UTF_8), "ISO8859-1") + "\"";
@@ -184,9 +181,10 @@ public class SSLProxyV2 implements Runnable {
                 }
             }
             if (str == null) {
-                str = "filename=\"" + new URLCodec().encode(fileName) + "\"";
+                str = "filename=\"" + URLEncoder.encode(fileName, "UTF-8") + "\"";
             }
-            builder.append(HttpHeaders.CONTENT_DISPOSITION).append(": attachment; ").append(str).append("\r\n");
+            final String CONTENT_DISPOSITION = "Content-Disposition";
+            builder.append(CONTENT_DISPOSITION).append(": attachment; ").append(str).append("\r\n");
         }
 
         builder.append("\r\n");
@@ -221,6 +219,21 @@ public class SSLProxyV2 implements Runnable {
         }
     }
 
+    private static final TrustManager tm = new X509TrustManager() {
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String s) {
+            log.debug("Accepting a client certificate: {}", chain[0].getSubjectDN());
+        }
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String s) {
+            log.debug("Accepting a server certificate: {}", chain[0].getSubjectDN());
+        }
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
+        }
+    };
+
     private void handleSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local) throws Exception {
         DataInput dataInput = new DataInputStream(localIn);
         ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
@@ -236,7 +249,7 @@ public class SSLProxyV2 implements Runnable {
             }
         } else {
             SSLContext context = SSLContext.getInstance("TLSv1.2");
-            TrustManager[] trustManagers = InsecureTrustManagerFactory.INSTANCE.getTrustManagers();
+            TrustManager[] trustManagers = new TrustManager[] { tm };
             context.init(null, trustManagers, null);
             SSLSocketFactory factory = context.getSocketFactory();
             Socket app = null;
@@ -277,8 +290,7 @@ public class SSLProxyV2 implements Runnable {
                     }
                 }
             } catch (IOException e) {
-                IOUtils.close(app);
-                IOUtils.close(secureSocket);
+                IOUtils.closeQuietly(app, secureSocket);
                 throw e;
             }
         }

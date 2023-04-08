@@ -1,10 +1,9 @@
 package eu.faircode.netguard;
 
-import cn.banny.utils.IOUtils;
-import com.fuzhu8.tcpcap.PcapDLT;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
+import org.apache.commons.io.IOUtils;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,7 +105,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         jni_run(jni_context, fd, true, 3);
         log.debug("Tunnel exited");
 
-        IOUtils.close(socket);
+        IOUtils.closeQuietly(socket);
         log.debug("Vpn thread shutting down");
 
         clients.remove(this);
@@ -250,7 +249,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     @SuppressWarnings("unused")
     private void notifyPacket(int uid, byte[] packet) {
         if (packetCapture != null) {
-            packetCapture.onPacket(packet, "Netguard", PcapDLT.CONST_RAW_IP);
+            packetCapture.onPacket(packet, "NetGuard", CONST_RAW_IP);
         }
     }
 
