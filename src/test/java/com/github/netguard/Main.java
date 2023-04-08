@@ -15,7 +15,7 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.DEBUG);
-        Logger.getLogger(SSLProxyV2.class).setLevel(Level.TRACE);
+        Logger.getLogger(SSLProxyV2.class).setLevel(Level.DEBUG);
         VpnServer vpnServer = new VpnServer();
         vpnServer.enableBroadcast(10);
         vpnServer.setVpnListener(new VpnListener() {
@@ -41,7 +41,7 @@ public class Main {
 
     private static class DebugPacketCapture implements IPacketCapture {
         @Override
-        public void onPacket(byte[] packetData, String type, int datalink) {
+        public void onPacket(byte[] packetData, String type) {
         }
         @Override
         public void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName) {

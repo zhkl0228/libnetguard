@@ -249,7 +249,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     @SuppressWarnings("unused")
     private void notifyPacket(int uid, byte[] packet) {
         if (packetCapture != null) {
-            packetCapture.onPacket(packet, "NetGuard", CONST_RAW_IP);
+            packetCapture.onPacket(packet, "NetGuard");
         }
     }
 

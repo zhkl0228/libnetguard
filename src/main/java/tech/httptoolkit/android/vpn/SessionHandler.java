@@ -17,7 +17,6 @@
 package tech.httptoolkit.android.vpn;
 
 import com.github.netguard.vpn.IPacketCapture;
-import com.github.netguard.vpn.InspectorVpn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.socket.SocketNIODataService;
@@ -87,7 +86,7 @@ public class SessionHandler {
 			log.warn("Unsupported IP protocol: {}", ipHeader.getProtocol());
 		}
 		if (handled && packetCapture != null) {
-			packetCapture.onPacket(rawPacket, "ToyShark", InspectorVpn.CONST_RAW_IP);
+			packetCapture.onPacket(rawPacket, "ToyShark");
 		}
 	}
 

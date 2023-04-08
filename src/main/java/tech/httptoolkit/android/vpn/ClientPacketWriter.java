@@ -17,7 +17,6 @@
 package tech.httptoolkit.android.vpn;
 
 import com.github.netguard.vpn.IPacketCapture;
-import com.github.netguard.vpn.InspectorVpn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,7 +67,7 @@ public class ClientPacketWriter implements Runnable {
 					this.clientWriter.writeShort(data.length);
 					this.clientWriter.write(data);
 					if (packetCapture != null) {
-						packetCapture.onPacket(data, "ToyShark", InspectorVpn.CONST_RAW_IP);
+						packetCapture.onPacket(data, "ToyShark");
 					}
 				} catch (IOException e) {
 					log.error("Error writing {} bytes to the VPN", data.length);
