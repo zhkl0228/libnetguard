@@ -1,9 +1,10 @@
 package tech.httptoolkit.android.vpn;
 
-import java.net.SocketAddress;
+import com.github.netguard.vpn.PortRedirector;
+import eu.faircode.netguard.Allowed;
 
-public interface Mitm {
+public interface Mitm extends PortRedirector {
 
-    SocketAddress mitm(String ip, int port);
+    Allowed mitm(String ip, int port);
 
 }

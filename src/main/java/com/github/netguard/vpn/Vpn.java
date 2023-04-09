@@ -6,4 +6,6 @@ public interface Vpn {
 
     void enableMitm(int... sslPorts);
 
+    void setPortRedirector(PortRedirector portRedirector);
+
 }

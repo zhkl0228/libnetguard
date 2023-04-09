@@ -16,9 +16,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -138,7 +136,12 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
     }
 
     @Override
-    public SocketAddress mitm(String ip, int port) {
+    public Allowed redirect(String ip, int port) {
+        return portRedirector == null ? null : portRedirector.redirect(ip, port);
+    }
+
+    @Override
+    public Allowed mitm(String ip, int port) {
         boolean mitm = false;
         if (sslPorts != null) {
             if (sslPorts.length == 0 && port == 443) {
@@ -159,9 +162,9 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
             int mitmTimeout = 10000; // default 10 seconds;
             Allowed allowed = SSLProxyV2.create(this, rootCert, packet, mitmTimeout);
             if (allowed == null) {
-                return new InetSocketAddress("127.0.0.1", 222);
+                return new Allowed("127.0.0.1", 222);
             } else if (allowed.raddr != null && allowed.rport > 0) {
-                return new InetSocketAddress(allowed.raddr, allowed.rport);
+                return allowed;
             } else {
                 return null;
             }

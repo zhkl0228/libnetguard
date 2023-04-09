@@ -192,6 +192,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     }
 
     private static final int SYSTEM_UID = 2000;
+    private static final int TCP_PROTOCOL = 6;
 
     // Called from native code
     @SuppressWarnings("unused")
@@ -204,17 +205,22 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
 
         Allowed allowed = null;
-        long start = System.currentTimeMillis();
+        long start = log.isDebugEnabled() ? System.currentTimeMillis() : 0;
         try {
             if(packet.allowed) {
                 allowed = new Allowed();
 
-                if (packet.protocol == 6 && packet.version == 4
+                if (packet.protocol == TCP_PROTOCOL && packet.version == 4 // ipv4
                         && sslPorts != null
-                        && packet.isSSL(sslPorts)) { // ipv4
+                        && packet.isSSL(sslPorts)) {
                     allowed = mitm(packet);
                 } else if (packet.isInstallRootCert()) {
                     allowed = mitm(packet);
+                } else if (portRedirector != null) {
+                    Allowed redirect = portRedirector.redirect(packet.daddr, packet.dport);
+                    if (redirect != null) {
+                        allowed = redirect;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -222,7 +228,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
 
         if (allowed != null) {
-            if (packet.protocol != 6 /* TCP */ || !"".equals(packet.flags)) {
+            if (packet.protocol != TCP_PROTOCOL || !"".equals(packet.flags)) {
                 logPacket(packet);
             }
         }

@@ -97,6 +97,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     private ProtocolDetector protocolDetector;
 
+    @SuppressWarnings("unused")
     public void setProtocolDetector(ProtocolDetector protocolDetector) {
         this.protocolDetector = protocolDetector;
     }
