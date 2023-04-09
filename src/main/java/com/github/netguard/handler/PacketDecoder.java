@@ -188,13 +188,25 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public void onRequest(HttpSession session, HttpRequest request) {
-        log.trace("onRequest session={}, request={}", session, request);
+    public final void onRequest(HttpSession session, HttpRequest request) {
+        onRequest(session, new KrakenHttpRequest(request));
+    }
+
+    protected void onRequest(HttpSession session, com.github.netguard.handler.http.HttpRequest request) {
+        if (log.isTraceEnabled()) {
+            log.trace("onRequest session={}, request={}\n{}", session, request, request.getHeaderString());
+        }
     }
 
     @Override
-    public void onResponse(HttpSession session, HttpRequest request, HttpResponse response) {
-        log.trace("onResponse session={}, request={}, response={}", session, request, response);
+    public final void onResponse(HttpSession session, HttpRequest request, HttpResponse response) {
+        onResponse(session, new KrakenHttpRequest(request), new KrakenHttpResponse(response));
+    }
+
+    protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
+        if (log.isTraceEnabled()) {
+            log.trace("onResponse session={}, request={}, response={}\n{}", session, request, response, response.getHeaderString());
+        }
     }
 
     @Override

@@ -63,6 +63,9 @@ public class VpnServer {
         if (thread != null) {
             throw new IllegalStateException("Already started.");
         }
+        if (broadcast) {
+            sendBroadcast();
+        }
         thread = new Thread(new Runnable() {
             @Override
             public void run() {
