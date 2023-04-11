@@ -113,6 +113,10 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         tunnelThread = null;
 
         jni_done(jni_context);
+
+        if (packetCapture != null) {
+            packetCapture.notifyFinish();
+        }
     }
 
     private native long jni_init(int sdk);

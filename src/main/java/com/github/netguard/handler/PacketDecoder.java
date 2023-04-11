@@ -1,10 +1,13 @@
 package com.github.netguard.handler;
 
+import com.github.netguard.Inspector;
 import com.github.netguard.handler.session.SSLProxySession;
+import com.github.netguard.handler.session.SSLSessionKey;
 import com.github.netguard.handler.session.Session;
 import com.github.netguard.handler.session.SessionCreator;
 import com.github.netguard.handler.session.SessionFactory;
 import com.github.netguard.vpn.IPacketCapture;
+import org.apache.commons.io.IOUtils;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.ethernet.EthernetDecoder;
 import org.krakenapps.pcap.decoder.ethernet.EthernetFrame;
@@ -32,7 +35,10 @@ import org.krakenapps.pcap.util.ChainBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Arrays;
 
 public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
@@ -121,6 +127,10 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     @Override
     public final void onPacket(byte[] packetData, String type) {
         try {
+            if (pcapFileOutputStream != null) {
+                pcapFileOutputStream.writePacket(packetData);
+            }
+
             Buffer data = new ChainBuffer(packetData);
             data.mark();
             byte b1 = data.get();
@@ -147,8 +157,8 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     public final void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName) {
         log.debug("onSSLProxyEstablish {} {}:{} => {}:{}", hostName, clientIp, clientPort, serverIp, serverPort);
         try {
-            TcpSessionKey key = new TcpSessionKeyImpl(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort);
-            httpDecoder.onEstablish(new SSLProxySession(key, hostName));
+            TcpSessionKey key = new SSLSessionKey(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort, hostName);
+            httpDecoder.onEstablish(new SSLProxySession(key));
         } catch (Exception e) {
             log.warn("onSSLProxyEstablish", e);
         }
@@ -156,7 +166,15 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public final void onSSLProxyTX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
-        log.trace("onSSLProxyTX {}:{} => {}:{}", clientIp, clientPort, serverIp, serverPort);
+        if (log.isTraceEnabled()) {
+            byte[] tmp;
+            if (data.length > 256) {
+                tmp = Arrays.copyOf(data, 256);
+            } else {
+                tmp = data;
+            }
+            log.trace(Inspector.inspectString(tmp, String.format("onSSLProxyTX %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+        }
         try {
             TcpSessionKey key = new TcpSessionKeyImpl(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort);
             httpDecoder.handleTx(key, new ChainBuffer(data));
@@ -167,12 +185,20 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public final void onSSLProxyRX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
-        log.trace("onSSLProxyRX {}:{} => {}:{}", clientIp, clientPort, serverIp, serverPort);
+        if (log.isTraceEnabled()) {
+            byte[] tmp;
+            if (data.length > 256) {
+                tmp = Arrays.copyOf(data, 256);
+            } else {
+                tmp = data;
+            }
+            log.trace(Inspector.inspectString(tmp, String.format("onSSLProxyRX %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+        }
         try {
             TcpSessionKey key = new TcpSessionKeyImpl(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort);
             httpDecoder.handleRx(key, new ChainBuffer(data));
         } catch (Exception e) {
-            log.warn("onSSLProxyRX", e);
+            log.warn("onSSLProxyRX: " + clientIp + ":" + clientPort + " => " + serverIp + ":" + serverPort, e);
         }
     }
 
@@ -180,7 +206,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     public final void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName) {
         log.debug("onSSLProxyFinish {} {}:{} => {}:{}", hostName, clientIp, clientPort, serverIp, serverPort);
         try {
-            TcpSessionKey key = new TcpSessionKeyImpl(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort);
+            TcpSessionKey key = new SSLSessionKey(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort, hostName);
             httpDecoder.onFinish(key);
         } catch (Exception e) {
             log.warn("onSSLProxyFinish", e);
@@ -237,6 +263,24 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     @Override
     public void onWebSocketResponse(HttpSession session, WebSocketFrame frame) {
         log.debug("onWebSocketResponse session={}, frame={}", session, frame);
+    }
+
+    private PcapFileOutputStream pcapFileOutputStream;
+
+    @SuppressWarnings("unused")
+    public void setOutputPcapFile(File pcapFile) throws IOException {
+        if (pcapFileOutputStream != null) {
+            IOUtils.closeQuietly(pcapFileOutputStream);
+        }
+        pcapFileOutputStream = new PcapFileOutputStream(pcapFile);
+    }
+
+    @Override
+    public void notifyFinish() {
+        if (pcapFileOutputStream != null) {
+            IOUtils.closeQuietly(pcapFileOutputStream);
+            pcapFileOutputStream = null;
+        }
     }
 
 }

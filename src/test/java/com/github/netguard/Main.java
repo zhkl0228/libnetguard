@@ -18,7 +18,7 @@ public class Main {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
         Logger.getLogger(PacketDecoder.class).setLevel(Level.TRACE);
-        VpnServer vpnServer = new VpnServer();
+        VpnServer vpnServer = new VpnServer(0);
         vpnServer.enableBroadcast(10);
         vpnServer.setVpnListener(new VpnListener() {
             @Override

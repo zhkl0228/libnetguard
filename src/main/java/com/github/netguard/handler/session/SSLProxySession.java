@@ -8,11 +8,8 @@ import org.krakenapps.pcap.decoder.tcp.TcpState;
 
 public class SSLProxySession extends TcpSessionImpl implements TcpSession {
 
-    private final String hostName;
-
-    public SSLProxySession(TcpSessionKey key, String hostName) {
+    public SSLProxySession(TcpSessionKey key) {
         super(null);
-        this.hostName = hostName;
 
         this.setKey(key);
     }
@@ -30,9 +27,5 @@ public class SSLProxySession extends TcpSessionImpl implements TcpSession {
     @Override
     public TcpState getServerState() {
         return TcpState.ESTABLISHED;
-    }
-
-    public String getHostName() {
-        return hostName;
     }
 }

@@ -116,6 +116,10 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
         log.debug("Vpn thread shutting down");
 
         clients.remove(this);
+
+        if (packetCapture != null) {
+            packetCapture.notifyFinish();
+        }
     }
 
     @Override

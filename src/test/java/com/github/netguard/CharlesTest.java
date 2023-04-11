@@ -1,6 +1,5 @@
 package com.github.netguard;
 
-import eu.faircode.netguard.ServiceSinkhole;
 import junit.framework.TestCase;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
@@ -19,29 +18,6 @@ import java.security.Security;
 import java.security.cert.X509Certificate;
 
 public class CharlesTest extends TestCase {
-
-    public void testTcpCap() throws Exception {
-        Security.addProvider(new BouncyCastleProvider());
-        KeyStore keyStore = KeyStore.getInstance("PKCS12", "BC");
-        String alias = "tcpcap-ssl-proxying";
-        try (InputStream inputStream = ServiceSinkhole.class.getResourceAsStream("/tcpcap-ssl-proxying.p12")) {
-            keyStore.load(inputStream, "tcpcap".toCharArray());
-        }
-        X509Certificate rootCert = (X509Certificate) keyStore.getCertificate(alias);
-        assertNotNull(rootCert);
-        System.out.println(rootCert);
-
-        PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, null);
-        assertNotNull(privateKey);
-        System.out.println(privateKey);
-
-        {
-            Object[] certs = keyStore.getCertificateChain(alias);
-            StringWriter writer = new StringWriter();
-            exportPem(writer, certs);
-            System.out.println(writer);
-        }
-    }
 
     public void testPrivateKey() throws Exception {
         Security.addProvider(new BouncyCastleProvider());

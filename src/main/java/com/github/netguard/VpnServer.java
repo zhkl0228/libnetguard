@@ -143,7 +143,8 @@ public class VpnServer {
             InetAddress broadcastAddr = InetAddress.getByName("255.255.255.255");
             packet.setAddress(broadcastAddr);
             datagramSocket.send(packet);
-        } catch (IOException ignored) {
+        } catch (IOException e) {
+            log.trace("sendBroadcast", e);
         } catch (Exception e) {
             log.warn("sendBroadcast", e);
         }
