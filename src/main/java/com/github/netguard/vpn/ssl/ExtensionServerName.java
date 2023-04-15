@@ -14,6 +14,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 class ExtensionServerName {
@@ -92,6 +93,7 @@ class ExtensionServerName {
 
         buffer = ByteBuffer.wrap(extensionData); // extensionData
         List<String> serverNames = new ArrayList<>(2);
+        List<String> applicationLayerProtocols = new ArrayList<>(2);
         while (buffer.remaining() > 0) {
             short type = buffer.getShort();
             length = buffer.getShort() & 0xffff;
@@ -111,19 +113,29 @@ class ExtensionServerName {
                 } else {
                     log.warn("Unsupported name type: {}, data={}, server={}", nameType, Hex.encodeHexString(data), server);
                 }
+            } else if (type == 0x10) { // ALPN
+                ByteBuffer nb = ByteBuffer.wrap(data);
+                nb.getShort(); // ALPN length
+                while (nb.hasRemaining()) {
+                    int len = nb.get() & 0xff;
+                    byte[] alpnData = new byte[len];
+                    nb.get(alpnData);
+                    String alpn = new String(alpnData, StandardCharsets.UTF_8);
+                    applicationLayerProtocols.add(alpn);
+                }
             }
             if (log.isDebugEnabled()) {
                 log.trace(Inspector.inspectString(data, "parseExtensions type=0x" + Integer.toHexString(type) + ", length=" + length));
             }
         }
-        log.debug("parseExtensions names={}, server={}", serverNames, server);
+        log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}", serverNames, server, applicationLayerProtocols);
 
         if (serverNames.isEmpty()) {
             log.debug("Not tls: extension name is empty: server={}", server);
             return new ClientHelloRecord(baos);
         } else {
             String hostName = serverNames.get(0);
-            return new ClientHelloRecord(baos, hostName);
+            return new ClientHelloRecord(baos, hostName, Collections.unmodifiableList(applicationLayerProtocols));
         }
     }
 

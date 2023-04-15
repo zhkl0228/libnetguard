@@ -6,8 +6,8 @@ import eu.bitwalker.useragentutils.Browser;
 import eu.bitwalker.useragentutils.UserAgent;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import org.apache.commons.io.IOUtils;
-import org.apache.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -155,11 +155,11 @@ public class SSLProxyV2 implements Runnable {
         String pem = rootCert.pem;
         StringBuilder builder = new StringBuilder();
         builder.append("HTTP/1.1 200 OK\r\n");
-        builder.append(HttpHeaders.CONNECTION).append(": close\r\n");
-        builder.append(HttpHeaders.PRAGMA).append(": no-cache\r\n");
-        builder.append(HttpHeaders.CONTENT_TYPE).append(": application/x-pem-file\r\n");
-        builder.append(HttpHeaders.CONTENT_LENGTH).append(": ").append(pem.length()).append("\r\n");
-        builder.append(HttpHeaders.SERVER).append(": ").append(getClass().getSimpleName()).append("\r\n");
+        builder.append(HttpHeaderNames.CONNECTION).append(": close\r\n");
+        builder.append(HttpHeaderNames.PRAGMA).append(": no-cache\r\n");
+        builder.append(HttpHeaderNames.CONTENT_TYPE).append(": application/x-pem-file\r\n");
+        builder.append(HttpHeaderNames.CONTENT_LENGTH).append(": ").append(pem.length()).append("\r\n");
+        builder.append(HttpHeaderNames.SERVER).append(": ").append(getClass().getSimpleName()).append("\r\n");
 
         {
             String fileName = "NetGuard.pem";
@@ -183,8 +183,7 @@ public class SSLProxyV2 implements Runnable {
             if (str == null) {
                 str = "filename=\"" + URLEncoder.encode(fileName, "UTF-8") + "\"";
             }
-            final String CONTENT_DISPOSITION = "Content-Disposition";
-            builder.append(CONTENT_DISPOSITION).append(": attachment; ").append(str).append("\r\n");
+            builder.append(HttpHeaderNames.CONTENT_DISPOSITION).append(": attachment; ").append(str).append("\r\n");
         }
 
         builder.append("\r\n");

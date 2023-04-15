@@ -233,7 +233,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isTraceEnabled()) {
             byte[] data = response.getResponseData();
-            log.trace("onResponse {} bytes session={}, request={}, response={}\n{}", data.length, session, request, response, response.getHeaderString());
+            log.trace("onResponse {} bytes session={}, request={}, response={}\n{}", data == null ? 0 : data.length, session, request, response, response.getHeaderString());
         }
     }
 
