@@ -16,13 +16,12 @@ import javax.net.SocketFactory;
 import javax.net.ssl.HandshakeCompletedEvent;
 import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.DataInput;
@@ -78,6 +77,7 @@ public class SSLProxyV2 implements Runnable {
         this.timeout = timeout;
         this.secureSocket = null;
         this.hostName = null;
+        this.applicationProtocol = null;
 
         ServerSocketFactory factory = ServerSocketFactory.getDefault();
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
@@ -89,8 +89,9 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private final String hostName;
+    private final String applicationProtocol;
 
-    private SSLProxyV2(IPacketCapture packetCapture, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket, String hostName) throws IOException {
+    private SSLProxyV2(IPacketCapture packetCapture, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket, String hostName, String applicationProtocol) throws IOException {
         this.rootCert = null;
 
         this.packetCapture = packetCapture;
@@ -98,6 +99,7 @@ public class SSLProxyV2 implements Runnable {
         this.timeout = timeout;
         this.secureSocket = secureSocket;
         this.hostName = hostName;
+        this.applicationProtocol = applicationProtocol;
 
         SSLServerSocketFactory factory = context.getServerSocketFactory();
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
@@ -195,7 +197,13 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private void handleSSLSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName) throws IOException, InterruptedException {
-        log.debug("ssl proxy remote={}, socket={}, local={}, hostName={}", remote, socket, local, hostName);
+        log.debug("ssl proxy remote={}, socket={}, local={}, hostName={}, applicationProtocol={}", remote, socket, local, hostName, applicationProtocol);
+        if (applicationProtocol != null && !applicationProtocol.isEmpty()) {
+            SSLSocket sslSocket = (SSLSocket) local;
+            SSLParameters parameters = sslSocket.getSSLParameters();
+            parameters.setApplicationProtocols(new String[]{applicationProtocol});
+            sslSocket.setSSLParameters(parameters);
+        }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
             doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName);
         }
@@ -218,24 +226,9 @@ public class SSLProxyV2 implements Runnable {
         }
     }
 
-    private static final TrustManager tm = new X509TrustManager() {
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String s) {
-            log.debug("Accepting a client certificate: {}", chain[0].getSubjectDN());
-        }
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String s) {
-            log.debug("Accepting a server certificate: {}", chain[0].getSubjectDN());
-        }
-        @Override
-        public X509Certificate[] getAcceptedIssuers() {
-            return new X509Certificate[0];
-        }
-    };
-
     private void handleSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local) throws Exception {
         DataInput dataInput = new DataInputStream(localIn);
-        ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
+        final ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
         log.debug("proxy remote={}, record={}, local={}", remote, record, local);
         if (record.hostName == null) {
             try (Socket socket = new Socket()) {
@@ -247,16 +240,18 @@ public class SSLProxyV2 implements Runnable {
                 }
             }
         } else {
-            SSLContext context = SSLContext.getInstance("TLSv1.2");
-            TrustManager[] trustManagers = new TrustManager[] { tm };
-            context.init(null, trustManagers, null);
-            SSLSocketFactory factory = context.getSocketFactory();
+            SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
             Socket app = null;
             SSLSocket secureSocket = null;
             try {
                 app = new Socket();
                 app.connect(remote, timeout);
                 secureSocket = (SSLSocket) factory.createSocket(app, record.hostName, remote.getPort(), true);
+                if (!record.applicationLayerProtocols.isEmpty()) {
+                    SSLParameters parameters = secureSocket.getSSLParameters();
+                    parameters.setApplicationProtocols(record.applicationLayerProtocols.toArray(new String[0]));
+                    secureSocket.setSSLParameters(parameters);
+                }
                 final CountDownLatch countDownLatch = new CountDownLatch(1);
                 secureSocket.addHandshakeCompletedListener(new HandshakeCompletedListener() {
                     @Override
@@ -274,13 +269,14 @@ public class SSLProxyV2 implements Runnable {
                 });
                 secureSocket.startHandshake();
                 countDownLatch.await();
+                log.debug("secureSocket={}, applicationProtocol={}", secureSocket, secureSocket.getApplicationProtocol());
                 if (peerCertificate == null) {
                     throw new IOException("Handshake failed with: " + record.hostName + ", remote=" + remote);
                 }
 
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
                 SSLContext serverContext = serverCertificate.createSSLContext(rootCert);
-                SSLProxyV2 proxy = new SSLProxyV2(packetCapture, packet, timeout, serverContext, secureSocket, record.hostName);
+                SSLProxyV2 proxy = new SSLProxyV2(packetCapture, packet, timeout, serverContext, secureSocket, record.hostName, secureSocket.getApplicationProtocol());
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                         socketOut.write(record.readData);

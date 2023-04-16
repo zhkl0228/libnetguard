@@ -16,8 +16,8 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
-        Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
-        Logger.getLogger(PacketDecoder.class).setLevel(Level.TRACE);
+        Logger.getLogger(SSLProxyV2.class).setLevel(Level.DEBUG);
+        Logger.getLogger(PacketDecoder.class).setLevel(Level.DEBUG);
         VpnServer vpnServer = new VpnServer();
         vpnServer.enableBroadcast(10);
         vpnServer.setVpnListener(new VpnListener() {
