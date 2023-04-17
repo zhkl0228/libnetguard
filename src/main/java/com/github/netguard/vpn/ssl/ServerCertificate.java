@@ -137,7 +137,7 @@ class ServerCertificate {
      */
     private static final String SSL_CONTEXT_FALLBACK_PROTOCOL = "TLSv1";
 
-    private static SSLContext newSSLContext() throws NoSuchAlgorithmException {
+    public static SSLContext newSSLContext() throws NoSuchAlgorithmException {
         try {
             log.debug("Using protocol {}", SSL_CONTEXT_PROTOCOL);
             return SSLContext.getInstance(SSL_CONTEXT_PROTOCOL

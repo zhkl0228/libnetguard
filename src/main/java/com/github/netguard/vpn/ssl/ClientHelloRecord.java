@@ -23,7 +23,7 @@ class ClientHelloRecord {
     public String toString() {
         return "ClientHelloRecord{" +
                 "hostName='" + hostName + '\'' +
-                "applicationLayerProtocols='" + applicationLayerProtocols + '\'' +
+                ", applicationLayerProtocols='" + applicationLayerProtocols + '\'' +
                 '}';
     }
 }

@@ -205,11 +205,13 @@ public class SSLProxyV2 implements Runnable {
             sslSocket.setSSLParameters(parameters);
         }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
-            doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName);
+            boolean isHttp2 = "h2".equals(applicationProtocol);
+            doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName, isHttp2);
         }
     }
 
-    private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, IPacketCapture packetCapture, String hostName) throws InterruptedException {
+    private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, IPacketCapture packetCapture,
+                                  String hostName, boolean isHttp2) throws InterruptedException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
@@ -217,8 +219,16 @@ public class SSLProxyV2 implements Runnable {
             packetCapture.onSSLProxyEstablish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName);
         }
         CountDownLatch countDownLatch = new CountDownLatch(2);
-        new StreamForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName);
-        new StreamForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName);
+        StreamForward inbound, outbound;
+        if (isHttp2) {
+            inbound = new HttpFrameForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName);
+            outbound = new HttpFrameForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName);
+        } else {
+            inbound = new StreamForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName);
+            outbound = new StreamForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName);
+        }
+        inbound.startThread();
+        outbound.startThread();
         countDownLatch.await();
 
         if (packetCapture != null) {
@@ -236,7 +246,7 @@ public class SSLProxyV2 implements Runnable {
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     socketOut.write(record.readData);
                     socketOut.flush();
-                    doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null);
+                    doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false);
                 }
             }
         } else {
@@ -281,7 +291,7 @@ public class SSLProxyV2 implements Runnable {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                         socketOut.write(record.readData);
                         socketOut.flush();
-                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null);
+                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false);
                     }
                 }
             } catch (IOException e) {

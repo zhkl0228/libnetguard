@@ -8,6 +8,7 @@ import com.github.netguard.vpn.ssl.SSLProxyV2;
 import eu.faircode.netguard.ServiceSinkhole;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.krakenapps.pcap.decoder.http.HttpDecoder;
 
 import java.io.IOException;
 import java.util.Scanner;
@@ -18,6 +19,7 @@ public class Main {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.DEBUG);
         Logger.getLogger(PacketDecoder.class).setLevel(Level.DEBUG);
+        Logger.getLogger(HttpDecoder.class).setLevel(Level.DEBUG);
         VpnServer vpnServer = new VpnServer();
         vpnServer.enableBroadcast(10);
         vpnServer.setVpnListener(new VpnListener() {
