@@ -29,7 +29,7 @@ public class StreamForward implements Runnable {
     private final CountDownLatch countDownLatch;
     private final Socket socket;
     protected final IPacketCapture packetCapture;
-    private final String hostName;
+    protected final String hostName;
 
     protected StreamForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket,
                             IPacketCapture packetCapture, String hostName) {

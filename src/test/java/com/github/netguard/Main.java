@@ -6,8 +6,12 @@ import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
+import com.github.netguard.vpn.ssl.h2.Http2SessionKey;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.ServiceSinkhole;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
@@ -59,6 +63,16 @@ public class Main {
                 System.out.println("NOT filter http2 host=" + hostName);
                 return false;
             }
+        }
+        @Override
+        public byte[] filterRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData) {
+            Inspector.inspect(requestData, "filterRequest sessionKey=" + sessionKey + ", request=" + request);
+            return requestData;
+        }
+        @Override
+        public byte[] filterResponse(Http2SessionKey sessionKey, HttpResponse response, HttpHeaders headers, byte[] responseData) {
+            Inspector.inspect(responseData, "sessionKey session=" + sessionKey + ", response=" + response);
+            return responseData;
         }
     }
 

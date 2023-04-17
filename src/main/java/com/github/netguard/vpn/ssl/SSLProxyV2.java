@@ -2,6 +2,7 @@ package com.github.netguard.vpn.ssl;
 
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.twitter.http2.HttpFrameForward;
 import eu.bitwalker.useragentutils.Browser;
@@ -224,8 +225,11 @@ public class SSLProxyV2 implements Runnable {
         CountDownLatch countDownLatch = new CountDownLatch(2);
         StreamForward inbound, outbound;
         if (filterHttp2) {
-            HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName);
-            outbound = new HttpFrameForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName)
+            Http2Session session = new Http2Session(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName);
+            HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName,
+                    session);
+            outbound = new HttpFrameForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName,
+                    session)
                     .setPeer(inboundForward);
             inbound = inboundForward;
         } else {

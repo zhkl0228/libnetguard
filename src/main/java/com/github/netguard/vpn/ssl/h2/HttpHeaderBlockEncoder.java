@@ -34,7 +34,7 @@ public class HttpHeaderBlockEncoder {
     private int encoderMaxHeaderTableSize;
     private int decoderMaxHeaderTableSize;
     private int maxHeaderTableSize;
-    private Encoder encoder;
+    private final Encoder encoder;
 
     /**
      * Create a new instance.
