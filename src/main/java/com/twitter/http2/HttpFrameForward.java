@@ -1,22 +1,13 @@
-package com.github.netguard.vpn.ssl;
+package com.twitter.http2;
 
 import com.github.netguard.vpn.IPacketCapture;
-import com.twitter.hpack.Decoder;
-import com.twitter.hpack.HeaderListener;
-import com.twitter.http2.DefaultHttpHeadersFrame;
-import com.twitter.http2.DefaultHttpSettingsFrame;
-import com.twitter.http2.HttpFrameDecoder;
-import com.twitter.http2.HttpFrameDecoderDelegate;
-import com.twitter.http2.HttpFrameEncoder;
-import com.twitter.http2.HttpHeadersFrame;
-import com.twitter.http2.HttpSettingsFrame;
+import com.github.netguard.vpn.ssl.StreamForward;
 import edu.baylor.cs.csi5321.spdy.frames.SpdyUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -24,10 +15,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 
-class HttpFrameForward extends StreamForward implements HttpFrameDecoderDelegate {
+public class HttpFrameForward extends StreamForward implements HttpFrameDecoderDelegate {
 
     private static final Logger log = LoggerFactory.getLogger(HttpFrameForward.class);
 
@@ -36,13 +26,28 @@ class HttpFrameForward extends StreamForward implements HttpFrameDecoderDelegate
     private final HttpFrameDecoder frameDecoder;
     private final HttpFrameEncoder frameEncoder;
 
-    private final Decoder decoder;
+    private final HttpHeaderBlockDecoder httpHeaderBlockDecoder;
+    private final com.github.netguard.vpn.ssl.h2.HttpHeaderBlockEncoder httpHeaderBlockEncoder;
 
-    HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName) {
+    private int lastHeaderTableSize = Integer.MAX_VALUE;
+    private int minHeaderTableSize = Integer.MAX_VALUE;
+    private boolean changeEncoderHeaderTableSize;
+
+    public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName) {
         super(inputStream, outputStream, server, clientIp, serverIp, clientPort, serverPort, countDownLatch, socket, packetCapture, hostName);
-        this.decoder = new Decoder(0x4000, DEFAULT_HEADER_TABLE_SIZE);
         this.frameDecoder = new HttpFrameDecoder(server, this);
         this.frameEncoder = new HttpFrameEncoder();
+
+        httpHeaderBlockDecoder = new HttpHeaderBlockDecoder(0x4000, DEFAULT_HEADER_TABLE_SIZE);
+        httpHeaderBlockEncoder = new com.github.netguard.vpn.ssl.h2.HttpHeaderBlockEncoder(DEFAULT_HEADER_TABLE_SIZE);
+    }
+
+    private HttpFrameForward peer;
+
+    public HttpFrameForward setPeer(HttpFrameForward peer) {
+        this.peer = peer;
+        peer.peer = this;
+        return this;
     }
 
     private boolean canStop;
@@ -86,6 +91,8 @@ class HttpFrameForward extends StreamForward implements HttpFrameDecoderDelegate
             }
             return true;
         } catch (SocketTimeoutException ignored) {
+        } finally {
+            this.peer = null;
         }
         return false;
     }
@@ -104,46 +111,49 @@ class HttpFrameForward extends StreamForward implements HttpFrameDecoderDelegate
     }
 
     private HttpHeadersFrame httpHeadersFrame;
-    private ByteBuf headerBlock;
 
     @Override
     public void readHeadersFrame(int streamId, boolean endStream, boolean endSegment, boolean exclusive, int dependency, int weight) {
         log.debug("readHeadersFrame server={}, streamId={}, endStream={}, endSegment={}, exclusive={}, dependency={}, weight={}", server, streamId, endStream, endSegment, exclusive, dependency, weight);
 
-        HttpHeadersFrame httpHeadersFrame = new DefaultHttpHeadersFrame(streamId);
+        httpHeadersFrame = new DefaultHttpHeadersFrame(streamId);
         httpHeadersFrame.setLast(endStream);
         httpHeadersFrame.setExclusive(exclusive);
         httpHeadersFrame.setDependency(dependency);
         httpHeadersFrame.setWeight(weight);
-        this.httpHeadersFrame = httpHeadersFrame;
-        this.headerBlock = Unpooled.buffer();
     }
 
     @Override
     public void readHeaderBlock(ByteBuf headerBlockFragment) {
-        log.debug("readHeaderBlock server={}, headerBlockFragment={}, frame={}", server, headerBlockFragment, httpHeadersFrame);
-        headerBlock.writeBytes(headerBlockFragment);
+        log.debug("readHeaderBlock server={}, headerBlockFragment={}", server, headerBlockFragment);
+        try {
+            httpHeaderBlockDecoder.decode(headerBlockFragment, httpHeadersFrame);
+        } catch (IOException e) {
+            throw new IllegalStateException("readHeaderBlock frame=" + httpHeadersFrame, e);
+        }
     }
 
     @Override
     public void readHeaderBlockEnd() {
         try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            headerBlock.readBytes(baos, headerBlock.readableBytes());
-            byte[] block = baos.toByteArray();
-            decoder.decode(new ByteArrayInputStream(block), new HeaderListener() {
-                @Override
-                public void addHeader(byte[] name, byte[] value, boolean sensitive) {
-                    httpHeadersFrame.headers().add(new String(name, StandardCharsets.UTF_8), new String(value, StandardCharsets.UTF_8));
-                }
-            });
-            ByteBuf byteBuf = frameEncoder.encodeHeadersFrame(httpHeadersFrame.getStreamId(), httpHeadersFrame.isLast(), httpHeadersFrame.isExclusive(), httpHeadersFrame.getDependency(), httpHeadersFrame.getWeight(), Unpooled.wrappedBuffer(block));
-            forwardFrameBuf(byteBuf);
+            synchronized (httpHeaderBlockEncoder) {
+                ByteBuf frame = frameEncoder.encodeHeadersFrame(
+                        httpHeadersFrame.getStreamId(),
+                        httpHeadersFrame.isLast(),
+                        httpHeadersFrame.isExclusive(),
+                        httpHeadersFrame.getDependency(),
+                        httpHeadersFrame.getWeight(),
+                        httpHeaderBlockEncoder.encode(httpHeadersFrame)
+                );
+                // Writes of compressed data must occur in order
+                forwardFrameBuf(frame);
+            }
         } catch (IOException e) {
-            throw new IllegalStateException("readHeaderBlockEnd", e);
+            log.error("readHeaderBlockEnd server={}", server, e);
         }
-        log.debug("readHeaderBlockEnd server={}, headerBlock={}, frame={}", server, headerBlock, httpHeadersFrame);
-        headerBlock = null;
+
+        httpHeaderBlockDecoder.endHeaderBlock(httpHeadersFrame);
+        log.debug("readHeaderBlockEnd server={}, frame={}", server, httpHeadersFrame);
         httpHeadersFrame = null;
     }
 
@@ -162,41 +172,62 @@ class HttpFrameForward extends StreamForward implements HttpFrameDecoderDelegate
     }
 
     private HttpSettingsFrame httpSettingsFrame;
+    private boolean changeDecoderHeaderTableSize;
+    private int headerTableSize;
 
     @Override
     public void readSettingsFrame(boolean ack) {
         httpSettingsFrame = new DefaultHttpSettingsFrame();
         httpSettingsFrame.setAck(ack);
-        log.debug("readSettingsFrame server={}, ack={}", server, ack);
-    }
+        log.debug("readSettingsFrame server={}, ack={}, changeDecoderHeaderTableSize={}, headerTableSize={}", server, ack, changeDecoderHeaderTableSize, headerTableSize);
 
-    @Override
-    public void readSetting(int id, int value) {
-        httpSettingsFrame.setValue(id, value);
-        log.debug("readSetting server={}, id={}, value={}", server, id, value);
-        switch (id) {
-            case HttpSettingsFrame.SETTINGS_HEADER_TABLE_SIZE:
-                // Ignore 'negative' values -- they are too large for java
-                if (value >= 0) {
-                    decoder.setMaxHeaderTableSize(value);
-                }
-                break;
-            case HttpSettingsFrame.SETTINGS_MAX_HEADER_LIST_SIZE:
-            case HttpSettingsFrame.SETTINGS_ENABLE_PUSH:
-            case HttpSettingsFrame.SETTINGS_MAX_CONCURRENT_STREAMS:
-            case HttpSettingsFrame.SETTINGS_INITIAL_WINDOW_SIZE:
-            case HttpSettingsFrame.SETTINGS_MAX_FRAME_SIZE:
-                break;
-            default:
-                // Ignore Unknown Settings
-                log.warn("readSetting id={}, value={}", id, value);
-                break;
+        if (ack && changeDecoderHeaderTableSize) {
+            httpHeaderBlockDecoder.setMaxHeaderTableSize(headerTableSize);
+            changeDecoderHeaderTableSize = false;
         }
     }
 
     @Override
+    public void readSetting(int id, int value) {
+        log.debug("readSetting server={}, id={}, value={}", server, id, value);
+        httpSettingsFrame.setValue(id, value);
+
+        if (id == HttpSettingsFrame.SETTINGS_HEADER_TABLE_SIZE) {
+            // Ignore 'negative' values -- they are too large for java
+            if (value >= 0) {
+                changeEncoderHeaderTableSize = true;
+                lastHeaderTableSize = value;
+                if (lastHeaderTableSize < minHeaderTableSize) {
+                    minHeaderTableSize = lastHeaderTableSize;
+                }
+            }
+        }
+    }
+
+    private void onPeerSettingsEnd(HttpSettingsFrame httpSettingsFrame) {
+        int newHeaderTableSize =
+                httpSettingsFrame.getValue(HttpSettingsFrame.SETTINGS_HEADER_TABLE_SIZE);
+        if (newHeaderTableSize >= 0) {
+            headerTableSize = newHeaderTableSize;
+            changeDecoderHeaderTableSize = true;
+        }
+        log.debug("onPeerSettingsEnd server={}, changeDecoderHeaderTableSize={}, headerTableSize={}, , frame={}", server, changeDecoderHeaderTableSize, headerTableSize, httpSettingsFrame);
+    }
+
+    @Override
     public void readSettingsEnd() {
-        log.debug("readSettingsEnd server={}, frame={}", server, httpSettingsFrame);
+        log.debug("readSettingsEnd server={}, changeEncoderHeaderTableSize={}, minHeaderTableSize={}, lastHeaderTableSize={}, frame={}", server, changeEncoderHeaderTableSize, minHeaderTableSize, lastHeaderTableSize, httpSettingsFrame);
+        if (changeEncoderHeaderTableSize) {
+            synchronized (httpHeaderBlockEncoder) {
+                httpHeaderBlockEncoder.setDecoderMaxHeaderTableSize(minHeaderTableSize);
+                httpHeaderBlockEncoder.setDecoderMaxHeaderTableSize(lastHeaderTableSize);
+            }
+            changeEncoderHeaderTableSize = false;
+            lastHeaderTableSize = Integer.MAX_VALUE;
+            minHeaderTableSize = Integer.MAX_VALUE;
+        }
+
+        peer.onPeerSettingsEnd(httpSettingsFrame);
         ByteBuf byteBuf = frameEncoder.encodeSettingsFrame(httpSettingsFrame);
         forwardFrameBuf(byteBuf);
         httpSettingsFrame = null;
@@ -225,7 +256,7 @@ class HttpFrameForward extends StreamForward implements HttpFrameDecoderDelegate
     @Override
     public void readPushPromiseFrame(int streamId, int promisedStreamId) {
         log.debug("readPushPromiseFrame server={}, streamId={}, promisedStreamId={}", server, streamId, promisedStreamId);
-        throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException("readPushPromiseFrame");
     }
 
     @Override

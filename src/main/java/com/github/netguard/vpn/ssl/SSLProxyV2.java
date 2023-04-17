@@ -2,6 +2,8 @@ package com.github.netguard.vpn.ssl;
 
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.ssl.h2.Http2Filter;
+import com.twitter.http2.HttpFrameForward;
 import eu.bitwalker.useragentutils.Browser;
 import eu.bitwalker.useragentutils.UserAgent;
 import eu.faircode.netguard.Allowed;
@@ -205,13 +207,14 @@ public class SSLProxyV2 implements Runnable {
             sslSocket.setSSLParameters(parameters);
         }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
-            boolean isHttp2 = "h2".equals(applicationProtocol);
-            doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName, isHttp2);
+            Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
+            boolean filterHttp2 = filter != null && "h2".equals(applicationProtocol) && filter.acceptHost(hostName);
+            doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName, filterHttp2);
         }
     }
 
     private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, IPacketCapture packetCapture,
-                                  String hostName, boolean isHttp2) throws InterruptedException {
+                                  String hostName, boolean filterHttp2) throws InterruptedException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
@@ -220,9 +223,11 @@ public class SSLProxyV2 implements Runnable {
         }
         CountDownLatch countDownLatch = new CountDownLatch(2);
         StreamForward inbound, outbound;
-        if (isHttp2) {
-            inbound = new HttpFrameForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName);
-            outbound = new HttpFrameForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName);
+        if (filterHttp2) {
+            HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName);
+            outbound = new HttpFrameForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName)
+                    .setPeer(inboundForward);
+            inbound = inboundForward;
         } else {
             inbound = new StreamForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName);
             outbound = new StreamForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName);

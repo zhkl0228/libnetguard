@@ -7,6 +7,7 @@ import com.github.netguard.handler.session.Session;
 import com.github.netguard.handler.session.SessionCreator;
 import com.github.netguard.handler.session.SessionFactory;
 import com.github.netguard.vpn.IPacketCapture;
+import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import org.apache.commons.io.IOUtils;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.ethernet.EthernetDecoder;
@@ -283,6 +284,11 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             IOUtils.closeQuietly(pcapFileOutputStream);
             pcapFileOutputStream = null;
         }
+    }
+
+    @Override
+    public Http2Filter getH2Filter() {
+        return null;
     }
 
 }
