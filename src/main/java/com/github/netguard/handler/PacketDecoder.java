@@ -287,6 +287,11 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
+    public boolean isSSLHostAllowed(String hostName) {
+        return true;
+    }
+
+    @Override
     public Http2Filter getH2Filter() {
         return null;
     }

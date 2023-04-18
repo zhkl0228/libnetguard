@@ -263,6 +263,12 @@ public class SSLProxyV2 implements Runnable {
                 }
             }
         } else {
+            if (packetCapture != null) {
+                if (!packetCapture.isSSLHostAllowed(record.hostName)) {
+                    throw new IOException(record.hostName + " is not allowed connect.");
+                }
+            }
+
             SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
             Socket app = null;
             SSLSocket secureSocket = null;

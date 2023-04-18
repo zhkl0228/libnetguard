@@ -3,6 +3,7 @@ package com.github.netguard.vpn;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 
 public interface IPacketCapture {
+
     void onPacket(byte[] packetData, String type);
     void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName, String applicationProtocol);
     void onSSLProxyTX(java.lang.String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
@@ -11,6 +12,7 @@ public interface IPacketCapture {
 
     void notifyFinish();
 
+    boolean isSSLHostAllowed(String hostName);
     Http2Filter getH2Filter();
 
 }
