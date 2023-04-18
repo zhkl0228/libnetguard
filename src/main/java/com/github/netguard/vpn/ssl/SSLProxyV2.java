@@ -209,18 +209,22 @@ public class SSLProxyV2 implements Runnable {
         }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
-            boolean filterHttp2 = filter != null && "h2".equals(applicationProtocol) && filter.acceptHost(hostName);
-            doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName, filterHttp2);
+            boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && filter.acceptHost(hostName);
+            doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName, filterHttp2, applicationProtocol);
         }
     }
 
+    private static boolean isHttp2(String applicationProtocol) {
+        return "h2".equals(applicationProtocol);
+    }
+
     private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, IPacketCapture packetCapture,
-                                  String hostName, boolean filterHttp2) throws InterruptedException {
+                                  String hostName, boolean filterHttp2, String applicationProtocol) throws InterruptedException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
         if (packetCapture != null) {
-            packetCapture.onSSLProxyEstablish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName);
+            packetCapture.onSSLProxyEstablish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName, applicationProtocol);
         }
         CountDownLatch countDownLatch = new CountDownLatch(2);
         StreamForward inbound, outbound;
@@ -255,7 +259,7 @@ public class SSLProxyV2 implements Runnable {
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     socketOut.write(record.readData);
                     socketOut.flush();
-                    doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false);
+                    doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false, null);
                 }
             }
         } else {
@@ -300,7 +304,7 @@ public class SSLProxyV2 implements Runnable {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                         socketOut.write(record.readData);
                         socketOut.flush();
-                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false);
+                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false, null);
                     }
                 }
             } catch (IOException e) {

@@ -2,6 +2,7 @@ package com.twitter.http2;
 
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.ssl.StreamForward;
+import com.github.netguard.vpn.ssl.h2.FrameForwardIOException;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.github.netguard.vpn.ssl.h2.Http2SessionKey;
@@ -72,7 +73,6 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private boolean canStop;
-    private IOException writeException;
 
     @Override
     protected boolean forward(byte[] buf) throws IOException {
@@ -106,12 +106,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     length -= read;
                 }
                 frameDecoder.decode(byteBuf);
-                if (writeException != null) {
-                    throw writeException;
-                }
             }
             return true;
         } catch (SocketTimeoutException ignored) {
+        } catch (FrameForwardIOException e) {
+            throw e.getTarget();
         } finally {
             this.peer = null;
         }
@@ -313,7 +312,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         httpSettingsFrame = null;
     }
 
-    private void forwardFrameBuf(ByteBuf byteBuf) {
+    private void forwardFrameBuf(ByteBuf byteBuf) throws FrameForwardIOException {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             byteBuf.readBytes(baos, byteBuf.readableBytes());
@@ -329,7 +328,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 }
             }
         } catch (IOException e) {
-            writeException = e;
+            throw new FrameForwardIOException(e);
         }
     }
 

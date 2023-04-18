@@ -63,9 +63,6 @@ public class StreamForward implements Runnable {
         int read;
         try {
             while ((read = inputStream.read(buf)) != -1) {
-                outputStream.write(buf, 0, read);
-                outputStream.flush();
-
                 if (packetCapture != null) {
                     if (server) {
                         packetCapture.onSSLProxyTX(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
@@ -73,6 +70,8 @@ public class StreamForward implements Runnable {
                         packetCapture.onSSLProxyRX(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
                     }
                 }
+                outputStream.write(buf, 0, read);
+                outputStream.flush();
             }
             return true;
         } catch (SocketTimeoutException ignored) {

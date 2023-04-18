@@ -8,14 +8,22 @@ import org.krakenapps.pcap.decoder.tcp.TcpState;
 
 public class SSLProxySession extends TcpSessionImpl implements TcpSession {
 
-    public SSLProxySession(TcpSessionKey key) {
+    private final String applicationProtocol;
+
+    public SSLProxySession(TcpSessionKey key, String applicationProtocol) {
         super(null);
+        this.applicationProtocol = applicationProtocol;
 
         this.setKey(key);
     }
 
     @Override
     public Protocol getProtocol() {
+        if ("h2".equals(applicationProtocol)) {
+            return Protocol.HTTP2;
+        } else if ("http/1.1".equals(applicationProtocol)) {
+            return Protocol.HTTP;
+        }
         return Protocol.SSL;
     }
 
