@@ -52,11 +52,11 @@ public class SSLProxyV2 implements Runnable {
 
     public static Allowed create(final InspectorVpn vpn, RootCert rootCert, final Packet packet, final int timeout) {
         try {
-            log.debug("create mitm packet={}", packet);
+            log.debug("create tcp proxy packet={}", packet);
             IPacketCapture packetCapture = vpn.getPacketCapture();
             SSLProxyV2 proxy = new SSLProxyV2(rootCert, packetCapture, packet, timeout);
             Allowed allowed = proxy.redirect();
-            log.debug("create mitm packet={}, allowed={}", packet, allowed);
+            log.debug("create tcp proxy packet={}, allowed={}", packet, allowed);
             return allowed;
         } catch (IOException e) {
             log.warn("create SSLProxy failed", e);
@@ -254,6 +254,11 @@ public class SSLProxyV2 implements Runnable {
         final ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
         log.debug("proxy remote={}, record={}, local={}", remote, record, local);
         if (record.hostName == null) {
+            if (packetCapture != null) {
+                if (!packetCapture.isTcpHostAllowed(packet.daddr, packet.dport)) {
+                    throw new IOException(packet.daddr + ":" + packet.dport + " is not allowed connect.");
+                }
+            }
             try (Socket socket = new Socket()) {
                 socket.connect(remote, timeout);
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
@@ -264,11 +269,10 @@ public class SSLProxyV2 implements Runnable {
             }
         } else {
             if (packetCapture != null) {
-                if (!packetCapture.isSSLHostAllowed(record.hostName)) {
+                if (!packetCapture.isSSLHostAllowed(record.hostName, packet.daddr, packet.dport)) {
                     throw new IOException(record.hostName + " is not allowed connect.");
                 }
             }
-
             SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
             Socket app = null;
             SSLSocket secureSocket = null;

@@ -203,50 +203,21 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     private Allowed isAddressAllowed(Packet packet) {
         packet.allowed = false;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
-            // Allow unknown system traffic
-            packet.allowed = true;
-            log.debug("Allowing unknown system {}", packet);
-        }
-
-        Allowed allowed = null;
-        long start = log.isDebugEnabled() ? System.currentTimeMillis() : 0;
-        try {
-            if(packet.allowed) {
-                allowed = new Allowed();
-
-                if (packet.protocol == TCP_PROTOCOL && packet.version == 4 // ipv4
-                        && sslPorts != null
-                        && packet.isSSL(sslPorts)) {
-                    allowed = mitm(packet);
-                } else if (packet.isInstallRootCert()) {
-                    allowed = mitm(packet);
-                } else if (portRedirector != null) {
-                    Allowed redirect = portRedirector.redirect(packet.daddr, packet.dport);
-                    if (redirect != null) {
-                        allowed = redirect;
-                    }
+            if (packet.protocol == TCP_PROTOCOL && packet.version == 4) { // ipv4
+                Allowed redirect = redirect(packet);
+                if (redirect != null) {
+                    return redirect;
                 }
             }
-        } catch (Exception e) {
-            log.warn("mitm failed: {}", packet, e);
+            packet.allowed = true;
         }
 
-        if (allowed != null) {
-            if (packet.protocol != TCP_PROTOCOL || !"".equals(packet.flags)) {
-                logPacket(packet);
-            }
-        }
-
-        if (log.isDebugEnabled()) {
-            log.debug("isAddressAllowed allowed={}, packet: {}, offset={}ms", allowed, packet, (System.currentTimeMillis() - start));
-        }
-
-        return allowed;
+        return packet.allowed ? new Allowed() : null;
     }
 
-    private Allowed mitm(Packet packet) {
-        int mitmTimeout = 10000; // default 10 seconds;
-        return SSLProxyV2.create(this, rootCert, packet, mitmTimeout);
+    private Allowed redirect(Packet packet) {
+        int timeout = 10000; // default 10 seconds;
+        return SSLProxyV2.create(this, rootCert, packet, timeout);
     }
 
     // Called from native code
