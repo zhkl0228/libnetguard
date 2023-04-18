@@ -11,6 +11,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpMethod;
@@ -376,7 +377,6 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private static HttpRequest createHttpRequest(HttpHeaders headers) {
-        // Create the first line of the request from the name/value pairs
         HttpMethod method = HttpMethod.valueOf(headers.get(":method"));
         String url = headers.get(":path");
 
@@ -392,7 +392,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         // Replace the SPDY host header with the HTTP host header
         String host = headers.get(":authority");
         headers.remove(":authority");
-        headers.set("host", host);
+        headers.set(HttpHeaderNames.HOST, host);
 
         addHeaders(headers, request);
 
@@ -401,11 +401,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private static HttpResponse createHttpResponse(HttpHeaders headers) {
         // Create the first line of the request from the name/value pairs
-        HttpResponseStatus status = HttpResponseStatus.valueOf(Integer.parseInt(
-                headers.get(":status")));
-
+        HttpResponseStatus status = HttpResponseStatus.valueOf(Integer.parseInt(headers.get(":status")));
         headers.remove(":status");
-
         return new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
     }
 
