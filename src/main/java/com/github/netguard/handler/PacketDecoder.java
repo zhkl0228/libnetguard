@@ -287,12 +287,12 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public boolean isTcpHostAllowed(String serverIp, int port) {
+    public boolean acceptTcp(String serverIp, int port) {
         return true;
     }
 
     @Override
-    public boolean isSSLHostAllowed(String hostName, String serverIp, int port) {
+    public boolean acceptSSL(String hostName, String serverIp, int port) {
         return true;
     }
 

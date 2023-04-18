@@ -12,8 +12,8 @@ public interface IPacketCapture {
 
     void notifyFinish();
 
-    boolean isTcpHostAllowed(String serverIp, int port);
-    boolean isSSLHostAllowed(String hostName, String serverIp, int port);
+    boolean acceptTcp(String serverIp, int port);
+    boolean acceptSSL(String hostName, String serverIp, int port);
     Http2Filter getH2Filter();
 
 }

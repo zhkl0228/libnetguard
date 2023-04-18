@@ -255,7 +255,7 @@ public class SSLProxyV2 implements Runnable {
         log.debug("proxy remote={}, record={}, local={}", remote, record, local);
         if (record.hostName == null) {
             if (packetCapture != null) {
-                if (!packetCapture.isTcpHostAllowed(packet.daddr, packet.dport)) {
+                if (!packetCapture.acceptTcp(packet.daddr, packet.dport)) {
                     throw new IOException(packet.daddr + ":" + packet.dport + " is not allowed connect.");
                 }
             }
@@ -269,7 +269,7 @@ public class SSLProxyV2 implements Runnable {
             }
         } else {
             if (packetCapture != null) {
-                if (!packetCapture.isSSLHostAllowed(record.hostName, packet.daddr, packet.dport)) {
+                if (!packetCapture.acceptSSL(record.hostName, packet.daddr, packet.dport)) {
                     throw new IOException(record.hostName + " is not allowed connect.");
                 }
             }
