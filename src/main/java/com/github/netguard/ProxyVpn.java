@@ -2,8 +2,10 @@ package com.github.netguard;
 
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
-import com.github.netguard.vpn.PortRedirector;
 import com.github.netguard.vpn.ssl.RootCert;
+import com.github.netguard.vpn.ssl.SSLProxyV2;
+import eu.faircode.netguard.Allowed;
+import eu.faircode.netguard.Packet;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import java.security.Security;
@@ -17,7 +19,7 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
 
     protected final List<ProxyVpn> clients;
 
-    protected final RootCert rootCert;
+    private final RootCert rootCert;
 
     protected ProxyVpn(List<ProxyVpn> clients) {
         this.clients = clients;
@@ -38,17 +40,9 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
         return packetCapture;
     }
 
-    protected int[] sslPorts;
-
-    @Override
-    public final void enableMitm(int... sslPorts) {
-        this.sslPorts = sslPorts;
+    protected final Allowed redirect(Packet packet) {
+        int timeout = 10000; // default 10 seconds;
+        return SSLProxyV2.create(this, rootCert, packet, timeout);
     }
 
-    protected PortRedirector portRedirector;
-
-    @Override
-    public void setPortRedirector(PortRedirector portRedirector) {
-        this.portRedirector = portRedirector;
-    }
 }

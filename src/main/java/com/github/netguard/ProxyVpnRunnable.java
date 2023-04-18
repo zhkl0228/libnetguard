@@ -1,13 +1,12 @@
 package com.github.netguard;
 
-import com.github.netguard.vpn.ssl.SSLProxyV2;
+import com.github.netguard.vpn.PortRedirector;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
-import tech.httptoolkit.android.vpn.Mitm;
 import tech.httptoolkit.android.vpn.SessionHandler;
 import tech.httptoolkit.android.vpn.SessionManager;
 import tech.httptoolkit.android.vpn.socket.SocketNIODataService;
@@ -24,7 +23,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-class ProxyVpnRunnable extends ProxyVpn implements Mitm {
+class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
 
     private static final Logger log = LoggerFactory.getLogger(ProxyVpnRunnable.class);
 
@@ -141,37 +140,14 @@ class ProxyVpnRunnable extends ProxyVpn implements Mitm {
 
     @Override
     public Allowed redirect(String ip, int port) {
-        return portRedirector == null ? null : portRedirector.redirect(ip, port);
-    }
-
-    @Override
-    public Allowed mitm(String ip, int port) {
-        boolean mitm = false;
-        if (sslPorts != null) {
-            if (sslPorts.length == 0 && port == 443) {
-                mitm = true;
-            } else {
-                for (int p : sslPorts) {
-                    if (p == port) {
-                        mitm = true;
-                        break;
-                    }
-                }
-            }
-        }
         Packet packet = new Packet();
         packet.daddr = ip;
         packet.dport = port;
-        if (mitm || packet.isInstallRootCert()) {
-            int mitmTimeout = 10000; // default 10 seconds;
-            Allowed allowed = SSLProxyV2.create(this, rootCert, packet, mitmTimeout);
-            if (allowed == null) {
-                return new Allowed("127.0.0.1", 222);
-            } else if (allowed.raddr != null && allowed.rport > 0) {
-                return allowed;
-            } else {
-                return null;
-            }
+        Allowed allowed = redirect(packet);
+        if (allowed == null) {
+            return new Allowed("127.0.0.1", 222); // blocked
+        } else if (allowed.raddr != null && allowed.rport > 0) {
+            return allowed;
         } else {
             return null;
         }

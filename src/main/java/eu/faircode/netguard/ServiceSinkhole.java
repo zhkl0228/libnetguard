@@ -215,11 +215,6 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         return packet.allowed ? new Allowed() : null;
     }
 
-    private Allowed redirect(Packet packet) {
-        int timeout = 10000; // default 10 seconds;
-        return SSLProxyV2.create(this, rootCert, packet, timeout);
-    }
-
     // Called from native code
     @SuppressWarnings("unused")
     private void accountUsage(Usage usage) {

@@ -54,7 +54,6 @@ public class Main {
                 }
             };
             vpn.setPacketCapture(packetCapture);
-            vpn.enableMitm();
         }
         @Override
         public boolean acceptHost(String hostName) {

@@ -16,6 +16,7 @@
 
 package tech.httptoolkit.android.vpn;
 
+import com.github.netguard.vpn.PortRedirector;
 import eu.faircode.netguard.Allowed;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
@@ -45,10 +46,10 @@ public class SessionManager implements ICloseSession {
 
 	private final Map<String, Session> table = new ConcurrentHashMap<>();
 
-	private final Mitm mitm;
+	private final PortRedirector portRedirector;
 
-	public SessionManager(Mitm mitm) {
-		this.mitm = mitm;
+	public SessionManager(PortRedirector portRedirector) {
+		this.portRedirector = portRedirector;
 	}
 
 	/**
@@ -176,10 +177,7 @@ public class SessionManager implements ICloseSession {
 		// Initiate connection straight away, to reduce latency
 		// We use the real address, unless tcpPortRedirection redirects us to a different
 		// target address for traffic on this port.
-		Allowed redirect = mitm.mitm(ips, port);
-		if(redirect == null) {
-			redirect = mitm.redirect(ips, port);
-		}
+		Allowed redirect = portRedirector.redirect(ips, port);
 		final InetSocketAddress socketAddress;
 		if (redirect == null) {
 			socketAddress = new InetSocketAddress(ips, port);
