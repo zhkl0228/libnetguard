@@ -269,7 +269,7 @@ public class SSLProxyV2 implements Runnable {
             }
         } else {
             if (packetCapture != null) {
-                if (!packetCapture.acceptSSL(record.hostName, packet.daddr, packet.dport)) {
+                if (!packetCapture.acceptSSL(record.hostName, packet.daddr, packet.dport, record.applicationLayerProtocols)) {
                     throw new IOException(record.hostName + " is not allowed connect.");
                 }
             }

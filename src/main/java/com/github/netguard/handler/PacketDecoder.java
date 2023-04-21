@@ -40,6 +40,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Arrays;
+import java.util.List;
 
 public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
@@ -292,7 +293,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public boolean acceptSSL(String hostName, String serverIp, int port) {
+    public boolean acceptSSL(String hostName, String serverIp, int port, List<String> applicationLayerProtocols) {
         return true;
     }
 

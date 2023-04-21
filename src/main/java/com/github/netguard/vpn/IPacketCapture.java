@@ -2,6 +2,8 @@ package com.github.netguard.vpn;
 
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 
+import java.util.List;
+
 public interface IPacketCapture {
 
     void onPacket(byte[] packetData, String type);
@@ -13,7 +15,7 @@ public interface IPacketCapture {
     void notifyFinish();
 
     boolean acceptTcp(String serverIp, int port);
-    boolean acceptSSL(String hostName, String serverIp, int port);
+    boolean acceptSSL(String hostName, String serverIp, int port, List<String> applicationLayerProtocols);
     Http2Filter getH2Filter();
 
 }
