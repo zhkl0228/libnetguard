@@ -179,23 +179,19 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         try {
             synchronized (httpHeaderBlockEncoder) {
                 ByteBuf headerBlock = httpHeaderBlockEncoder.encode(headersFrame);
+                ByteBuf frame = frameEncoder.encodeHeadersFrame(
+                        headersFrame.getStreamId(),
+                        !byteBuf.isReadable(),
+                        headersFrame.isExclusive(),
+                        headersFrame.getDependency(),
+                        headersFrame.getWeight(),
+                        headerBlock
+                );
                 try {
-                    ByteBuf frame = frameEncoder.encodeHeadersFrame(
-                            headersFrame.getStreamId(),
-                            !byteBuf.isReadable(),
-                            headersFrame.isExclusive(),
-                            headersFrame.getDependency(),
-                            headersFrame.getWeight(),
-                            headerBlock
-                    );
-                    try {
-                        // Writes of compressed data must occur in order
-                        forwardFrameBuf(frame);
-                    } finally {
-                        frame.release();
-                    }
+                    // Writes of compressed data must occur in order
+                    forwardFrameBuf(frame);
                 } finally {
-                    headerBlock.release();
+                    frame.release();
                 }
             }
 
