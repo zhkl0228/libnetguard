@@ -113,6 +113,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         } catch (FrameForwardIOException e) {
             throw e.getTarget();
         } finally {
+            byteBuf.release();
             this.peer = null;
         }
         return false;
@@ -177,16 +178,25 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data == null ? new byte[0] : data);
         try {
             synchronized (httpHeaderBlockEncoder) {
-                ByteBuf frame = frameEncoder.encodeHeadersFrame(
-                        headersFrame.getStreamId(),
-                        !byteBuf.isReadable(),
-                        headersFrame.isExclusive(),
-                        headersFrame.getDependency(),
-                        headersFrame.getWeight(),
-                        httpHeaderBlockEncoder.encode(headersFrame)
-                );
-                // Writes of compressed data must occur in order
-                forwardFrameBuf(frame);
+                ByteBuf headerBlock = httpHeaderBlockEncoder.encode(headersFrame);
+                try {
+                    ByteBuf frame = frameEncoder.encodeHeadersFrame(
+                            headersFrame.getStreamId(),
+                            !byteBuf.isReadable(),
+                            headersFrame.isExclusive(),
+                            headersFrame.getDependency(),
+                            headersFrame.getWeight(),
+                            headerBlock
+                    );
+                    try {
+                        // Writes of compressed data must occur in order
+                        forwardFrameBuf(frame);
+                    } finally {
+                        frame.release();
+                    }
+                } finally {
+                    headerBlock.release();
+                }
             }
 
             while (byteBuf.isReadable()) {
@@ -197,6 +207,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             }
         } catch (IOException e) {
             log.warn("writeMessage server={}", server, e);
+        } finally {
+            byteBuf.release();
         }
     }
 
