@@ -1,16 +1,14 @@
 package com.github.netguard.vpn.ssl;
 
+import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.twitter.http2.HttpFrameForward;
-import eu.bitwalker.useragentutils.Browser;
-import eu.bitwalker.useragentutils.UserAgent;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -137,7 +135,8 @@ public class SSLProxyV2 implements Runnable {
         } catch (Exception e) {
             log.warn("proxy failed: hostName={}, serverSocket={}, packet={}", hostName, serverSocket, packet, e);
         } finally {
-            IOUtils.closeQuietly(secureSocket, serverSocket);
+            IoUtil.close(secureSocket);
+            IoUtil.close(serverSocket);
         }
     }
 
@@ -168,21 +167,12 @@ public class SSLProxyV2 implements Runnable {
 
         {
             String fileName = "NetGuard.pem";
-            UserAgent userAgent = userAgentString == null ? null : UserAgent.parseUserAgentString(userAgentString);
-            Browser browser = userAgent == null ? null : userAgent.getBrowser();
             String str = null;
-            if (browser != null) {
-                switch (browser.getGroup()) {
-                    case OPERA:
-                    case MOZILLA:
-                    case CHROME:
-                    case FIREFOX:
-                    case EDGE:
-                        str = "filename*=UTF-8''" + URLEncoder.encode(fileName, "UTF-8");
-                        break;
-                    case SAFARI:
-                        str = "filename=\"" + new String(fileName.getBytes(StandardCharsets.UTF_8), "ISO8859-1") + "\"";
-                        break;
+            if (userAgentString != null) {
+                if (userAgentString.toUpperCase().contains("SAFARI")) {
+                    str = "filename=\"" + new String(fileName.getBytes(StandardCharsets.UTF_8), "ISO8859-1") + "\"";
+                } else {
+                    str = "filename*=UTF-8''" + URLEncoder.encode(fileName, "UTF-8");
                 }
             }
             if (str == null) {
@@ -318,7 +308,8 @@ public class SSLProxyV2 implements Runnable {
                     }
                 }
             } catch (IOException e) {
-                IOUtils.closeQuietly(app, secureSocket);
+                IoUtil.close(app);
+                IoUtil.close(secureSocket);
                 throw e;
             }
         }

@@ -1,6 +1,6 @@
 package tech.httptoolkit.android.vpn.socket;
 
-import org.apache.commons.io.IOUtils;
+import cn.hutool.core.io.IoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
@@ -49,7 +49,7 @@ public class SocketChannelWriter {
 			log.debug("removing aborted connection -> {}", session);
 			session.cancelKey();
 
-			IOUtils.closeQuietly(channel);
+			IoUtil.close(channel);
 			session.closeSession();
 		}
 	}

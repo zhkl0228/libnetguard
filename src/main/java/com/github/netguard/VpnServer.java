@@ -1,8 +1,8 @@
 package com.github.netguard;
 
+import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.VpnListener;
 import eu.faircode.netguard.ServiceSinkhole;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -113,7 +113,7 @@ public class VpnServer {
             throw new IllegalStateException("Already shutdown.");
         }
         shutdown = true;
-        IOUtils.closeQuietly(serverSocket);
+        IoUtil.close(serverSocket);
         for (ProxyVpn vpn : clients.toArray(new ProxyVpn[0])) {
             vpn.stop();
         }

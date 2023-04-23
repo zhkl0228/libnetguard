@@ -1,5 +1,6 @@
 package com.github.netguard.handler;
 
+import cn.hutool.core.io.IoUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.handler.session.SSLProxySession;
 import com.github.netguard.handler.session.SSLSessionKey;
@@ -8,7 +9,6 @@ import com.github.netguard.handler.session.SessionCreator;
 import com.github.netguard.handler.session.SessionFactory;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
-import org.apache.commons.io.IOUtils;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.ethernet.EthernetDecoder;
 import org.krakenapps.pcap.decoder.ethernet.EthernetFrame;
@@ -221,9 +221,9 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     protected void onRequest(HttpSession session, com.github.netguard.handler.http.HttpRequest request) {
-        if (log.isTraceEnabled()) {
+        if (log.isDebugEnabled()) {
             byte[] data = request.getPostData();
-            log.trace("onRequest {} bytes session={}, request={}\n{}", data == null ? 0 : data.length, session, request, request.getHeaderString());
+            log.debug("onRequest {} bytes session={}, request={}\n{}", data == null ? 0 : data.length, session, request, request.getHeaderString());
         }
     }
 
@@ -233,9 +233,9 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
-        if (log.isTraceEnabled()) {
+        if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
-            log.trace("onResponse {} bytes session={}, request={}, response={}\n{}", data == null ? 0 : data.length, session, request, response, response.getHeaderString());
+            log.debug("onResponse {} bytes session={}, request={}, response={}\n{}", data == null ? 0 : data.length, session, request, response, response.getHeaderString());
         }
     }
 
@@ -274,7 +274,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     @SuppressWarnings("unused")
     public void setOutputPcapFile(File pcapFile) throws IOException {
         if (pcapFileOutputStream != null) {
-            IOUtils.closeQuietly(pcapFileOutputStream);
+            IoUtil.close(pcapFileOutputStream);
         }
         pcapFileOutputStream = new PcapFileOutputStream(pcapFile);
     }
@@ -282,7 +282,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     @Override
     public void notifyFinish() {
         if (pcapFileOutputStream != null) {
-            IOUtils.closeQuietly(pcapFileOutputStream);
+            IoUtil.close(pcapFileOutputStream);
             pcapFileOutputStream = null;
         }
     }

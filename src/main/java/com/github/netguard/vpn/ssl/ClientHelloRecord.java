@@ -4,7 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.util.Collections;
 import java.util.List;
 
-class ClientHelloRecord {
+public class ClientHelloRecord {
     public final byte[] readData;
     public final String hostName;
     public final List<String> applicationLayerProtocols;

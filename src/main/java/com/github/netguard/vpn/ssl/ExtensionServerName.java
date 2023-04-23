@@ -1,7 +1,7 @@
 package com.github.netguard.vpn.ssl;
 
+import cn.hutool.core.util.HexUtil;
 import com.github.netguard.Inspector;
-import org.apache.commons.codec.binary.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-class ExtensionServerName {
+public class ExtensionServerName {
 
     private static final Logger log = LoggerFactory.getLogger(ExtensionServerName.class);
 
@@ -32,7 +32,7 @@ class ExtensionServerName {
         return tlsVer;
     }
 
-    static ClientHelloRecord parseServerNames(DataInput dataInput, InetSocketAddress server) throws IOException {
+    public static ClientHelloRecord parseServerNames(DataInput dataInput, InetSocketAddress server) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutput dataOutput = new DataOutputStream(baos);
         byte contentType = dataInput.readByte();
@@ -111,7 +111,7 @@ class ExtensionServerName {
                     String name = new String(nameData, StandardCharsets.UTF_8);
                     serverNames.add(name);
                 } else {
-                    log.warn("Unsupported name type: {}, data={}, server={}", nameType, Hex.encodeHexString(data), server);
+                    log.warn("Unsupported name type: {}, data={}, server={}", nameType, HexUtil.encodeHexStr(data), server);
                 }
             } else if (type == 0x10) { // ALPN
                 ByteBuffer nb = ByteBuffer.wrap(data);

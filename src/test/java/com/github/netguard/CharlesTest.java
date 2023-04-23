@@ -1,8 +1,8 @@
 package com.github.netguard;
 
+import cn.hutool.core.codec.Base64;
+import cn.hutool.core.io.IoUtil;
 import junit.framework.TestCase;
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.io.IOUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 
@@ -42,7 +42,7 @@ public class CharlesTest extends TestCase {
         System.out.println(rootCert);
 
         {
-            String str = Base64.encodeBase64String(rootCert.getEncoded());
+            String str = Base64.encode(rootCert.getEncoded());
             StringBuilder builder = new StringBuilder();
             builder.append("-----BEGIN CERTIFICATE-----\n");
             char[] cs = str.toCharArray();
@@ -78,7 +78,7 @@ public class CharlesTest extends TestCase {
                 pw.flush();
             }
         } finally {
-            IOUtils.closeQuietly(pw);
+            IoUtil.close(pw);
         }
     }
 

@@ -4,8 +4,8 @@
  */
 package com.github.netguard;
 
-import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.codec.digest.DigestUtils;
+import cn.hutool.core.util.HexUtil;
+import cn.hutool.crypto.digest.DigestUtil;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -217,9 +217,9 @@ public class Inspector {
 
 		buffer.append(label);
 		if(data != null) {
-			buffer.append(", md5=").append(Hex.encodeHex(DigestUtils.md5(data)));
+			buffer.append(", md5=").append(DigestUtil.md5Hex(data));
 			if (data.length < 1024) {
-				buffer.append(", hex=").append(Hex.encodeHex(data));
+				buffer.append(", hex=").append(HexUtil.encodeHexStr(data));
 			}
 		}
 		
