@@ -54,7 +54,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName,
                             Http2Session session) {
-        super(inputStream, outputStream, server, clientIp, serverIp, clientPort, serverPort, countDownLatch, socket, packetCapture, hostName);
+        super(inputStream, outputStream, server, clientIp, serverIp, clientPort, serverPort, countDownLatch, socket, packetCapture, hostName, true);
         this.frameDecoder = new HttpFrameDecoder(server, this);
         this.frameEncoder = new HttpFrameEncoder();
 
@@ -77,9 +77,10 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     @Override
     protected boolean forward(byte[] buf) throws IOException {
+        DataInputStream dataInput;
         ByteBuf byteBuf = Unpooled.buffer();
-        DataInputStream dataInput = new DataInputStream(inputStream);
         try {
+            dataInput = new DataInputStream(inputStream);
             if (server) {
                 byte[] preface = new byte[24];
                 dataInput.readFully(preface);
@@ -89,7 +90,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 outputStream.flush();
 
                 if (packetCapture != null) {
-                    packetCapture.onSSLProxyTX(clientIp, serverIp, clientPort, serverPort, preface);
+                    packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, preface);
                 }
             }
             while (!canStop) {
@@ -130,8 +131,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         log.debug("readDataFrame server={}, streamId={}, endStream={}, endSegment={}, data={}", server, streamId, endStream, endSegment, data);
 
         Stream stream = streamMap.get(streamId);
-        if (stream != null) {
-            try {
+        try {
+            if (stream != null) {
                 data.readBytes(stream.baos, data.readableBytes());
                 if (endStream) {
                     streamMap.remove(streamId);
@@ -141,9 +142,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                         handleResponse(stream.httpHeadersFrame, stream.baos.toByteArray());
                     }
                 }
-            } catch (IOException e) {
-                throw new IllegalStateException("readDataFrame", e);
             }
+        } catch (IOException e) {
+            throw new IllegalStateException("readDataFrame", e);
+        } finally {
+            data.release();
         }
     }
 
@@ -167,12 +170,14 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             httpHeaderBlockDecoder.decode(headerBlockFragment, httpHeadersFrame);
         } catch (IOException e) {
             throw new IllegalStateException("readHeaderBlock frame=" + httpHeadersFrame, e);
+        } finally {
+            headerBlockFragment.release();
         }
     }
 
     private final Map<Integer, Stream> streamMap = new HashMap<>();
 
-    private static final int DEFAULT_CHUNK_SIZE = 1024;
+    private static final int DEFAULT_CHUNK_SIZE = 0x1000;
 
     private void writeMessage(HttpHeadersFrame headersFrame, byte[] data) {
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data == null ? new byte[0] : data);
@@ -198,7 +203,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             while (byteBuf.isReadable()) {
                 ByteBuf partialDataFrame = byteBuf.readSlice(Math.min(byteBuf.readableBytes(), DEFAULT_CHUNK_SIZE));
                 log.debug("writeMessage server={}, partialDataFrame={}, byteBuf={}", server, partialDataFrame, byteBuf);
-                ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), !byteBuf.isReadable(), partialDataFrame);
+                boolean endStream = !byteBuf.isReadable();
+                ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStream, partialDataFrame);
                 forwardFrameBuf(frame);
             }
         } catch (IOException e) {
@@ -247,15 +253,23 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     @Override
     public void readPriorityFrame(int streamId, boolean exclusive, int dependency, int weight) {
         log.debug("readPriorityFrame server={}, streamId={}, exclusive={}, dependency={}, weight={}", server, streamId, exclusive, dependency, weight);
-        ByteBuf byteBuf = frameEncoder.encodePriorityFrame(streamId, exclusive, dependency, weight);
-        forwardFrameBuf(byteBuf);
+        ByteBuf frame = frameEncoder.encodePriorityFrame(streamId, exclusive, dependency, weight);
+        try {
+            forwardFrameBuf(frame);
+        } finally {
+            frame.release();
+        }
     }
 
     @Override
     public void readRstStreamFrame(int streamId, int errorCode) {
         log.debug("readRstStreamFrame server={}, streamId={}, errorCode={}", server, streamId, errorCode);
-        ByteBuf byteBuf = frameEncoder.encodeRstStreamFrame(streamId, errorCode);
-        forwardFrameBuf(byteBuf);
+        ByteBuf frame = frameEncoder.encodeRstStreamFrame(streamId, errorCode);
+        try {
+            forwardFrameBuf(frame);
+        } finally {
+            frame.release();
+        }
         streamMap.remove(streamId);
     }
 
@@ -316,13 +330,18 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
 
         peer.onPeerSettingsEnd(httpSettingsFrame);
-        ByteBuf byteBuf = frameEncoder.encodeSettingsFrame(httpSettingsFrame);
-        forwardFrameBuf(byteBuf);
+        ByteBuf frame = frameEncoder.encodeSettingsFrame(httpSettingsFrame);
+        try {
+            forwardFrameBuf(frame);
+        } finally {
+            frame.release();
+        }
         httpSettingsFrame = null;
     }
 
     private void forwardFrameBuf(ByteBuf byteBuf) throws FrameForwardIOException {
         try {
+            log.debug("forwardFrameBuf server={}, byteBuf={}", server, byteBuf);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             byteBuf.readBytes(baos, byteBuf.readableBytes());
             byte[] data = baos.toByteArray();
@@ -331,9 +350,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
             if (packetCapture != null) {
                 if (server) {
-                    packetCapture.onSSLProxyTX(clientIp, serverIp, clientPort, serverPort, data);
+                    packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, data);
                 } else {
-                    packetCapture.onSSLProxyRX(clientIp, serverIp, clientPort, serverPort, data);
+                    packetCapture.onSSLProxyRx(clientIp, serverIp, clientPort, serverPort, data);
                 }
             }
         } catch (IOException e) {
@@ -350,22 +369,34 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     @Override
     public void readPingFrame(long data, boolean ack) {
         log.debug("readPingFrame server={}, data={}, ack={}", server, data, ack);
-        ByteBuf byteBuf = frameEncoder.encodePingFrame(data, ack);
-        forwardFrameBuf(byteBuf);
+        ByteBuf frame = frameEncoder.encodePingFrame(data, ack);
+        try {
+            forwardFrameBuf(frame);
+        } finally {
+            frame.release();
+        }
     }
 
     @Override
     public void readGoAwayFrame(int lastStreamId, int errorCode) {
         log.debug("readGoAwayFrame server={}, lastStreamId={}, errorCode={}", server, lastStreamId, errorCode);
-        ByteBuf byteBuf = frameEncoder.encodeGoAwayFrame(lastStreamId, errorCode);
-        forwardFrameBuf(byteBuf);
+        ByteBuf frame = frameEncoder.encodeGoAwayFrame(lastStreamId, errorCode);
+        try {
+            forwardFrameBuf(frame);
+        } finally {
+            frame.release();
+        }
     }
 
     @Override
     public void readWindowUpdateFrame(int streamId, int windowSizeIncrement) {
         log.debug("readWindowUpdateFrame server={}, streamId={}, windowSizeIncrement={}", server, streamId, windowSizeIncrement);
-        ByteBuf byteBuf = frameEncoder.encodeWindowUpdateFrame(streamId, windowSizeIncrement);
-        forwardFrameBuf(byteBuf);
+        ByteBuf frame = frameEncoder.encodeWindowUpdateFrame(streamId, windowSizeIncrement);
+        try {
+            forwardFrameBuf(frame);
+        } finally {
+            frame.release();
+        }
     }
 
     @Override

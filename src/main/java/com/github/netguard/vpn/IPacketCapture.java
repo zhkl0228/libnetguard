@@ -8,14 +8,22 @@ public interface IPacketCapture {
 
     void onPacket(byte[] packetData, String type);
     void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName, String applicationProtocol);
-    void onSSLProxyTX(java.lang.String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
-    void onSSLProxyRX(java.lang.String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
+    void onSSLProxyTx(String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
+    void onSSLProxyRx(String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
     void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName);
+
+    void onSocketEstablish(String clientIp, String serverIp, int clientPort, int serverPort);
+    void onSocketTx(String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
+    void onSocketRx(String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
+    void onSocketFinish(String clientIp, String serverIp, int clientPort, int serverPort);
 
     void notifyFinish();
 
-    boolean acceptTcp(String serverIp, int port);
-    boolean acceptSSL(String hostName, String serverIp, int port, List<String> applicationLayerProtocols);
+    /**
+     * 默认返回 <code>null</code> 表示允许连接
+     * @param hostName 如果是 SSL 不为 <code>null</code>
+     */
+    AllowRule acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols);
     Http2Filter getH2Filter();
 
 }

@@ -7,6 +7,7 @@ import com.github.netguard.handler.session.SSLSessionKey;
 import com.github.netguard.handler.session.Session;
 import com.github.netguard.handler.session.SessionCreator;
 import com.github.netguard.handler.session.SessionFactory;
+import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import org.krakenapps.pcap.Protocol;
@@ -103,6 +104,42 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         tcpPortProtocolMapper.register(Protocol.HTTP, httpDecoder);
     }
 
+    @Override
+    public void onSocketEstablish(String clientIp, String serverIp, int clientPort, int serverPort) {
+        log.debug("onSocketEstablish {}:{} => {}:{}", clientIp, clientPort, serverIp, serverPort);
+    }
+
+    @Override
+    public void onSocketTx(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+        if (log.isTraceEnabled()) {
+            byte[] tmp;
+            if (data.length > 256) {
+                tmp = Arrays.copyOf(data, 256);
+            } else {
+                tmp = data;
+            }
+            log.trace(Inspector.inspectString(tmp, String.format("onSocketTx %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+        }
+    }
+
+    @Override
+    public void onSocketRx(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+        if (log.isTraceEnabled()) {
+            byte[] tmp;
+            if (data.length > 256) {
+                tmp = Arrays.copyOf(data, 256);
+            } else {
+                tmp = data;
+            }
+            log.trace(Inspector.inspectString(tmp, String.format("onSocketRx %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+        }
+    }
+
+    @Override
+    public void onSocketFinish(String clientIp, String serverIp, int clientPort, int serverPort) {
+        log.debug("onSocketFinish {}:{} => {}:{}", clientIp, clientPort, serverIp, serverPort);
+    }
+
     private ProtocolDetector protocolDetector;
 
     @SuppressWarnings("unused")
@@ -167,7 +204,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyTX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+    public final void onSSLProxyTx(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
         if (log.isTraceEnabled()) {
             byte[] tmp;
             if (data.length > 256) {
@@ -186,7 +223,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyRX(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+    public final void onSSLProxyRx(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
         if (log.isTraceEnabled()) {
             byte[] tmp;
             if (data.length > 256) {
@@ -288,18 +325,12 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public boolean acceptTcp(String serverIp, int port) {
-        return true;
-    }
-
-    @Override
-    public boolean acceptSSL(String hostName, String serverIp, int port, List<String> applicationLayerProtocols) {
-        return true;
+    public AllowRule acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols) {
+        return null;
     }
 
     @Override
     public Http2Filter getH2Filter() {
         return null;
     }
-
 }

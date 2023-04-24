@@ -30,9 +30,10 @@ public class StreamForward implements Runnable {
     private final Socket socket;
     protected final IPacketCapture packetCapture;
     protected final String hostName;
+    private final boolean isSSL;
 
     protected StreamForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket,
-                            IPacketCapture packetCapture, String hostName) {
+                            IPacketCapture packetCapture, String hostName, boolean isSSL) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.server = server;
@@ -44,6 +45,7 @@ public class StreamForward implements Runnable {
         this.socket = socket;
         this.packetCapture = packetCapture;
         this.hostName = hostName;
+        this.isSSL = isSSL;
     }
 
     final void startThread() {
@@ -65,9 +67,17 @@ public class StreamForward implements Runnable {
             while ((read = inputStream.read(buf)) != -1) {
                 if (packetCapture != null) {
                     if (server) {
-                        packetCapture.onSSLProxyTX(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                        if (isSSL) {
+                            packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                        } else {
+                            packetCapture.onSocketTx(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                        }
                     } else {
-                        packetCapture.onSSLProxyRX(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                        if (isSSL) {
+                            packetCapture.onSSLProxyRx(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                        } else {
+                            packetCapture.onSocketRx(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                        }
                     }
                 }
                 outputStream.write(buf, 0, read);
