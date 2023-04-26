@@ -201,7 +201,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             } else if (server) {
                 HttpHeaders headers = stream.httpHeadersFrame.headers();
                 if (!headers.contains(HttpHeaderNames.CONTENT_LENGTH) &&
-                        !headers.contains(HttpHeaderNames.CONTENT_ENCODING)) {
+                        !headers.contains(HttpHeaderNames.TRANSFER_ENCODING) &&
+                        !headers.contains(HttpHeaderNames.CONTENT_RANGE)) {
                     stream.longPolling = true;
                     handlePollingRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), false, true);
                     stream.buffer.reset();
