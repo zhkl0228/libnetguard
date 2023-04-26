@@ -286,11 +286,12 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
-    private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean writeHeader) {
+    private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream) {
         byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
                 createHttpRequest(headersFrame.headers().copy()),
-                headersFrame.headers(), requestData);
-        if (writeHeader) {
+                headersFrame.headers(), requestData,
+                newStream);
+        if (newStream) {
             writeMessage(headersFrame, data, endStreamOnFlush);
         } else {
             ByteBuf byteBuf = Unpooled.wrappedBuffer(data);

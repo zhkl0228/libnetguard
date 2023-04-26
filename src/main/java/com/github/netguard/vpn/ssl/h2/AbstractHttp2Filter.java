@@ -43,12 +43,12 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     protected abstract byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, HttpHeaders headers, byte[] responseData);
 
     @Override
-    public final byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData) {
+    public final byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData, boolean newStream) {
         requestMap.put(sessionKey, new RequestData(request, requestData));
-        return filterPollingRequestInternal(request, headers, requestData);
+        return filterPollingRequestInternal(request, headers, requestData, newStream);
     }
 
-    protected byte[] filterPollingRequestInternal(HttpRequest request, HttpHeaders headers, byte[] requestData) {
+    protected byte[] filterPollingRequestInternal(HttpRequest request, HttpHeaders headers, byte[] requestData, boolean newStream) {
         return requestData;
     }
 

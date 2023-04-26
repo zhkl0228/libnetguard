@@ -76,7 +76,7 @@ public class Main {
         }
 
         @Override
-        public byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData) {
+        public byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData, boolean newStream) {
             return requestData;
         }
 

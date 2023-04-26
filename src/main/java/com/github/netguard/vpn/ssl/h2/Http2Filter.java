@@ -12,7 +12,7 @@ public interface Http2Filter {
 
     byte[] filterResponse(Http2SessionKey sessionKey, HttpResponse response, HttpHeaders headers, byte[] responseData);
 
-    byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData);
+    byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData, boolean newStream);
 
     byte[] filterPollingResponse(Http2SessionKey sessionKey, HttpResponse response, HttpHeaders headers, byte[] responseData, boolean endStream);
 
