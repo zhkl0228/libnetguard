@@ -290,7 +290,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream) {
         byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
                 createHttpRequest(headersFrame.headers().copy()),
-                headersFrame.headers(), requestData,
+                requestData,
                 newStream);
         if (newStream) {
             writeMessage(headersFrame, data, endStreamOnFlush);
@@ -308,7 +308,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private void handlePollingResponse(HttpHeadersFrame headersFrame, byte[] responseData, boolean endStreamOnFlush) {
         byte[] data = filter == null ? responseData : filter.filterPollingResponse(new Http2SessionKey(session, headersFrame.getStreamId()),
                 createHttpResponse(headersFrame.headers().copy()),
-                headersFrame.headers(), responseData, endStreamOnFlush);
+                responseData, endStreamOnFlush);
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
         ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
         try {
