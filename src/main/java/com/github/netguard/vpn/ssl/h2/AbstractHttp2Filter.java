@@ -35,11 +35,32 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     public final byte[] filterResponse(Http2SessionKey sessionKey, HttpResponse response, HttpHeaders headers, byte[] responseData) {
         RequestData data = requestMap.remove(sessionKey);
         if (data == null) {
-            throw new IllegalStateException("sessionKey=" + sessionKey);
+            return responseData;
         }
         return filterResponseInternal(data.request, data.requestData, response, headers, responseData);
     }
 
     protected abstract byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, HttpHeaders headers, byte[] responseData);
+
+    @Override
+    public final byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData) {
+        requestMap.put(sessionKey, new RequestData(request, requestData));
+        return filterPollingRequestInternal(request, headers, requestData);
+    }
+
+    protected byte[] filterPollingRequestInternal(HttpRequest request, HttpHeaders headers, byte[] requestData) {
+        return requestData;
+    }
+
+    @Override
+    public final byte[] filterPollingResponse(Http2SessionKey sessionKey, HttpResponse response, HttpHeaders headers, byte[] responseData, boolean endStream) {
+        RequestData data = endStream ? requestMap.remove(sessionKey) : requestMap.get(sessionKey);
+        if (data == null) {
+            return responseData;
+        }
+        return filterPollingResponseInternal(data.request, data.requestData, response, headers, responseData);
+    }
+
+    protected abstract byte[] filterPollingResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, HttpHeaders headers, byte[] responseData);
 
 }

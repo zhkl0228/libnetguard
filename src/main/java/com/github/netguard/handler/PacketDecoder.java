@@ -119,6 +119,8 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
                 tmp = data;
             }
             log.trace(Inspector.inspectString(tmp, String.format("onSocketTx %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+        } else if (log.isDebugEnabled()) {
+            log.debug("onSocketTx {} bytes {}:{} => {}:{}", data.length, clientIp, clientPort, serverIp, serverPort);
         }
     }
 
@@ -132,6 +134,8 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
                 tmp = data;
             }
             log.trace(Inspector.inspectString(tmp, String.format("onSocketRx %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+        } else if (log.isDebugEnabled()) {
+            log.debug("onSocketRx {} bytes {}:{} => {}:{}", data.length, clientIp, clientPort, serverIp, serverPort);
         }
     }
 

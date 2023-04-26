@@ -1,8 +1,10 @@
 package com.twitter.http2;
 
+import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.HexUtil;
+import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.ssl.StreamForward;
-import com.github.netguard.vpn.ssl.h2.FrameForwardIOException;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.github.netguard.vpn.ssl.h2.Http2SessionKey;
@@ -24,11 +26,16 @@ import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.EOFException;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.text.SimpleDateFormat;
+import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -87,7 +94,6 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 byteBuf.writeBytes(preface);
                 frameDecoder.decode(byteBuf);
                 outputStream.write(preface);
-                outputStream.flush();
 
                 if (packetCapture != null) {
                     packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, preface);
@@ -96,23 +102,63 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             while (!canStop) {
                 int header = dataInput.readInt();
                 int length = (header >>> 8) & SpdyUtil.MASK_LENGTH_HEADER;
+                log.debug("read frame length server={}, length={}", server, length);
                 dataInput.readFully(buf, 0, 5);
                 byteBuf.writeInt(header);
                 byteBuf.writeBytes(buf, 0, 5);
                 while (length > 0) {
                     int read = dataInput.read(buf, 0, Math.min(length, buf.length));
                     if (read == -1) {
-                        break;
+                        throw new EOFException();
                     }
                     byteBuf.writeBytes(buf, 0, read);
                     length -= read;
                 }
-                frameDecoder.decode(byteBuf);
+                byte[] input = null;
+                if (log.isDebugEnabled()) {
+                    byteBuf.markReaderIndex();
+                    input = new byte[byteBuf.readableBytes()];
+                    byteBuf.readBytes(input);
+                    byteBuf.resetReaderIndex();
+                }
+                while (byteBuf.isReadable()) {
+                    frameDecoder.decode(byteBuf);
+                }
+
+                byte[] output = outputBuffer.toByteArray();
+                outputBuffer.reset();
+                if (input != null) {
+                    log.debug("forward server={}, inHash={}, outHash={}, input={}, output={}", server, DigestUtil.md5Hex(input), DigestUtil.md5Hex(output), HexUtil.encodeHexStr(input), HexUtil.encodeHexStr(output));
+                }
+                if (log.isTraceEnabled()) {
+                    String date = new SimpleDateFormat("[yyyy-MM-dd HH:mm:ss]").format(new Date());
+                    if (server) {
+                        File outbound = new File("target/" + String.format("%s:%d_%s:%d_outbound.txt", clientIp, clientPort, serverIp, serverPort));
+                        File forward = new File("target/" + String.format("%s:%d_%s:%d_outbound_forward.txt", clientIp, clientPort, serverIp, serverPort));
+                        FileUtil.appendUtf8Lines(Collections.singletonList(date + HexUtil.encodeHexStr(input)), outbound);
+                        FileUtil.appendUtf8Lines(Collections.singletonList(date + HexUtil.encodeHexStr(output)), forward);
+                    } else {
+                        File inbound = new File("target/" + String.format("%s:%d_%s:%d_inbound.txt", clientIp, clientPort, serverIp, serverPort));
+                        File forward = new File("target/" + String.format("%s:%d_%s:%d_inbound_forward.txt", clientIp, clientPort, serverIp, serverPort));
+                        FileUtil.appendUtf8Lines(Collections.singletonList(date + HexUtil.encodeHexStr(input)), inbound);
+                        FileUtil.appendUtf8Lines(Collections.singletonList(date + HexUtil.encodeHexStr(output)), forward);
+                    }
+                }
+                if (output.length > 0) {
+                    outputStream.write(output);
+                    outputStream.flush();
+
+                    if (packetCapture != null) {
+                        if (server) {
+                            packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, output);
+                        } else {
+                            packetCapture.onSSLProxyRx(clientIp, serverIp, clientPort, serverPort, output);
+                        }
+                    }
+                }
             }
             return true;
         } catch (SocketTimeoutException ignored) {
-        } catch (FrameForwardIOException e) {
-            throw e.getTarget();
         } finally {
             byteBuf.release();
             this.peer = null;
@@ -128,19 +174,37 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     @Override
     public void readDataFrame(int streamId, boolean endStream, boolean endSegment, ByteBuf data) {
-        log.debug("readDataFrame server={}, streamId={}, endStream={}, endSegment={}, data={}", server, streamId, endStream, endSegment, data);
-
         Stream stream = streamMap.get(streamId);
+        log.debug("readDataFrame server={}, streamId={}, endStream={}, endSegment={}, longPolling={}, data={}", server, streamId, endStream, endSegment, (stream == null ? null : stream.longPolling), data);
         try {
-            if (stream != null) {
-                data.readBytes(stream.baos, data.readableBytes());
-                if (endStream) {
-                    streamMap.remove(streamId);
-                    if (server) {
-                        handleRequest(stream.httpHeadersFrame, stream.baos.toByteArray());
-                    } else {
-                        handleResponse(stream.httpHeadersFrame, stream.baos.toByteArray());
-                    }
+            if (stream == null) {
+                return;
+            }
+            data.readBytes(stream.buffer, data.readableBytes());
+            if (stream.longPolling) {
+                if (server) {
+                    handlePollingRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), endStream, false);
+                } else {
+                    handlePollingResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), endStream);
+                }
+                stream.buffer.reset();
+                return;
+            }
+            if (endStream) {
+                streamMap.remove(streamId);
+                if (server) {
+                    handleRequest(stream.httpHeadersFrame, stream.buffer.toByteArray());
+                } else {
+                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray());
+                }
+                stream.buffer.reset();
+            } else if (server) {
+                HttpHeaders headers = stream.httpHeadersFrame.headers();
+                if (!headers.contains(HttpHeaderNames.CONTENT_LENGTH) &&
+                        !headers.contains(HttpHeaderNames.CONTENT_ENCODING)) {
+                    stream.longPolling = true;
+                    handlePollingRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), false, true);
+                    stream.buffer.reset();
                 }
             }
         } catch (IOException e) {
@@ -156,6 +220,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     public void readHeadersFrame(int streamId, boolean endStream, boolean endSegment, boolean exclusive, int dependency, int weight) {
         log.debug("readHeadersFrame server={}, streamId={}, endStream={}, endSegment={}, exclusive={}, dependency={}, weight={}", server, streamId, endStream, endSegment, exclusive, dependency, weight);
 
+        if (httpHeadersFrame != null) {
+            throw new IllegalStateException("readHeadersFrame=" + httpHeadersFrame);
+        }
         httpHeadersFrame = new DefaultHttpHeadersFrame(streamId);
         httpHeadersFrame.setLast(endStream);
         httpHeadersFrame.setExclusive(exclusive);
@@ -179,14 +246,14 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private static final int DEFAULT_CHUNK_SIZE = 0x1000;
 
-    private void writeMessage(HttpHeadersFrame headersFrame, byte[] data) {
+    private void writeMessage(HttpHeadersFrame headersFrame, byte[] data, boolean endStreamOnFlush) {
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data == null ? new byte[0] : data);
         try {
             synchronized (httpHeaderBlockEncoder) {
                 ByteBuf headerBlock = httpHeaderBlockEncoder.encode(headersFrame);
                 ByteBuf frame = frameEncoder.encodeHeadersFrame(
                         headersFrame.getStreamId(),
-                        !byteBuf.isReadable(),
+                        headersFrame.isLast(),
                         headersFrame.isExclusive(),
                         headersFrame.getDependency(),
                         headersFrame.getWeight(),
@@ -200,11 +267,16 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 }
             }
 
-            while (byteBuf.isReadable()) {
-                ByteBuf partialDataFrame = byteBuf.readSlice(Math.min(byteBuf.readableBytes(), DEFAULT_CHUNK_SIZE));
-                log.debug("writeMessage server={}, partialDataFrame={}, byteBuf={}", server, partialDataFrame, byteBuf);
-                boolean endStream = !byteBuf.isReadable();
-                ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStream, partialDataFrame);
+            if (byteBuf.isReadable()) {
+                while (byteBuf.isReadable()) {
+                    ByteBuf partialDataFrame = byteBuf.readSlice(Math.min(byteBuf.readableBytes(), DEFAULT_CHUNK_SIZE));
+                    log.debug("writeMessage server={}, partialDataFrame={}, byteBuf={}", server, partialDataFrame, byteBuf);
+                    boolean endStream = !byteBuf.isReadable() && endStreamOnFlush;
+                    ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStream, partialDataFrame);
+                    forwardFrameBuf(frame);
+                }
+            } else if (data != null) {
+                ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
                 forwardFrameBuf(frame);
             }
         } catch (IOException e) {
@@ -214,18 +286,48 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
+    private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean writeHeader) {
+        byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
+                createHttpRequest(headersFrame.headers().copy()),
+                headersFrame.headers(), requestData);
+        if (writeHeader) {
+            writeMessage(headersFrame, data, endStreamOnFlush);
+        } else {
+            ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
+            ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
+            try {
+                forwardFrameBuf(frame);
+            } finally {
+                frame.release();
+            }
+        }
+    }
+
+    private void handlePollingResponse(HttpHeadersFrame headersFrame, byte[] responseData, boolean endStreamOnFlush) {
+        byte[] data = filter == null ? responseData : filter.filterPollingResponse(new Http2SessionKey(session, headersFrame.getStreamId()),
+                createHttpResponse(headersFrame.headers().copy()),
+                headersFrame.headers(), responseData, endStreamOnFlush);
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
+        ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
+        try {
+            forwardFrameBuf(frame);
+        } finally {
+            frame.release();
+        }
+    }
+
     private void handleRequest(HttpHeadersFrame headersFrame, byte[] requestData) {
         byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
                 createHttpRequest(headersFrame.headers().copy()),
                 headersFrame.headers(), requestData);
-        writeMessage(headersFrame, data);
+        writeMessage(headersFrame, data, true);
     }
 
     private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData) {
         byte[] data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId()),
                 createHttpResponse(headersFrame.headers().copy()),
                 headersFrame.headers(), responseData);
-        writeMessage(headersFrame, data);
+        writeMessage(headersFrame, data, true);
     }
 
     @Override
@@ -239,13 +341,21 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
         if (httpHeadersFrame.isLast()) {
             if (server) {
-                handleRequest(httpHeadersFrame, new byte[0]);
+                handleRequest(httpHeadersFrame, null);
             } else {
-                handleResponse(httpHeadersFrame, new byte[0]);
+                handleResponse(httpHeadersFrame, null);
             }
         } else {
-            // Request body will follow in a series of Data Frames
-            streamMap.put(httpHeadersFrame.getStreamId(), new Stream(httpHeadersFrame));
+            Stream stream = new Stream(httpHeadersFrame);
+            streamMap.put(httpHeadersFrame.getStreamId(), stream);
+
+            Stream peerStream;
+            if (!server &&
+                    (peerStream = peer.streamMap.get(httpHeadersFrame.getStreamId())) != null &&
+                    peerStream.longPolling) {
+                stream.longPolling = true;
+                writeMessage(stream.httpHeadersFrame, null, false);
+            }
         }
         httpHeadersFrame = null;
     }
@@ -339,24 +449,14 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         httpSettingsFrame = null;
     }
 
-    private void forwardFrameBuf(ByteBuf byteBuf) throws FrameForwardIOException {
+    private final ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
+
+    private void forwardFrameBuf(ByteBuf byteBuf) {
         try {
             log.debug("forwardFrameBuf server={}, byteBuf={}", server, byteBuf);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byteBuf.readBytes(baos, byteBuf.readableBytes());
-            byte[] data = baos.toByteArray();
-            outputStream.write(data);
-            outputStream.flush();
-
-            if (packetCapture != null) {
-                if (server) {
-                    packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, data);
-                } else {
-                    packetCapture.onSSLProxyRx(clientIp, serverIp, clientPort, serverPort, data);
-                }
-            }
+            byteBuf.readBytes(outputBuffer, byteBuf.readableBytes());
         } catch (IOException e) {
-            throw new FrameForwardIOException(e);
+            throw new IllegalStateException("forwardFrameBuf", e);
         }
     }
 

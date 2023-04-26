@@ -74,6 +74,16 @@ public class Main {
             Inspector.inspect(responseData, "sessionKey session=" + sessionKey + ", response=" + response);
             return responseData;
         }
+
+        @Override
+        public byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData) {
+            return requestData;
+        }
+
+        @Override
+        public byte[] filterPollingResponse(Http2SessionKey sessionKey, HttpResponse response, HttpHeaders headers, byte[] responseData, boolean endStream) {
+            return responseData;
+        }
     }
 
 }
