@@ -36,7 +36,6 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -49,11 +48,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private static final int DEFAULT_HEADER_TABLE_SIZE = 0x1000;
 
-    private final HttpFrameDecoder frameDecoder;
+    private final NetGuardFrameDecoder frameDecoder;
     private final HttpFrameEncoder frameEncoder;
 
-    private final HttpHeaderBlockDecoder httpHeaderBlockDecoder;
-    private final HttpHeaderBlockEncoder httpHeaderBlockEncoder;
+    private final HttpHeaderBlockDecoder headerDecoder;
+    private final HttpHeaderBlockEncoder headerEncoder;
 
     private final Http2Session session;
     private final Http2Filter filter;
@@ -65,11 +64,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName,
                             Http2Session session) {
         super(inputStream, outputStream, server, clientIp, serverIp, clientPort, serverPort, countDownLatch, socket, packetCapture, hostName, true);
-        this.frameDecoder = new HttpFrameDecoder(server, this);
+        this.frameDecoder = new NetGuardFrameDecoder(server, this);
         this.frameEncoder = new HttpFrameEncoder();
 
-        httpHeaderBlockDecoder = new HttpHeaderBlockDecoder(0x4000, DEFAULT_HEADER_TABLE_SIZE);
-        httpHeaderBlockEncoder = new HttpHeaderBlockEncoder(DEFAULT_HEADER_TABLE_SIZE);
+        headerDecoder = new HttpHeaderBlockDecoder(0x4000, DEFAULT_HEADER_TABLE_SIZE);
+        headerEncoder = new HttpHeaderBlockEncoder(DEFAULT_HEADER_TABLE_SIZE);
 
         this.session = session;
         this.filter = packetCapture == null ? null : packetCapture.getH2Filter();
@@ -105,11 +104,15 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             while (!canStop) {
                 int header = dataInput.readInt();
                 int length = (header >>> 8) & SpdyUtil.MASK_LENGTH_HEADER;
-                dataInput.readFully(buf, 0, 5);
+                byte flags = dataInput.readByte();
+                int stream = dataInput.readInt();
+
                 byteBuf.writeInt(header);
-                byteBuf.writeBytes(buf, 0, 5);
+                byteBuf.writeByte(flags);
+                byteBuf.writeInt(stream);
                 if (log.isDebugEnabled()) {
-                    log.debug("read frame length server={}, length={}, buf={}", server, length, HexUtil.encodeHexStr(Arrays.copyOfRange(buf, 0, 5)));
+                    int streamId = stream & SpdyUtil.MASK_STREAM_ID_HEADER;
+                    log.debug("read frame length server={}, length={}, flags=0x{}, streamId={}", server, length, Integer.toHexString(flags & 0xff), streamId);
                 }
                 while (length > 0) {
                     int read = dataInput.read(buf, 0, Math.min(length, buf.length));
@@ -183,6 +186,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         log.debug("readDataFrame server={}, streamId={}, endStream={}, endSegment={}, longPolling={}, data={}", server, streamId, endStream, endSegment, (stream == null ? null : stream.longPolling), data);
         try {
             if (stream == null) {
+                log.warn("readDataFrame not exists stream: " + streamId);
                 return;
             }
             data.readBytes(stream.buffer, data.readableBytes());
@@ -240,7 +244,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     public void readHeaderBlock(ByteBuf headerBlockFragment) {
         log.debug("readHeaderBlock server={}, headerBlockFragment={}", server, headerBlockFragment);
         try {
-            httpHeaderBlockDecoder.decode(headerBlockFragment, httpHeadersFrame);
+            headerDecoder.decode(headerBlockFragment, httpHeadersFrame);
         } catch (IOException e) {
             throw new IllegalStateException("readHeaderBlock frame=" + httpHeadersFrame, e);
         } finally {
@@ -256,7 +260,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         ByteBuf byteBuf = data == null || data.length == 0 ? Unpooled.EMPTY_BUFFER : Unpooled.wrappedBuffer(data);
         try {
             {
-                ByteBuf headerBlock = httpHeaderBlockEncoder.encode(headersFrame);
+                ByteBuf headerBlock = headerEncoder.encode(headersFrame);
                 ByteBuf frame = frameEncoder.encodeHeadersFrame(
                         headersFrame.getStreamId(),
                         headersFrame.isLast(),
@@ -349,7 +353,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             throw new UnsupportedOperationException("frame=" + httpHeadersFrame);
         }
 
-        httpHeaderBlockDecoder.endHeaderBlock(httpHeadersFrame);
+        headerDecoder.endHeaderBlock(httpHeadersFrame);
         log.debug("readHeaderBlockEnd server={}, frame={}", server, httpHeadersFrame);
 
         if (httpHeadersFrame.isLast()) {
@@ -360,7 +364,10 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             }
         } else {
             Stream stream = new Stream(httpHeadersFrame);
-            streamMap.put(httpHeadersFrame.getStreamId(), stream);
+            Stream old = streamMap.put(httpHeadersFrame.getStreamId(), stream);
+            if (old != null) {
+                log.warn("readHeaderBlockEnd replace exists stream old=" + old);
+            }
 
             Stream peerStream;
             if (!server &&
@@ -407,7 +414,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         log.debug("readSettingsFrame server={}, ack={}, changeDecoderHeaderTableSize={}, headerTableSize={}", server, ack, changeDecoderHeaderTableSize, headerTableSize);
 
         if (ack && changeDecoderHeaderTableSize) {
-            httpHeaderBlockDecoder.setMaxHeaderTableSize(headerTableSize);
+            headerDecoder.setMaxHeaderTableSize(headerTableSize);
             changeDecoderHeaderTableSize = false;
         }
     }
@@ -443,8 +450,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     public void readSettingsEnd() {
         log.debug("readSettingsEnd server={}, changeEncoderHeaderTableSize={}, minHeaderTableSize={}, lastHeaderTableSize={}, frame={}", server, changeEncoderHeaderTableSize, minHeaderTableSize, lastHeaderTableSize, httpSettingsFrame);
         if (changeEncoderHeaderTableSize) {
-            httpHeaderBlockEncoder.setDecoderMaxHeaderTableSize(minHeaderTableSize);
-            httpHeaderBlockEncoder.setDecoderMaxHeaderTableSize(lastHeaderTableSize);
+            headerEncoder.setDecoderMaxHeaderTableSize(minHeaderTableSize);
+            headerEncoder.setDecoderMaxHeaderTableSize(lastHeaderTableSize);
             changeEncoderHeaderTableSize = false;
             lastHeaderTableSize = Integer.MAX_VALUE;
             minHeaderTableSize = Integer.MAX_VALUE;
