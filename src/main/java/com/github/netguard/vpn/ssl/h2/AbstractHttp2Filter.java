@@ -1,5 +1,6 @@
 package com.github.netguard.vpn.ssl.h2;
 
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
@@ -24,10 +25,15 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     @Override
     public final byte[] filterRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData) {
         requestMap.put(sessionKey, new RequestData(request, requestData));
-        return filterRequestInternal(request, headers, requestData);
+        byte[] fakeRequestData = filterRequestInternal(request, requestData);
+        if (fakeRequestData.length != requestData.length &&
+                headers.contains(HttpHeaderNames.CONTENT_LENGTH)) {
+            headers.setInt(HttpHeaderNames.CONTENT_LENGTH, fakeRequestData.length);
+        }
+        return fakeRequestData;
     }
 
-    protected byte[] filterRequestInternal(HttpRequest request, HttpHeaders headers, byte[] requestData) {
+    protected byte[] filterRequestInternal(HttpRequest request, byte[] requestData) {
         return requestData;
     }
 
@@ -37,10 +43,15 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
         if (data == null) {
             return responseData;
         }
-        return filterResponseInternal(data.request, data.requestData, response, headers, responseData);
+        byte[] fakeResponseData = filterResponseInternal(data.request, data.requestData, response, responseData);
+        if (fakeResponseData.length != responseData.length &&
+                headers.contains(HttpHeaderNames.CONTENT_LENGTH)) {
+            headers.setInt(HttpHeaderNames.CONTENT_LENGTH, fakeResponseData.length);
+        }
+        return fakeResponseData;
     }
 
-    protected abstract byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, HttpHeaders headers, byte[] responseData);
+    protected abstract byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData);
 
     @Override
     public final byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, byte[] requestData, boolean newStream) {

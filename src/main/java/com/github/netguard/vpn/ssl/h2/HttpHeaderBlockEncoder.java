@@ -15,11 +15,13 @@
  */
 package com.github.netguard.vpn.ssl.h2;
 
-import com.twitter.hpack.Encoder;
+import com.twitter.hpack.NetGuardEncoder;
 import com.twitter.http2.HttpHeaderBlockFrame;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.Unpooled;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -28,13 +30,15 @@ import java.util.Locale;
 
 public class HttpHeaderBlockEncoder {
 
+    private static final Logger log = LoggerFactory.getLogger(HttpHeaderBlockEncoder.class);
+
     private static final byte[] COOKIE = {'c', 'o', 'o', 'k', 'i', 'e'};
     private static final byte[] EMPTY = {};
 
     private int encoderMaxHeaderTableSize;
     private int decoderMaxHeaderTableSize;
     private int maxHeaderTableSize;
-    private final Encoder encoder;
+    private final NetGuardEncoder encoder;
 
     /**
      * Create a new instance.
@@ -43,7 +47,7 @@ public class HttpHeaderBlockEncoder {
         encoderMaxHeaderTableSize = maxHeaderTableSize;
         decoderMaxHeaderTableSize = maxHeaderTableSize;
         this.maxHeaderTableSize = maxHeaderTableSize;
-        encoder = new Encoder(maxHeaderTableSize);
+        encoder = new NetGuardEncoder(maxHeaderTableSize);
     }
 
     /**
@@ -105,6 +109,9 @@ public class HttpHeaderBlockEncoder {
                 for (String value : frame.headers().getAll(name)) {
                     for (String crumb : value.split(";")) {
                         byte[] valueBytes = crumb.trim().getBytes(StandardCharsets.UTF_8);
+                        if (log.isDebugEnabled()) {
+                            log.debug("encodeCookie value={}", crumb.trim());
+                        }
                         encoder.encodeHeader(out, COOKIE, valueBytes, true);
                     }
                 }
@@ -113,10 +120,16 @@ public class HttpHeaderBlockEncoder {
                 // Sec. 8.1.3.3. Header Field Ordering
                 List<String> values = frame.headers().getAll(name);
                 if (values.size() == 0) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("encodeEmptyHeader name={}", name.toLowerCase(Locale.ENGLISH));
+                    }
                     encoder.encodeHeader(out, nameBytes, EMPTY, false);
                 } else {
                     for (String value : values) {
                         byte[] valueBytes = value.getBytes(StandardCharsets.UTF_8);
+                        if (log.isDebugEnabled()) {
+                            log.debug("encodeHeader name={}, value={}", name.toLowerCase(Locale.ENGLISH), value);
+                        }
                         encoder.encodeHeader(out, nameBytes, valueBytes, false);
                     }
                 }

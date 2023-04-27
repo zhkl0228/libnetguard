@@ -8,6 +8,8 @@ import com.github.netguard.vpn.ssl.StreamForward;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.github.netguard.vpn.ssl.h2.Http2SessionKey;
+import com.github.netguard.vpn.ssl.h2.HttpHeaderBlockDecoder;
+import com.github.netguard.vpn.ssl.h2.HttpHeaderBlockEncoder;
 import edu.baylor.cs.csi5321.spdy.frames.SpdyUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -34,6 +36,7 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -50,7 +53,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private final HttpFrameEncoder frameEncoder;
 
     private final HttpHeaderBlockDecoder httpHeaderBlockDecoder;
-    private final com.github.netguard.vpn.ssl.h2.HttpHeaderBlockEncoder httpHeaderBlockEncoder;
+    private final HttpHeaderBlockEncoder httpHeaderBlockEncoder;
 
     private final Http2Session session;
     private final Http2Filter filter;
@@ -66,7 +69,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         this.frameEncoder = new HttpFrameEncoder();
 
         httpHeaderBlockDecoder = new HttpHeaderBlockDecoder(0x4000, DEFAULT_HEADER_TABLE_SIZE);
-        httpHeaderBlockEncoder = new com.github.netguard.vpn.ssl.h2.HttpHeaderBlockEncoder(DEFAULT_HEADER_TABLE_SIZE);
+        httpHeaderBlockEncoder = new HttpHeaderBlockEncoder(DEFAULT_HEADER_TABLE_SIZE);
 
         this.session = session;
         this.filter = packetCapture == null ? null : packetCapture.getH2Filter();
@@ -102,10 +105,12 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             while (!canStop) {
                 int header = dataInput.readInt();
                 int length = (header >>> 8) & SpdyUtil.MASK_LENGTH_HEADER;
-                log.debug("read frame length server={}, length={}", server, length);
                 dataInput.readFully(buf, 0, 5);
                 byteBuf.writeInt(header);
                 byteBuf.writeBytes(buf, 0, 5);
+                if (log.isDebugEnabled()) {
+                    log.debug("read frame length server={}, length={}, buf={}", server, length, HexUtil.encodeHexStr(Arrays.copyOfRange(buf, 0, 5)));
+                }
                 while (length > 0) {
                     int read = dataInput.read(buf, 0, Math.min(length, buf.length));
                     if (read == -1) {
@@ -131,7 +136,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     log.debug("forward server={}, inHash={}, outHash={}, input={}, output={}", server, DigestUtil.md5Hex(input), DigestUtil.md5Hex(output), HexUtil.encodeHexStr(input), HexUtil.encodeHexStr(output));
                 }
                 if (log.isTraceEnabled()) {
-                    String date = new SimpleDateFormat("[yyyy-MM-dd HH:mm:ss]").format(new Date());
+                    String date = new SimpleDateFormat("[HH:mm:ss SSS]").format(new Date());
                     if (server) {
                         File outbound = new File("target/" + String.format("%s:%d_%s:%d_outbound.txt", clientIp, clientPort, serverIp, serverPort));
                         File forward = new File("target/" + String.format("%s:%d_%s:%d_outbound_forward.txt", clientIp, clientPort, serverIp, serverPort));
@@ -248,9 +253,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private static final int DEFAULT_CHUNK_SIZE = 0x1000;
 
     private void writeMessage(HttpHeadersFrame headersFrame, byte[] data, boolean endStreamOnFlush) {
-        ByteBuf byteBuf = Unpooled.wrappedBuffer(data == null ? new byte[0] : data);
+        ByteBuf byteBuf = data == null || data.length == 0 ? Unpooled.EMPTY_BUFFER : Unpooled.wrappedBuffer(data);
         try {
-            synchronized (httpHeaderBlockEncoder) {
+            {
                 ByteBuf headerBlock = httpHeaderBlockEncoder.encode(headersFrame);
                 ByteBuf frame = frameEncoder.encodeHeadersFrame(
                         headersFrame.getStreamId(),
@@ -321,15 +326,21 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private void handleRequest(HttpHeadersFrame headersFrame, byte[] requestData) {
         byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
                 createHttpRequest(headersFrame.headers().copy()),
-                headersFrame.headers(), requestData);
-        writeMessage(headersFrame, data, true);
+                headersFrame.headers(), requestData == null ? new byte[0] : requestData);
+        if (data == null) {
+            throw new IllegalStateException();
+        }
+        writeMessage(headersFrame, requestData == null && data.length == 0 ? null : data, true);
     }
 
     private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData) {
         byte[] data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId()),
                 createHttpResponse(headersFrame.headers().copy()),
-                headersFrame.headers(), responseData);
-        writeMessage(headersFrame, data, true);
+                headersFrame.headers(), responseData == null ? new byte[0] : responseData);
+        if (data == null) {
+            throw new IllegalStateException();
+        }
+        writeMessage(headersFrame, responseData == null && data.length == 0 ? null : data, true);
     }
 
     @Override
@@ -391,7 +402,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     @Override
     public void readSettingsFrame(boolean ack) {
-        httpSettingsFrame = new DefaultHttpSettingsFrame();
+        httpSettingsFrame = new NetGuardHttpSettingsFrame();
         httpSettingsFrame.setAck(ack);
         log.debug("readSettingsFrame server={}, ack={}, changeDecoderHeaderTableSize={}, headerTableSize={}", server, ack, changeDecoderHeaderTableSize, headerTableSize);
 
@@ -432,10 +443,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     public void readSettingsEnd() {
         log.debug("readSettingsEnd server={}, changeEncoderHeaderTableSize={}, minHeaderTableSize={}, lastHeaderTableSize={}, frame={}", server, changeEncoderHeaderTableSize, minHeaderTableSize, lastHeaderTableSize, httpSettingsFrame);
         if (changeEncoderHeaderTableSize) {
-            synchronized (httpHeaderBlockEncoder) {
-                httpHeaderBlockEncoder.setDecoderMaxHeaderTableSize(minHeaderTableSize);
-                httpHeaderBlockEncoder.setDecoderMaxHeaderTableSize(lastHeaderTableSize);
-            }
+            httpHeaderBlockEncoder.setDecoderMaxHeaderTableSize(minHeaderTableSize);
+            httpHeaderBlockEncoder.setDecoderMaxHeaderTableSize(lastHeaderTableSize);
             changeEncoderHeaderTableSize = false;
             lastHeaderTableSize = Integer.MAX_VALUE;
             minHeaderTableSize = Integer.MAX_VALUE;

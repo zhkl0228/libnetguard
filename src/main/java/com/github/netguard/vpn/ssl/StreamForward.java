@@ -49,7 +49,7 @@ public class StreamForward implements Runnable {
     }
 
     final void startThread() {
-        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + socket);
+        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + clientIp + ":" + clientPort + "_" + serverIp + ":" + serverPort);
         thread.setDaemon(true);
         thread.start();
     }
