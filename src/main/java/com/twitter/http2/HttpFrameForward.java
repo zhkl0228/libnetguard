@@ -46,8 +46,6 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private static final Logger log = LoggerFactory.getLogger(HttpFrameForward.class);
 
-    private static final int DEFAULT_HEADER_TABLE_SIZE = 0x1000;
-
     private final NetGuardFrameDecoder frameDecoder;
     private final HttpFrameEncoder frameEncoder;
 
@@ -57,17 +55,13 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private final Http2Session session;
     private final Http2Filter filter;
 
-    private int lastHeaderTableSize = Integer.MAX_VALUE;
-    private int minHeaderTableSize = Integer.MAX_VALUE;
-    private boolean changeEncoderHeaderTableSize;
-
     public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName,
                             Http2Session session) {
         super(inputStream, outputStream, server, clientIp, serverIp, clientPort, serverPort, countDownLatch, socket, packetCapture, hostName, true);
         this.frameDecoder = new NetGuardFrameDecoder(server, this);
         this.frameEncoder = new HttpFrameEncoder();
 
-        headerDecoder = new HttpHeaderBlockDecoder(0x4000, DEFAULT_HEADER_TABLE_SIZE);
+        headerDecoder = new HttpHeaderBlockDecoder(0x4000, 0x1000);
         headerEncoder = new HttpHeaderBlockEncoder(0x100);
 
         this.session = session;
@@ -404,58 +398,27 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private HttpSettingsFrame httpSettingsFrame;
-    private boolean changeDecoderHeaderTableSize;
-    private int headerTableSize;
 
     @Override
     public void readSettingsFrame(boolean ack) {
         httpSettingsFrame = new NetGuardHttpSettingsFrame();
         httpSettingsFrame.setAck(ack);
-        log.debug("readSettingsFrame server={}, ack={}, changeDecoderHeaderTableSize={}, headerTableSize={}", server, ack, changeDecoderHeaderTableSize, headerTableSize);
-
-        if (ack && changeDecoderHeaderTableSize) {
-            headerDecoder.setMaxHeaderTableSize(headerTableSize);
-            changeDecoderHeaderTableSize = false;
-        }
+        log.debug("readSettingsFrame server={}, ack={}", server, ack);
     }
 
     @Override
     public void readSetting(int id, int value) {
         log.debug("readSetting server={}, id={}, value={}", server, id, value);
         httpSettingsFrame.setValue(id, value);
-
-        if (id == HttpSettingsFrame.SETTINGS_HEADER_TABLE_SIZE) {
-            // Ignore 'negative' values -- they are too large for java
-            if (value >= 0) {
-                changeEncoderHeaderTableSize = true;
-                lastHeaderTableSize = value;
-                if (lastHeaderTableSize < minHeaderTableSize) {
-                    minHeaderTableSize = lastHeaderTableSize;
-                }
-            }
-        }
     }
 
     private void onPeerSettingsEnd(HttpSettingsFrame httpSettingsFrame) {
-        int newHeaderTableSize =
-                httpSettingsFrame.getValue(HttpSettingsFrame.SETTINGS_HEADER_TABLE_SIZE);
-        if (newHeaderTableSize >= 0) {
-            headerTableSize = newHeaderTableSize;
-            changeDecoderHeaderTableSize = true;
-        }
-        log.debug("onPeerSettingsEnd server={}, changeDecoderHeaderTableSize={}, headerTableSize={}, , frame={}", server, changeDecoderHeaderTableSize, headerTableSize, httpSettingsFrame);
+        log.debug("onPeerSettingsEnd server={}, frame={}", server, httpSettingsFrame);
     }
 
     @Override
     public void readSettingsEnd() {
-        log.debug("readSettingsEnd server={}, changeEncoderHeaderTableSize={}, minHeaderTableSize={}, lastHeaderTableSize={}, frame={}", server, changeEncoderHeaderTableSize, minHeaderTableSize, lastHeaderTableSize, httpSettingsFrame);
-        if (changeEncoderHeaderTableSize) {
-            headerEncoder.setDecoderMaxHeaderTableSize(minHeaderTableSize);
-            headerEncoder.setDecoderMaxHeaderTableSize(lastHeaderTableSize);
-            changeEncoderHeaderTableSize = false;
-            lastHeaderTableSize = Integer.MAX_VALUE;
-            minHeaderTableSize = Integer.MAX_VALUE;
-        }
+        log.debug("readSettingsEnd server={}, frame={}", server, httpSettingsFrame);
 
         peer.onPeerSettingsEnd(httpSettingsFrame);
         ByteBuf frame = frameEncoder.encodeSettingsFrame(httpSettingsFrame);

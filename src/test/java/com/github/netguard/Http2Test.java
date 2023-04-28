@@ -2,8 +2,8 @@ package com.github.netguard;
 
 import cn.hutool.core.util.HexUtil;
 import com.twitter.hpack.Decoder;
-import com.twitter.hpack.NetGuardEncoder;
 import com.twitter.hpack.HeaderListener;
+import com.twitter.hpack.NetGuardEncoder;
 import junit.framework.TestCase;
 
 import java.io.ByteArrayInputStream;
