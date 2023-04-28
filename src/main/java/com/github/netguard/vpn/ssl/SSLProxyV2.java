@@ -80,6 +80,7 @@ public class SSLProxyV2 implements Runnable {
         this.secureSocket = null;
         this.hostName = null;
         this.applicationProtocol = null;
+        this.allowFilterH2 = false;
 
         ServerSocketFactory factory = ServerSocketFactory.getDefault();
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
@@ -92,8 +93,10 @@ public class SSLProxyV2 implements Runnable {
 
     private final String hostName;
     private final String applicationProtocol;
+    private final boolean allowFilterH2;
 
-    private SSLProxyV2(IPacketCapture packetCapture, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket, String hostName, String applicationProtocol) throws IOException {
+    private SSLProxyV2(IPacketCapture packetCapture, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket,
+                       String hostName, String applicationProtocol, boolean allowFilterH2) throws IOException {
         this.rootCert = null;
 
         this.packetCapture = packetCapture;
@@ -102,6 +105,7 @@ public class SSLProxyV2 implements Runnable {
         this.secureSocket = secureSocket;
         this.hostName = hostName;
         this.applicationProtocol = applicationProtocol;
+        this.allowFilterH2 = allowFilterH2;
 
         SSLServerSocketFactory factory = context.getServerSocketFactory();
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
@@ -200,7 +204,7 @@ public class SSLProxyV2 implements Runnable {
         }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
-            boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && filter.acceptHost(hostName);
+            boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.acceptHost(hostName);
             doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName, filterHttp2, applicationProtocol, true);
         }
     }
@@ -252,7 +256,7 @@ public class SSLProxyV2 implements Runnable {
         DataInput dataInput = new DataInputStream(localIn);
         final ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
         log.debug("proxy remote={}, record={}, local={}", remote, record, local);
-        AllowRule allowRule = AllowRule.CONNECT_SSL;
+        AllowRule allowRule = AllowRule.FILTER_H2;
         if (packetCapture != null) {
             AllowRule rule = packetCapture.acceptSSL(packet.daddr, packet.dport, record.hostName, record.applicationLayerProtocols);
             if (rule != null) {
@@ -308,7 +312,8 @@ public class SSLProxyV2 implements Runnable {
 
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
                 SSLContext serverContext = serverCertificate.createSSLContext(rootCert);
-                SSLProxyV2 proxy = new SSLProxyV2(packetCapture, packet, timeout, serverContext, secureSocket, record.hostName, secureSocket.getApplicationProtocol());
+                SSLProxyV2 proxy = new SSLProxyV2(packetCapture, packet, timeout, serverContext, secureSocket,
+                        record.hostName, secureSocket.getApplicationProtocol(), allowRule == AllowRule.FILTER_H2);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                         socketOut.write(record.readData);

@@ -41,7 +41,7 @@ public final class NetGuardEncoder {
      * Creates a new encoder.
      */
     public NetGuardEncoder(int maxHeaderTableSize) {
-        this(maxHeaderTableSize, true, true, false);
+        this(maxHeaderTableSize, true, false, false);
     }
 
     /**

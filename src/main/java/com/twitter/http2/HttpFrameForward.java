@@ -68,7 +68,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         this.frameEncoder = new HttpFrameEncoder();
 
         headerDecoder = new HttpHeaderBlockDecoder(0x4000, DEFAULT_HEADER_TABLE_SIZE);
-        headerEncoder = new HttpHeaderBlockEncoder(DEFAULT_HEADER_TABLE_SIZE);
+        headerEncoder = new HttpHeaderBlockEncoder(0x100);
 
         this.session = session;
         this.filter = packetCapture == null ? null : packetCapture.getH2Filter();
