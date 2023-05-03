@@ -234,4 +234,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         return true;
     }
 
+    @Override
+    public InetSocketAddress getRemoteSocketAddress() {
+        return (InetSocketAddress) socket.getRemoteSocketAddress();
+    }
 }

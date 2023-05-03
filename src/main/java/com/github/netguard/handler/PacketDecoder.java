@@ -7,7 +7,7 @@ import com.github.netguard.handler.session.SSLSessionKey;
 import com.github.netguard.handler.session.Session;
 import com.github.netguard.handler.session.SessionCreator;
 import com.github.netguard.handler.session.SessionFactory;
-import com.github.netguard.vpn.AllowRule;
+import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import org.krakenapps.pcap.Protocol;
@@ -329,7 +329,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public AllowRule acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols) {
+    public AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols) {
         return null;
     }
 

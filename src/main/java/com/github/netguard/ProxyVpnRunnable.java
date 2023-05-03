@@ -15,6 +15,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -151,5 +152,10 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
         } else {
             return null;
         }
+    }
+
+    @Override
+    public InetSocketAddress getRemoteSocketAddress() {
+        return (InetSocketAddress) socket.getRemoteSocketAddress();
     }
 }

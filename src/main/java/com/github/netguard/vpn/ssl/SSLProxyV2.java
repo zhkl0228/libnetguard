@@ -1,6 +1,7 @@
 package com.github.netguard.vpn.ssl;
 
 import cn.hutool.core.io.IoUtil;
+import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
@@ -35,6 +36,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URLEncoder;
@@ -255,20 +257,27 @@ public class SSLProxyV2 implements Runnable {
     private void handleSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local) throws Exception {
         DataInput dataInput = new DataInputStream(localIn);
         final ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
-        log.debug("proxy remote={}, record={}, local={}", remote, record, local);
         AllowRule allowRule = AllowRule.FILTER_H2;
+        Proxy socketProxy = Proxy.NO_PROXY;
+        String redirectAddress = null;
         if (packetCapture != null) {
-            AllowRule rule = packetCapture.acceptSSL(packet.daddr, packet.dport, record.hostName, record.applicationLayerProtocols);
-            if (rule != null) {
-                allowRule = rule;
+            AcceptResult result = packetCapture.acceptSSL(packet.daddr, packet.dport, record.hostName, record.applicationLayerProtocols);
+            if (result != null) {
+                allowRule = result.getRule();
+                socketProxy = result.getSocketProxy();
+                redirectAddress = result.getRedirectAddress();
             }
         }
+        if (redirectAddress == null) {
+            redirectAddress = record.hostName == null ? remote.getHostString() : record.hostName;
+        }
+        log.debug("proxy remote={}, record={}, local={}, allowRule={}, socketProxy={}, redirectAddress={}", remote, record, local, allowRule, socketProxy, redirectAddress);
         if (allowRule == AllowRule.DISCONNECT) {
             throw new IOException(packet.daddr + ":" + packet.dport + " is not allowed connect: hostName=" + record.hostName);
         }
         if (record.hostName == null || allowRule == AllowRule.CONNECT_TCP) {
-            try (Socket socket = new Socket()) {
-                socket.connect(remote, timeout);
+            try (Socket socket = new Socket(socketProxy)) {
+                socket.connect(new InetSocketAddress(redirectAddress, remote.getPort()), timeout);
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     socketOut.write(record.readData);
                     socketOut.flush();
@@ -280,8 +289,8 @@ public class SSLProxyV2 implements Runnable {
             Socket app = null;
             SSLSocket secureSocket = null;
             try {
-                app = new Socket();
-                app.connect(remote, timeout);
+                app = new Socket(socketProxy);
+                app.connect(new InetSocketAddress(redirectAddress, remote.getPort()), timeout);
                 secureSocket = (SSLSocket) factory.createSocket(app, record.hostName, remote.getPort(), true);
                 if (!record.applicationLayerProtocols.isEmpty()) {
                     SSLParameters parameters = secureSocket.getSSLParameters();
