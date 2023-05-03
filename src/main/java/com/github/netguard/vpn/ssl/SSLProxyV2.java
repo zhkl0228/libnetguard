@@ -271,13 +271,17 @@ public class SSLProxyV2 implements Runnable {
         if (redirectAddress == null) {
             redirectAddress = record.hostName == null ? remote.getHostString() : record.hostName;
         }
+        if (socketProxy == null) {
+            socketProxy = Proxy.NO_PROXY;
+        }
         log.debug("proxy remote={}, record={}, local={}, allowRule={}, socketProxy={}, redirectAddress={}", remote, record, local, allowRule, socketProxy, redirectAddress);
         if (allowRule == AllowRule.DISCONNECT) {
             throw new IOException(packet.daddr + ":" + packet.dport + " is not allowed connect: hostName=" + record.hostName);
         }
+        boolean isSocksProxy = socketProxy.type() == Proxy.Type.SOCKS;
         if (record.hostName == null || allowRule == AllowRule.CONNECT_TCP) {
             try (Socket socket = new Socket(socketProxy)) {
-                socket.connect(new InetSocketAddress(redirectAddress, remote.getPort()), timeout);
+                socket.connect(isSocksProxy ? InetSocketAddress.createUnresolved(redirectAddress, remote.getPort()) : new InetSocketAddress(redirectAddress, remote.getPort()), timeout);
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     socketOut.write(record.readData);
                     socketOut.flush();
@@ -290,7 +294,7 @@ public class SSLProxyV2 implements Runnable {
             SSLSocket secureSocket = null;
             try {
                 app = new Socket(socketProxy);
-                app.connect(new InetSocketAddress(redirectAddress, remote.getPort()), timeout);
+                app.connect(isSocksProxy ? InetSocketAddress.createUnresolved(redirectAddress, remote.getPort()) : new InetSocketAddress(redirectAddress, remote.getPort()), timeout);
                 secureSocket = (SSLSocket) factory.createSocket(app, record.hostName, remote.getPort(), true);
                 if (!record.applicationLayerProtocols.isEmpty()) {
                     SSLParameters parameters = secureSocket.getSSLParameters();
