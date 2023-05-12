@@ -66,39 +66,36 @@ public class VpnServer {
         if (broadcast) {
             sendBroadcast();
         }
-        thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (!shutdown) {
-                    try {
-                        Socket socket = serverSocket.accept();
-                        ProxyVpn vpn = null;
-                        if (useNetGuardCore) {
-                            try {
-                                vpn = new ServiceSinkhole(socket, clients);
-                            } catch(UnsatisfiedLinkError e) {
-                                log.debug("init ServiceSinkhole", e);
-                                useNetGuardCore = false;
-                            }
+        thread = new Thread(() -> {
+            while (!shutdown) {
+                try {
+                    Socket socket = serverSocket.accept();
+                    ProxyVpn vpn = null;
+                    if (useNetGuardCore) {
+                        try {
+                            vpn = new ServiceSinkhole(socket, clients);
+                        } catch(UnsatisfiedLinkError e) {
+                            log.debug("init ServiceSinkhole", e);
+                            useNetGuardCore = false;
                         }
-                        if (vpn == null) {
-                            vpn = new ProxyVpnRunnable(socket, clients);
-                        }
-                        if (vpnListener != null) {
-                            vpnListener.onConnectClient(vpn);
-                        }
-                        Thread vpnThread = new Thread(vpn, "socket: " + socket);
-                        vpnThread.setPriority(Thread.MAX_PRIORITY);
-                        vpnThread.start();
-                        clients.add(vpn);
-                    } catch (SocketTimeoutException e) {
-                        if (broadcast) {
-                            sendBroadcast();
-                        }
-                    } catch (SocketException ignored) {
-                    } catch (IOException e) {
-                        log.warn("accept", e);
                     }
+                    if (vpn == null) {
+                        vpn = new ProxyVpnRunnable(socket, clients);
+                    }
+                    if (vpnListener != null) {
+                        vpnListener.onConnectClient(vpn);
+                    }
+                    Thread vpnThread = new Thread(vpn, "socket: " + socket);
+                    vpnThread.setPriority(Thread.MAX_PRIORITY);
+                    vpnThread.start();
+                    clients.add(vpn);
+                } catch (SocketTimeoutException e) {
+                    if (broadcast) {
+                        sendBroadcast();
+                    }
+                } catch (SocketException ignored) {
+                } catch (IOException e) {
+                    log.warn("accept", e);
                 }
             }
         }, getClass().getSimpleName());

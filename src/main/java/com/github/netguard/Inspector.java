@@ -14,11 +14,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 
-/**
- * 
- * @author unidbg
- * 
- */
 @SuppressWarnings("unused")
 public class Inspector {
 
@@ -54,24 +49,8 @@ public class Inspector {
 				buffer.append('\n');
 			}
 		}
-		
-		int redex = mode - i % mode;
-		for(byte k = 0; k < redex && redex < mode; k++) {
-			buffer.append("  ");
-			buffer.append(' ');
-		}
-		int count = i % mode;
-		int start = i - count;
-		if(start < i) {
-			buffer.append("   ");
-		}
-		for(int k = start; k < i; k++) {
-			buffer.append(toChar(data[k]));
-		}
-		
-		if(redex < mode) {
-			buffer.append('\n');
-		}
+
+		appendSuffix(data, mode, buffer, i);
 		buffer.append("^-----------------------------------------------------------------------------^");
 		
 		System.out.println(buffer);
@@ -258,31 +237,35 @@ public class Inspector {
 					buffer.append('\n');
 				}
 			}
-			
-			int redex = mode - i % mode;
-			for(byte k = 0; k < redex && redex < mode; k++) {
-				buffer.append("  ");
-				buffer.append(' ');
-			}
-			int count = i % mode;
-			int start = i - count;
-			if(start < i) {
-				buffer.append("   ");
-			}
-			for(int k = start; k < i; k++) {
-				buffer.append(toChar(data[k]));
-			}
-			
-			if(redex < mode) {
-				buffer.append('\n');
-			}
+
+			appendSuffix(data, mode, buffer, i);
 		}
 		
 		buffer.append("^-----------------------------------------------------------------------------^");
 		
 		return buffer.toString();
 	}
-	
+
+	private static void appendSuffix(byte[] data, int mode, StringBuilder buffer, int i) {
+		int redex = mode - i % mode;
+		for(byte k = 0; k < redex && redex < mode; k++) {
+			buffer.append("  ");
+			buffer.append(' ');
+		}
+		int count = i % mode;
+		int start = i - count;
+		if(start < i) {
+			buffer.append("   ");
+		}
+		for(int k = start; k < i; k++) {
+			buffer.append(toChar(data[k]));
+		}
+
+		if(redex < mode) {
+			buffer.append('\n');
+		}
+	}
+
 	public static void inspect(String label, byte[] data, int mode) {
 		inspect(null, label, data, mode);
 	}
