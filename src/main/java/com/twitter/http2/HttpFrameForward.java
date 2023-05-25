@@ -54,6 +54,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private final Http2Session session;
     private final Http2Filter filter;
+    private final String sessionKey;
 
     public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName,
                             Http2Session session) {
@@ -66,6 +67,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
         this.session = session;
         this.filter = packetCapture == null ? null : packetCapture.getH2Filter();
+        this.sessionKey = String.format("%s:%d => %s:%d", clientIp, clientPort, serverIp, serverPort);
     }
 
     private HttpFrameForward peer;
@@ -292,7 +294,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream) {
         byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
-                createHttpRequest(headersFrame.headers().copy()),
+                createHttpRequest(headersFrame, sessionKey),
                 requestData,
                 newStream);
         if (newStream) {
@@ -310,7 +312,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private void handlePollingResponse(HttpHeadersFrame headersFrame, byte[] responseData, boolean endStreamOnFlush) {
         byte[] data = filter == null ? responseData : filter.filterPollingResponse(new Http2SessionKey(session, headersFrame.getStreamId()),
-                createHttpResponse(headersFrame.headers().copy()),
+                createHttpResponse(headersFrame, sessionKey),
                 responseData, endStreamOnFlush);
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
         ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
@@ -323,7 +325,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private void handleRequest(HttpHeadersFrame headersFrame, byte[] requestData) {
         byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
-                createHttpRequest(headersFrame.headers().copy()),
+                createHttpRequest(headersFrame, sessionKey),
                 headersFrame.headers(), requestData == null ? new byte[0] : requestData);
         if (data == null) {
             throw new IllegalStateException();
@@ -333,11 +335,15 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData) {
         byte[] data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId()),
-                createHttpResponse(headersFrame.headers().copy()),
+                createHttpResponse(headersFrame, sessionKey),
                 headersFrame.headers(), responseData == null ? new byte[0] : responseData);
         if (data == null) {
             throw new IllegalStateException();
         }
+        HttpHeaders headers = headersFrame.headers();
+        headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
+        headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
+        headers.set("x-netguard-session", sessionKey);
         writeMessage(headersFrame, responseData == null && data.length == 0 ? null : data, true);
     }
 
@@ -486,7 +492,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         log.warn("readFrameError: {}", message);
     }
 
-    private static void addHeaders(HttpHeaders headers, HttpMessage message) {
+    private static void addHeaders(HttpMessage message, HttpHeaders headers) {
         for (Map.Entry<String, String> e : headers) {
             String name = e.getKey();
             String value = e.getValue();
@@ -496,7 +502,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
-    private static HttpRequest createHttpRequest(HttpHeaders headers) {
+    private static HttpRequest createHttpRequest(HttpHeadersFrame headersFrame, String sessionKey) {
+        HttpHeaders headers = headersFrame.headers().copy();
         HttpMethod method = HttpMethod.valueOf(headers.get(":method"));
         String url = headers.get(":path");
 
@@ -509,21 +516,28 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         // Remove the scheme header
         headers.remove(":scheme");
 
-        // Replace the SPDY host header with the HTTP host header
+        // Replace the H2 host header with the HTTP host header
         String host = headers.get(":authority");
         headers.remove(":authority");
         headers.set(HttpHeaderNames.HOST, host);
-
-        addHeaders(headers, request);
-
+        headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
+        headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
+        headers.set("x-netguard-session", sessionKey);
+        addHeaders(request, headers);
         return request;
     }
 
-    private static HttpResponse createHttpResponse(HttpHeaders headers) {
+    private static HttpResponse createHttpResponse(HttpHeadersFrame headersFrame, String sessionKey) {
+        HttpHeaders headers = headersFrame.headers().copy();
         // Create the first line of the request from the name/value pairs
         HttpResponseStatus status = HttpResponseStatus.valueOf(Integer.parseInt(headers.get(":status")));
         headers.remove(":status");
-        return new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
+        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
+        headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
+        headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
+        headers.set("x-netguard-session", sessionKey);
+        addHeaders(response, headers);
+        return response;
     }
 
 }
