@@ -9,8 +9,6 @@
     <version>0.0.1</version>
 
     <properties>
-        <maven.compiler.source>7</maven.compiler.source>
-        <maven.compiler.target>7</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     <build>
@@ -42,6 +40,7 @@
                 <version>2.10.3</version>
                 <configuration>
                     <additionalparam>-Xdoclint:none</additionalparam>
+                    <source>8</source>
                 </configuration>
                 <executions>
                     <execution>
@@ -131,6 +130,17 @@
             <groupId>com.twitter</groupId>
             <artifactId>netty-http2</artifactId>
             <version>0.17.11</version>
+        </dependency>
+        <dependency>
+            <groupId>name.neykov</groupId>
+            <artifactId>extract-tls-secrets</artifactId>
+            <version>4.0.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.sun</groupId>
+                    <artifactId>tools</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>

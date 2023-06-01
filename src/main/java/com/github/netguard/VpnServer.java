@@ -1,20 +1,19 @@
 package com.github.netguard;
 
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.VpnListener;
 import eu.faircode.netguard.ServiceSinkhole;
+import name.neykov.secrets.AgentAttach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
+import java.lang.management.ManagementFactory;
+import java.net.*;
 import java.nio.ByteBuffer;
+import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -149,6 +148,28 @@ public class VpnServer {
 
     public int getPort() {
         return serverSocket.getLocalPort();
+    }
+
+    static {
+        File preMasterSecretsLogFile = new File("target/pre_master_secrets.log");
+        String preMasterSecretsLogPath = preMasterSecretsLogFile.getAbsolutePath();
+        FileUtil.del(preMasterSecretsLogFile);
+        CodeSource codeSource = AgentAttach.class.getProtectionDomain().getCodeSource();
+        if (codeSource != null) {
+            try {
+                URL jarUrl = codeSource.getLocation();
+                File jarFile = new File(jarUrl.toURI());
+                String name = ManagementFactory.getRuntimeMXBean().getName();
+                String pid = name.split("@")[0];
+                String jarPath = jarFile.getAbsolutePath();
+                System.out.printf("VM option: -javaagent:%s=%s%n", jarPath, preMasterSecretsLogPath);
+                System.out.printf("java -jar %s %s %s%n", jarPath.replace(FileUtil.getUserHomePath(), "~"),
+                        pid,
+                        preMasterSecretsLogPath.replace(FileUtil.getUserHomePath(), "~"));
+            } catch (URISyntaxException e) {
+                throw new IllegalStateException(e);
+            }
+        }
     }
 
 }
