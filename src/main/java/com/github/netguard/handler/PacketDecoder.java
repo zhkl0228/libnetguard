@@ -1,6 +1,7 @@
 package com.github.netguard.handler;
 
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.util.URLUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.handler.session.SSLProxySession;
 import com.github.netguard.handler.session.SSLSessionKey;
@@ -40,8 +41,11 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
@@ -264,7 +268,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onRequest(HttpSession session, com.github.netguard.handler.http.HttpRequest request) {
         if (log.isDebugEnabled()) {
             byte[] data = request.getPostData();
-            log.debug("onRequest {} bytes session={}, request={}\n{}", data == null ? 0 : data.length, session, request, request.getHeaderString());
+            log.debug("onRequest {} bytes session={}, request={}\n{}\n{}", data == null ? 0 : data.length, session, request, request.getHeaderString(), parseParameters(request.getRequestUri()));
         }
     }
 
@@ -336,5 +340,25 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     @Override
     public Http2Filter getH2Filter() {
         return null;
+    }
+
+    protected static Map<String, String> parseParameters(String parameters) {
+        int index = parameters.indexOf('?');
+        if (index != -1) {
+            parameters = parameters.substring(index + 1);
+        }
+        String[] values = parameters.split("&");
+        Map<String, String> map = new LinkedHashMap<>();
+        for (String pair : values) {
+            index = pair.indexOf('=');
+            if (index == -1) {
+                log.warn("parseParameters: {}", parameters);
+                continue;
+            }
+            String name = pair.substring(0, index);
+            String value = pair.substring(index + 1);
+            map.put(name, URLUtil.decode(value, StandardCharsets.UTF_8));
+        }
+        return map;
     }
 }
