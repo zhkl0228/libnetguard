@@ -343,7 +343,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     protected static Map<String, String> parseParameters(String parameters) {
-        int index = parameters.indexOf('?');
+        int index = parameters.lastIndexOf('?');
         if (index != -1) {
             parameters = parameters.substring(index + 1);
         }
