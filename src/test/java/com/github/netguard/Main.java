@@ -5,11 +5,10 @@ import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
+import com.github.netguard.vpn.ssl.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
-import com.github.netguard.vpn.ssl.h2.Http2SessionKey;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.ServiceSinkhole;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import org.apache.log4j.Level;
@@ -44,7 +43,7 @@ public class Main {
         vpnServer.shutdown();
     }
 
-    private static class MyVpnListener implements VpnListener, Http2Filter {
+    private static class MyVpnListener extends AbstractHttp2Filter implements VpnListener, Http2Filter {
         @Override
         public void onConnectClient(Vpn vpn) {
             IPacketCapture packetCapture = new PacketDecoder() {
@@ -56,7 +55,7 @@ public class Main {
             vpn.setPacketCapture(packetCapture);
         }
         @Override
-        public boolean acceptHost(String hostName) {
+        public boolean filterHost(String hostName) {
             if (hostName.endsWith("weixin.qq.com")) {
                 return true;
             } else {
@@ -64,24 +63,21 @@ public class Main {
                 return false;
             }
         }
+
         @Override
-        public byte[] filterRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData) {
-            Inspector.inspect(requestData, "filterRequest sessionKey=" + sessionKey + ", request=" + request);
+        protected byte[] filterRequestInternal(HttpRequest request, byte[] requestData) {
+            Inspector.inspect(requestData, "filterRequest=" + request);
             return requestData;
         }
+
         @Override
-        public byte[] filterResponse(Http2SessionKey sessionKey, HttpResponse response, HttpHeaders headers, byte[] responseData) {
-            Inspector.inspect(responseData, "sessionKey session=" + sessionKey + ", response=" + response);
+        protected byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData) {
+            Inspector.inspect(responseData, "filterResponse=" + response);
             return responseData;
         }
 
         @Override
-        public byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, byte[] requestData, boolean newStream) {
-            return requestData;
-        }
-
-        @Override
-        public byte[] filterPollingResponse(Http2SessionKey sessionKey, HttpResponse response, byte[] responseData, boolean endStream) {
+        protected byte[] filterPollingResponseInternal(HttpRequest request, HttpResponse response, byte[] responseData) {
             return responseData;
         }
     }

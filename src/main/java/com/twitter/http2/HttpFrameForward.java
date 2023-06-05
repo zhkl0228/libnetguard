@@ -10,6 +10,7 @@ import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.github.netguard.vpn.ssl.h2.Http2SessionKey;
 import com.github.netguard.vpn.ssl.h2.HttpHeaderBlockDecoder;
 import com.github.netguard.vpn.ssl.h2.HttpHeaderBlockEncoder;
+import edu.baylor.cs.csi5321.spdy.frames.H2FrameRstStream;
 import edu.baylor.cs.csi5321.spdy.frames.SpdyUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -198,7 +199,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             if (endStream) {
                 streamMap.remove(streamId);
                 if (server) {
-                    handleRequest(stream.httpHeadersFrame, stream.buffer.toByteArray());
+                    handleRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), streamId);
                 } else {
                     handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray());
                 }
@@ -323,9 +324,21 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
-    private void handleRequest(HttpHeadersFrame headersFrame, byte[] requestData) {
+    private void handleRequest(HttpHeadersFrame headersFrame, byte[] requestData, int streamId) {
+        HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey);
+        if (filter != null) {
+            if (!filter.acceptRequest(request, requestData == null ? new byte[0] : requestData)) {
+                ByteBuf frame = frameEncoder.encodeRstStreamFrame(streamId, H2FrameRstStream.ErrorCode.CANCEL.ordinal());
+                try {
+                    forwardFrameBuf(frame);
+                } finally {
+                    frame.release();
+                }
+                return;
+            }
+        }
         byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
-                createHttpRequest(headersFrame, sessionKey),
+                request,
                 headersFrame.headers(), requestData == null ? new byte[0] : requestData);
         if (data == null) {
             throw new IllegalStateException();
@@ -358,7 +371,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
         if (httpHeadersFrame.isLast()) {
             if (server) {
-                handleRequest(httpHeadersFrame, null);
+                handleRequest(httpHeadersFrame, null, httpHeadersFrame.getStreamId());
             } else {
                 handleResponse(httpHeadersFrame, null);
             }

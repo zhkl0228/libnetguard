@@ -206,7 +206,7 @@ public class SSLProxyV2 implements Runnable {
         }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
-            boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.acceptHost(hostName);
+            boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.filterHost(hostName);
             doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName, filterHttp2, applicationProtocol, true);
         }
     }
