@@ -304,15 +304,12 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream, int streamId) {
         HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey);
         if (filter != null) {
-            if (!filter.acceptRequest(request, requestData == null ? new byte[0] : requestData, true)) {
+            if (filter.cancelRequest(request, requestData == null ? new byte[0] : requestData, true)) {
                 peer.writeCancelStreamFrame(streamId);
                 return;
             }
         }
-        byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
-                request,
-                requestData,
-                newStream);
+        byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId()), request, requestData, newStream);
         if (newStream) {
             writeMessage(headersFrame, data, endStreamOnFlush);
         } else {
@@ -342,13 +339,12 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private void handleRequest(HttpHeadersFrame headersFrame, byte[] requestData, int streamId) {
         HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey);
         if (filter != null) {
-            if (!filter.acceptRequest(request, requestData == null ? new byte[0] : requestData, false)) {
+            if (filter.cancelRequest(request, requestData == null ? new byte[0] : requestData, false)) {
                 peer.writeCancelStreamFrame(streamId);
                 return;
             }
         }
-        byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId()),
-                request,
+        byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId()), request,
                 headersFrame.headers(), requestData == null ? new byte[0] : requestData);
         if (data == null) {
             throw new IllegalStateException();

@@ -5,8 +5,8 @@ import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
-import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
+import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
@@ -16,8 +16,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ServerSocketFactory;
 import javax.net.SocketFactory;
-import javax.net.ssl.HandshakeCompletedEvent;
-import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLPeerUnverifiedException;
@@ -302,18 +300,15 @@ public class SSLProxyV2 implements Runnable {
                     secureSocket.setSSLParameters(parameters);
                 }
                 final CountDownLatch countDownLatch = new CountDownLatch(1);
-                secureSocket.addHandshakeCompletedListener(new HandshakeCompletedListener() {
-                    @Override
-                    public void handshakeCompleted(HandshakeCompletedEvent event) {
-                        try {
-                            peerCertificate = (X509Certificate) event.getPeerCertificates()[0];
-                            SSLSession session = event.getSession();
-                            log.debug("handshakeCompleted event={}, peerHost={}", event, session.getPeerHost());
-                        } catch (SSLPeerUnverifiedException e) {
-                            log.debug("handshakeCompleted failed", e);
-                        } finally {
-                            countDownLatch.countDown();
-                        }
+                secureSocket.addHandshakeCompletedListener(event -> {
+                    try {
+                        peerCertificate = (X509Certificate) event.getPeerCertificates()[0];
+                        SSLSession session = event.getSession();
+                        log.debug("handshakeCompleted event={}, peerHost={}", event, session.getPeerHost());
+                    } catch (SSLPeerUnverifiedException e) {
+                        log.debug("handshakeCompleted failed", e);
+                    } finally {
+                        countDownLatch.countDown();
                     }
                 });
                 secureSocket.startHandshake();

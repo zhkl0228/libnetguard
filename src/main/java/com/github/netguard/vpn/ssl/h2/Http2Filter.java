@@ -16,6 +16,6 @@ public interface Http2Filter {
 
     byte[] filterPollingResponse(Http2SessionKey sessionKey, HttpResponse response, byte[] responseData, boolean endStream);
 
-    boolean acceptRequest(HttpRequest request, byte[] requestData, boolean polling);
+    boolean cancelRequest(HttpRequest request, byte[] requestData, boolean polling);
 
 }

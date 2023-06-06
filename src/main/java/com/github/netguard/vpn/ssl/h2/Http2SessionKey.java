@@ -12,6 +12,10 @@ public class Http2SessionKey {
         this.streamId = streamId;
     }
 
+    public Http2Session getSession() {
+        return session;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

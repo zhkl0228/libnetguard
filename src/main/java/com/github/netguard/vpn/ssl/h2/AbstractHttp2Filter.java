@@ -82,8 +82,8 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     protected abstract byte[] filterPollingResponseInternal(HttpRequest request, HttpResponse response, byte[] responseData);
 
     @Override
-    public boolean acceptRequest(HttpRequest request, byte[] requestData, boolean polling) {
-        return true;
+    public boolean cancelRequest(HttpRequest request, byte[] requestData, boolean polling) {
+        return false;
     }
 
 }
