@@ -297,11 +297,15 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
+    private void writeCancelStreamFrame(int streamId) {
+        readRstStreamFrame(streamId, H2FrameRstStream.ErrorCode.CANCEL.ordinal());
+    }
+
     private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream, int streamId) {
         HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey);
         if (filter != null) {
             if (!filter.acceptRequest(request, requestData == null ? new byte[0] : requestData, true)) {
-                peer.readRstStreamFrame(streamId, H2FrameRstStream.ErrorCode.NO_ERROR.ordinal());
+                peer.writeCancelStreamFrame(streamId);
                 return;
             }
         }
@@ -339,7 +343,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey);
         if (filter != null) {
             if (!filter.acceptRequest(request, requestData == null ? new byte[0] : requestData, false)) {
-                peer.readRstStreamFrame(streamId, H2FrameRstStream.ErrorCode.NO_ERROR.ordinal());
+                peer.writeCancelStreamFrame(streamId);
                 return;
             }
         }
