@@ -9,6 +9,7 @@ import com.github.netguard.handler.session.Session;
 import com.github.netguard.handler.session.SessionCreator;
 import com.github.netguard.handler.session.SessionFactory;
 import com.github.netguard.vpn.AcceptResult;
+import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import org.krakenapps.pcap.Protocol;
@@ -268,7 +269,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onRequest(HttpSession session, com.github.netguard.handler.http.HttpRequest request) {
         if (log.isDebugEnabled()) {
             byte[] data = request.getPostData();
-            log.debug("onRequest {} bytes session={}, request={}\n{}\n{}", data == null ? 0 : data.length, session, request, request.getHeaderString(), parseParameters(request.getRequestUri()));
+            log.debug("onRequest {} bytes session={}, request={}\n{}{}\n", data == null ? 0 : data.length, session, request, request.getHeaderString(), parseParameters(request.getRequestUri()));
         }
     }
 
@@ -334,7 +335,20 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols) {
-        return null;
+        if (hostName != null) {
+            if (hostName.endsWith(".icloud.com") ||
+                    hostName.endsWith(".apple.com")) {
+                return AcceptResult.builder(AllowRule.CONNECT_TCP).build(); // Enable iOS traffic.
+            }
+            if (hostName.endsWith(".googleapis.com") ||
+                    hostName.endsWith(".google.com") ||
+                    "www.gstatic.com".equals(hostName)) {
+                return AcceptResult.builder(AllowRule.DISCONNECT).build(); // Disable android traffic.
+            }
+            return null;
+        } else {
+            return AcceptResult.builder(AllowRule.CONNECT_TCP).build();
+        }
     }
 
     @Override
@@ -352,7 +366,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         for (String pair : values) {
             index = pair.indexOf('=');
             if (index == -1) {
-                log.warn("parseParameters: {}", parameters);
+                log.debug("parseParameters failed {}", parameters);
                 continue;
             }
             String name = pair.substring(0, index);

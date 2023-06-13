@@ -86,8 +86,6 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
             }
             tunnelThread = null;
 
-            jni_clear(jni_context);
-
             log.debug("Stopped tunnel thread");
         }
     }
@@ -126,6 +124,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     private native void jni_stop(long context);
 
+    @SuppressWarnings("unused")
     private native void jni_clear(long context);
 
     private native int jni_get_mtu();
@@ -190,25 +189,31 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     private boolean isSupported(int protocol) {
         return (protocol == 1 /* ICMPv4 */ ||
                 protocol == 59 /* ICMPv6 */ ||
-                protocol == 6 /* TCP */ ||
-                protocol == 17 /* UDP */);
+                protocol == TCP_PROTOCOL ||
+                protocol == UDP_PROTOCOL);
     }
 
     private static final int SYSTEM_UID = 2000;
     private static final int TCP_PROTOCOL = 6;
+    private static final int UDP_PROTOCOL = 17;
 
     // Called from native code
     @SuppressWarnings("unused")
     private Allowed isAddressAllowed(Packet packet) {
         packet.allowed = false;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
-            if (packet.protocol == TCP_PROTOCOL && packet.version == 4) { // ipv4
+            if (packet.version == 4 && packet.protocol == TCP_PROTOCOL) { // ipv4
                 Allowed redirect = redirect(packet);
                 if (redirect != null) {
                     return redirect;
                 }
             }
-            packet.allowed = true;
+            if (packet.version == 4 && packet.protocol == UDP_PROTOCOL) {
+                packet.allowed = packet.dport == 53; // DNS
+            } else {
+                packet.allowed = true;
+            }
+            log.debug("isAddressAllowed: packet={}, allowed={}", packet, packet.allowed);
         }
 
         return packet.allowed ? new Allowed() : null;

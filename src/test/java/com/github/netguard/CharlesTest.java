@@ -43,6 +43,7 @@ public class CharlesTest extends TestCase {
 
         {
             String str = Base64.encode(rootCert.getEncoded());
+            System.out.println("CA=" + str);
             StringBuilder builder = new StringBuilder();
             builder.append("-----BEGIN CERTIFICATE-----\n");
             char[] cs = str.toCharArray();

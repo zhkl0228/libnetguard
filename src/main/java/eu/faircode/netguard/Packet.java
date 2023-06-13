@@ -47,21 +47,6 @@ public class Packet {
         return "88.88.88.88".equals(daddr) && dport == 88;
     }
 
-    final boolean isSSL(int[] sslPorts) {
-        if (sslPorts == null) {
-            throw new IllegalArgumentException("sslPorts is NULL.");
-        }
-        if (sslPorts.length == 0) {
-            return dport == 443;
-        }
-        for (int port : sslPorts) {
-            if (port == dport) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public InetSocketAddress createServerAddress() {
         try {
             return new InetSocketAddress(InetAddress.getByName(daddr), dport);
