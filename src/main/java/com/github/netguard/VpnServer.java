@@ -3,16 +3,27 @@ package com.github.netguard;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.VpnListener;
+import com.github.netguard.vpn.ssl.RootCert;
 import eu.faircode.netguard.ServiceSinkhole;
 import name.neykov.secrets.AgentAttach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.net.*;
-import java.nio.ByteBuffer;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +38,7 @@ public class VpnServer {
     private static final int UDP_PORT = 20230;
 
     private final ServerSocket serverSocket;
+    private final RootCert rootCert = RootCert.load();
 
     public VpnServer() throws IOException {
         this(UDP_PORT);
@@ -72,14 +84,14 @@ public class VpnServer {
                     ProxyVpn vpn = null;
                     if (useNetGuardCore) {
                         try {
-                            vpn = new ServiceSinkhole(socket, clients);
+                            vpn = new ServiceSinkhole(socket, clients, rootCert);
                         } catch(UnsatisfiedLinkError e) {
                             log.debug("init ServiceSinkhole", e);
                             useNetGuardCore = false;
                         }
                     }
                     if (vpn == null) {
-                        vpn = new ProxyVpnRunnable(socket, clients);
+                        vpn = new ProxyVpnRunnable(socket, clients, rootCert);
                     }
                     if (vpnListener != null) {
                         vpnListener.onConnectClient(vpn);
@@ -123,13 +135,12 @@ public class VpnServer {
 
     private void sendBroadcast() {
         try (DatagramSocket datagramSocket = new DatagramSocket()) {
-            byte[] magic = "vpn".getBytes();
-            ByteBuffer buffer = ByteBuffer.allocate(7);
-            buffer.putShort((short) magic.length);
-            buffer.put(magic);
-            buffer.putShort((short) serverSocket.getLocalPort());
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            DataOutput dataOutput = new DataOutputStream(baos);
+            dataOutput.writeUTF("vpn");
+            dataOutput.writeShort(serverSocket.getLocalPort());
 
-            byte[] data = buffer.array();
+            byte[] data = baos.toByteArray();
             if (log.isTraceEnabled()) {
                 log.trace(Inspector.inspectString(data, "sendBroadcast"));
             }

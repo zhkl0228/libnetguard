@@ -3,6 +3,7 @@ package eu.faircode.netguard;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.ssl.RootCert;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,8 +35,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     private final long jni_context;
     private final int fd;
 
-    public ServiceSinkhole(Socket socket, List<ProxyVpn> clients) {
-        super(clients);
+    public ServiceSinkhole(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
+        super(clients, rootCert);
         int mtu = jni_get_mtu();
 
         this.jni_context = jni_init(30);

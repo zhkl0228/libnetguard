@@ -6,24 +6,18 @@ import com.github.netguard.vpn.ssl.RootCert;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
-import java.security.Security;
 import java.util.List;
 
 public abstract class ProxyVpn implements Runnable, InspectorVpn {
-
-    static {
-        Security.addProvider(new BouncyCastleProvider());
-    }
 
     protected final List<ProxyVpn> clients;
 
     private final RootCert rootCert;
 
-    protected ProxyVpn(List<ProxyVpn> clients) {
+    protected ProxyVpn(List<ProxyVpn> clients, RootCert rootCert) {
         this.clients = clients;
-        this.rootCert = RootCert.load();
+        this.rootCert = rootCert;
     }
 
     protected abstract void stop();

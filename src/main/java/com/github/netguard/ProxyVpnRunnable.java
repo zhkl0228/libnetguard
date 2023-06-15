@@ -2,6 +2,7 @@ package com.github.netguard;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.PortRedirector;
+import com.github.netguard.vpn.ssl.RootCert;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
 import org.slf4j.Logger;
@@ -45,8 +46,8 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
 
     private final ExecutorService pingThreadPool;
 
-    ProxyVpnRunnable(Socket socket, List<ProxyVpn> clients) throws IOException {
-        super(clients);
+    ProxyVpnRunnable(Socket socket, List<ProxyVpn> clients, RootCert rootCert) throws IOException {
+        super(clients, rootCert);
         this.socket = socket;
         this.vpnReadStream = new DataInputStream(socket.getInputStream());
 
@@ -63,7 +64,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
         this.pingThreadPool = new ThreadPoolExecutor(
                 1, 20, // 1 - 20 parallel pings max
                 60L, TimeUnit.SECONDS,
-                new SynchronousQueue<Runnable>(),
+                new SynchronousQueue<>(),
                 new ThreadPoolExecutor.DiscardPolicy() // Replace running pings if there's too many
         );
         SessionManager manager = new SessionManager(this);

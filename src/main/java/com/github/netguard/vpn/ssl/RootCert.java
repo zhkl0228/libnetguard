@@ -1,6 +1,7 @@
 package com.github.netguard.vpn.ssl;
 
 import eu.faircode.netguard.ServiceSinkhole;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 
 import java.io.IOException;
@@ -9,13 +10,18 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.security.KeyStore;
 import java.security.PrivateKey;
+import java.security.Security;
 import java.security.cert.X509Certificate;
 
 public class RootCert {
 
+    static {
+        Security.addProvider(new BouncyCastleProvider());
+    }
+
     final X509Certificate rootCert;
     final PrivateKey privateKey;
-    final String pem;
+    public final String pem;
 
     private RootCert(X509Certificate rootCert, PrivateKey privateKey, String pem) {
         this.rootCert = rootCert;

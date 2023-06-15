@@ -86,7 +86,7 @@ class KrakenHttpRequest implements com.github.netguard.handler.http.HttpRequest 
     }
     @Override
     public String getRequestMethod() {
-        return request.getMethod().toString();
+        return String.valueOf(request.getMethod());
     }
     @Override
     public String getContentType() {

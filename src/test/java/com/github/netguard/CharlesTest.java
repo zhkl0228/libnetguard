@@ -2,6 +2,7 @@ package com.github.netguard;
 
 import cn.hutool.core.codec.Base64;
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.util.ZipUtil;
 import junit.framework.TestCase;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
@@ -42,8 +43,9 @@ public class CharlesTest extends TestCase {
         System.out.println(rootCert);
 
         {
-            String str = Base64.encode(rootCert.getEncoded());
-            System.out.println("CA=" + str);
+            byte[] data = rootCert.getEncoded();
+            String str = Base64.encode(data);
+            System.out.println("CA=" + str + ", length=" + str.length() + ", data.length=" + data.length + ", zlibLength=" + ZipUtil.zlib(str.getBytes(), 9).length + ", gzipLength=" + ZipUtil.gzip(str.getBytes()).length);
             StringBuilder builder = new StringBuilder();
             builder.append("-----BEGIN CERTIFICATE-----\n");
             char[] cs = str.toCharArray();
@@ -54,7 +56,7 @@ public class CharlesTest extends TestCase {
                 }
             }
             builder.append("\n-----END CERTIFICATE-----\n");
-            System.out.println(builder);
+            System.out.println(builder + "length=" + builder.length());
         }
 
         PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, null);
