@@ -356,7 +356,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         return null;
     }
 
-    protected static Map<String, String> parseParameters(String parameters) {
+    public static Map<String, String> parseParameters(String parameters) {
         int index = parameters.lastIndexOf('?');
         if (index != -1) {
             parameters = parameters.substring(index + 1);

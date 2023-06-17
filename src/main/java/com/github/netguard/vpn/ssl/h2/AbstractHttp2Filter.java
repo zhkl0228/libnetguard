@@ -1,16 +1,26 @@
 package com.github.netguard.vpn.ssl.h2;
 
+import cn.hutool.core.io.IORuntimeException;
+import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.ZipUtil;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
 @SuppressWarnings("unused")
 public abstract class AbstractHttp2Filter implements Http2Filter {
+
+    private static final Logger log = LoggerFactory.getLogger(AbstractHttp2Filter.class);
 
     private static class RequestData {
         final HttpRequest request;
@@ -84,6 +94,34 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     @Override
     public boolean cancelRequest(HttpRequest request, byte[] requestData, boolean polling) {
         return false;
+    }
+
+    @Override
+    public boolean filterHost(String hostName) {
+        return true;
+    }
+
+    protected final byte[] decodeContent(String contentEncoding, byte[] data) {
+        if (contentEncoding == null) {
+            return data;
+        }
+        try {
+            switch (contentEncoding) {
+                case "gzip": {
+                    return ZipUtil.unGzip(data);
+                }
+                case "br": {
+                    try (InputStream inputStream = new BrotliCompressorInputStream(new ByteArrayInputStream(data))) {
+                        return IoUtil.readBytes(inputStream);
+                    }
+                }
+                default:
+                    throw new UnsupportedOperationException("contentEncoding=" + contentEncoding);
+            }
+        } catch (IOException | IORuntimeException e) {
+            log.debug("decodeContent failed: contentEncoding={}", contentEncoding, e);
+            return data;
+        }
     }
 
 }
