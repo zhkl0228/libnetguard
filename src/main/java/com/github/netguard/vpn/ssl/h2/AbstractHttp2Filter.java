@@ -3,6 +3,7 @@ package com.github.netguard.vpn.ssl.h2;
 import cn.hutool.core.io.IORuntimeException;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.ZipUtil;
+import com.alibaba.fastjson.JSONObject;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
@@ -15,6 +16,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 @SuppressWarnings("unused")
@@ -66,6 +68,30 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
             headers.setInt(HttpHeaderNames.CONTENT_LENGTH, fakeResponseData.length);
         }
         return fakeResponseData;
+    }
+
+    /**
+     * 序列化请求与响应
+     */
+    protected final JSONObject serializeRequest(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData) {
+        JSONObject obj = new JSONObject();
+        obj.put("method", request.method());
+        obj.put("uri", request.uri());
+        obj.put("requestHeaders", createHeadersObject(request.headers()));
+        obj.put("requestData", requestData);
+        obj.put("responseCode", response.status().code());
+        obj.put("responseHeaders", createHeadersObject(response.headers()));
+        obj.put("responseData", responseData);
+        return obj;
+    }
+
+    private JSONObject createHeadersObject(HttpHeaders headers) {
+        JSONObject obj = new JSONObject();
+        for (Iterator<Map.Entry<String, String>> iterator = headers.iteratorAsString(); iterator.hasNext(); ) {
+            Map.Entry<String, String> entry = iterator.next();
+            obj.put(entry.getKey(), entry.getValue());
+        }
+        return obj;
     }
 
     protected abstract byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData);
