@@ -75,7 +75,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
      */
     protected final JSONObject serializeRequest(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData) {
         JSONObject obj = new JSONObject(true);
-        obj.put("method", request.method());
+        obj.put("method", request.method().name());
         obj.put("uri", request.uri());
         obj.put("requestHeaders", createHeadersObject(request.headers()));
         obj.put("requestData", requestData);
