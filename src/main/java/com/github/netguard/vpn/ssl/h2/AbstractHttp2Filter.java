@@ -74,7 +74,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
      * 序列化请求与响应
      */
     protected final JSONObject serializeRequest(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData) {
-        JSONObject obj = new JSONObject();
+        JSONObject obj = new JSONObject(true);
         obj.put("method", request.method());
         obj.put("uri", request.uri());
         obj.put("requestHeaders", createHeadersObject(request.headers()));
@@ -86,7 +86,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     }
 
     private JSONObject createHeadersObject(HttpHeaders headers) {
-        JSONObject obj = new JSONObject();
+        JSONObject obj = new JSONObject(true);
         for (Iterator<Map.Entry<String, String>> iterator = headers.iteratorAsString(); iterator.hasNext(); ) {
             Map.Entry<String, String> entry = iterator.next();
             obj.put(entry.getKey(), entry.getValue());
