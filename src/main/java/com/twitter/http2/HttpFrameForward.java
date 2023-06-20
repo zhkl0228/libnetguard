@@ -233,7 +233,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         if (httpHeadersFrame != null) {
             throw new IllegalStateException("readHeadersFrame=" + httpHeadersFrame);
         }
-        httpHeadersFrame = new DefaultHttpHeadersFrame(streamId);
+        httpHeadersFrame = new NetGuardHttpHeadersFrame(streamId);
         httpHeadersFrame.setLast(endStream);
         httpHeadersFrame.setExclusive(exclusive);
         httpHeadersFrame.setDependency(dependency);
@@ -529,13 +529,13 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private static HttpRequest createHttpRequest(HttpHeadersFrame headersFrame, String sessionKey) {
         HttpHeaders headers = headersFrame.headers().copy();
         HttpMethod method = HttpMethod.valueOf(headers.get(":method"));
-        String url = headers.get(":path");
+        String uri = headers.get(":path");
 
         headers.remove(":method");
         headers.remove(":path");
 
 
-        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, url);
+        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, uri, false);
 
         // Remove the scheme header
         headers.remove(":scheme");
@@ -556,7 +556,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         // Create the first line of the request from the name/value pairs
         HttpResponseStatus status = HttpResponseStatus.valueOf(Integer.parseInt(headers.get(":status")));
         headers.remove(":status");
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
+        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, false);
         headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
         headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
         headers.set("x-netguard-session", sessionKey);
