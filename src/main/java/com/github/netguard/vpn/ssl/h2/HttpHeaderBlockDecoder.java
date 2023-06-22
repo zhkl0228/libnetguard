@@ -80,13 +80,12 @@ public final class HttpHeaderBlockDecoder {
 
     private void decodeInputStream(ByteBufInputStream inputStream, final HeaderListener headerListener) throws IOException {
         if (log.isDebugEnabled()) {
-            decoder.decode(inputStream, new HeaderListener() {
-                @Override
-                public void addHeader(byte[] name, byte[] value, boolean sensitive) {
+            decoder.decode(inputStream, (name, value, sensitive) -> {
+                if (log.isDebugEnabled()) {
                     log.debug("addHeader name={}, value={}, sensitive={}", new String(name, StandardCharsets.UTF_8),
                             new String(value, StandardCharsets.UTF_8), sensitive);
-                    headerListener.addHeader(name, value, sensitive);
                 }
+                headerListener.addHeader(name, value, sensitive);
             });
         } else {
             decoder.decode(inputStream, headerListener);
