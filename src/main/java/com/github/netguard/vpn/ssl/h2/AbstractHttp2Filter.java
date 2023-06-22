@@ -89,7 +89,13 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
         JSONObject obj = new JSONObject(true);
         for (Iterator<Map.Entry<String, String>> iterator = headers.iteratorAsString(); iterator.hasNext(); ) {
             Map.Entry<String, String> entry = iterator.next();
-            obj.put(entry.getKey(), entry.getValue());
+            String name = entry.getKey();
+            if ("x-netguard-session".equalsIgnoreCase(name) ||
+                    "x-http2-stream-id".equalsIgnoreCase(name) ||
+                    "x-http2-stream-weight".equalsIgnoreCase(name)) {
+                continue;
+            }
+            obj.put(name, entry.getValue());
         }
         return obj;
     }
