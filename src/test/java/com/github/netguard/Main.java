@@ -11,6 +11,7 @@ import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.ServiceSinkhole;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import io.netty.util.ResourceLeakDetector;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
@@ -21,6 +22,7 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) throws IOException {
+        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
         Logger.getLogger(PacketDecoder.class).setLevel(Level.INFO);
