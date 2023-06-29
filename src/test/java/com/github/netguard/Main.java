@@ -9,6 +9,7 @@ import com.github.netguard.vpn.ssl.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.ServiceSinkhole;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.util.ResourceLeakDetector;
@@ -67,7 +68,7 @@ public class Main {
         }
 
         @Override
-        protected byte[] filterRequestInternal(HttpRequest request, byte[] requestData) {
+        protected byte[] filterRequestInternal(HttpRequest request, HttpHeaders headers, byte[] requestData) {
             Inspector.inspect(requestData, "filterRequest=" + request);
             return requestData;
         }

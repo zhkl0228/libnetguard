@@ -41,12 +41,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
@@ -338,7 +337,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         if (hostName != null) {
             if (hostName.endsWith(".icloud.com") ||
                     hostName.endsWith(".apple.com")) {
-                return AcceptResult.builder(AllowRule.CONNECT_TCP).build(); // Enable iOS traffic.
+                return configAcceptResultBuilder(hostName, port, AcceptResult.builder(AllowRule.CONNECT_TCP)).build(); // Enable iOS traffic.
             }
             if (hostName.endsWith(".googleapis.com") ||
                     hostName.endsWith(".google.com") ||
@@ -347,8 +346,13 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             }
             return null;
         } else {
-            return AcceptResult.builder(AllowRule.CONNECT_TCP).build();
+            return configAcceptResultBuilder(null, port, AcceptResult.builder(AllowRule.CONNECT_TCP)).build();
         }
+    }
+
+    @SuppressWarnings("unused")
+    protected AcceptResult.AcceptResultBuilder configAcceptResultBuilder(String hostName, int port, AcceptResult.AcceptResultBuilder builder) {
+        return builder;
     }
 
     @Override
@@ -374,5 +378,32 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             map.put(name, URLUtil.decode(value, StandardCharsets.UTF_8));
         }
         return map;
+    }
+
+    @SuppressWarnings("unused")
+    public static boolean isVpnConnected() {
+        try {
+            Enumeration<NetworkInterface> enumeration = NetworkInterface.getNetworkInterfaces();
+            while (enumeration.hasMoreElements()) {
+                NetworkInterface networkInterface = enumeration.nextElement();
+                if (networkInterface.isLoopback() ||
+                        !networkInterface.isUp()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addressEnumeration = networkInterface.getInetAddresses();
+                while (addressEnumeration.hasMoreElements()) {
+                    InetAddress address = addressEnumeration.nextElement();
+                    if (address instanceof Inet6Address) {
+                        continue;
+                    }
+                    if (networkInterface.isPointToPoint()) {
+                        return true;
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        return false;
     }
 }
