@@ -24,7 +24,7 @@ public class Main {
     public static void main(String[] args) throws IOException {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
-        Logger.getLogger(PacketDecoder.class).setLevel(Level.INFO);
+        Logger.getLogger(PacketDecoder.class).setLevel(Level.DEBUG);
         Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
         Logger.getLogger("edu.baylor.cs.csi5321.spdy.frames").setLevel(Level.INFO);

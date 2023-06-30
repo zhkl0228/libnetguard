@@ -1,6 +1,7 @@
 package com.github.netguard;
 
 import cn.hutool.core.codec.Base64;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.ZipUtil;
 import junit.framework.TestCase;
@@ -9,10 +10,8 @@ import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.StringWriter;
-import java.io.Writer;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.Security;
@@ -68,6 +67,7 @@ public class CharlesTest extends TestCase {
             StringWriter writer = new StringWriter();
             exportPem(writer, certs);
             System.out.println(writer);
+            FileUtil.writeString(writer.toString(), new File("target/ca.pem"), StandardCharsets.UTF_8);
         }
     }
 
