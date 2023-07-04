@@ -37,18 +37,13 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
 
     @Override
     public final byte[] filterRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData) {
-        String contentEncoding = headers.get("content-encoding");
-        boolean isDeflate = "deflate".equalsIgnoreCase(contentEncoding);
-        byte[] data = isDeflate ? ZipUtil.unZlib(requestData) : requestData;
-        requestMap.put(sessionKey, new RequestData(request, data));
-        byte[] fakeRequestData = filterRequestInternal(request, headers, data);
-        if (isDeflate) {
-            fakeRequestData = ZipUtil.zlib(fakeRequestData, 9);
-        }
+        requestMap.put(sessionKey, new RequestData(request, requestData));
+        byte[] fakeRequestData = filterRequestInternal(request, headers, requestData);
         if (fakeRequestData.length != requestData.length &&
                 headers.contains(HttpHeaderNames.CONTENT_LENGTH)) {
             headers.setInt(HttpHeaderNames.CONTENT_LENGTH, fakeRequestData.length);
         }
+        headers.set(":path", request.uri());
         return fakeRequestData;
     }
 
@@ -139,6 +134,9 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
         }
         try {
             switch (contentEncoding) {
+                case "deflate": {
+                    return ZipUtil.unZlib(data);
+                }
                 case "gzip": {
                     return ZipUtil.unGzip(data);
                 }
