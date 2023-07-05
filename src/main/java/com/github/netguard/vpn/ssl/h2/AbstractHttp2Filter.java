@@ -43,6 +43,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
                 headers.contains(HttpHeaderNames.CONTENT_LENGTH)) {
             headers.setInt(HttpHeaderNames.CONTENT_LENGTH, fakeRequestData.length);
         }
+        headers.set(":method", request.method().name());
         headers.set(":path", request.uri());
         return fakeRequestData;
     }
