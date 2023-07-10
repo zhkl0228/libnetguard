@@ -41,11 +41,7 @@ class NetGuardHttpSettingsFrame implements HttpSettingsFrame {
 
     @Override
     public int getValue(int id) {
-        if (settingsMap.containsKey(id)) {
-            return settingsMap.get(id);
-        } else {
-            return -1;
-        }
+        return settingsMap.getOrDefault(id, -1);
     }
 
     @Override

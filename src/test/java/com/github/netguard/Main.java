@@ -6,18 +6,23 @@ import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
 import com.github.netguard.vpn.ssl.h2.AbstractHttp2Filter;
+import com.github.netguard.vpn.ssl.h2.CancelResult;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.ServiceSinkhole;
+import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.ResourceLeakDetector;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.Scanner;
 
 public class Main {
@@ -27,7 +32,7 @@ public class Main {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
         Logger.getLogger(PacketDecoder.class).setLevel(Level.DEBUG);
-        Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
+        Logger.getLogger(HttpDecoder.class).setLevel(Level.DEBUG);
         Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
         Logger.getLogger("edu.baylor.cs.csi5321.spdy.frames").setLevel(Level.INFO);
         VpnServer vpnServer = new VpnServer();
@@ -65,6 +70,19 @@ public class Main {
                 System.out.println("NOT filter http2 host=" + hostName);
                 return false;
             }
+        }
+
+        @Override
+        public CancelResult cancelRequest(HttpRequest request, byte[] requestData, boolean polling) {
+            String host = request.headers().get("host");
+            if ("weixin.qq.com".equals(host) && "/".equals(request.uri())) {
+                HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+                HttpHeaders headers = response.headers();
+                headers.set("content-type", "text/plain; charset=utf-8");
+                headers.set("cache-control", "no-cache, must-revalidate");
+                return CancelResult.fake(response, ("FAKE_HTML: " + new Date()).getBytes());
+            }
+            return super.cancelRequest(request, requestData, polling);
         }
 
         @Override

@@ -24,6 +24,6 @@ public interface Http2Filter {
      * 针对需要过滤的 http2 请求，是否取消执行
      * @return <code>true</code>则会取消该请求的执行
      */
-    boolean cancelRequest(HttpRequest request, byte[] requestData, boolean polling);
+    CancelResult cancelRequest(HttpRequest request, byte[] requestData, boolean polling);
 
 }

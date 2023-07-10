@@ -78,7 +78,7 @@ public class HttpHeaderBlockEncoder {
     /**
      * Encode the header block frame.
      */
-    public ByteBuf encode(HttpHeaderBlockFrame frame) throws IOException {
+    public synchronized ByteBuf encode(HttpHeaderBlockFrame frame) throws IOException {
         ByteBuf buf = Unpooled.buffer();
         ByteBufOutputStream out = new ByteBufOutputStream(buf);
 

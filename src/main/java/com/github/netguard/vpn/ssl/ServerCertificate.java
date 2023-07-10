@@ -89,7 +89,7 @@ class ServerCertificate {
         String alias = "tcpcap";
         Authority authority = new Authority(null, alias, alias.toCharArray(), "TCPcap Proxy SSL Proxying", "MTX", "MTX Ltd", "MTX", "MTX Ltd");
         KeyStore ks = createServerCertificate(commonName,
-                subjectAlternativeNames, authority, rootCert.rootCert, rootCert.privateKey);
+                subjectAlternativeNames, authority, rootCert.rootCert, rootCert.privateKey, peerCertificate);
         if (log.isTraceEnabled()) {
             log.trace("generateServerContext: {}", ks.getCertificate(alias));
         }
@@ -153,8 +153,8 @@ class ServerCertificate {
     private static final int FAKE_KEYSIZE = 2048;
 
     private static KeyStore createServerCertificate(String commonName,
-                                                   SubjectAlternativeNameHolder subjectAlternativeNames,
-                                                   Authority authority, Certificate caCert, PrivateKey caPrivateKey)
+                                                    SubjectAlternativeNameHolder subjectAlternativeNames,
+                                                    Authority authority, X509Certificate caCert, PrivateKey caPrivateKey, X509Certificate peerCertificate)
             throws NoSuchAlgorithmException, NoSuchProviderException,
             IOException, OperatorCreationException, CertificateException,
             InvalidKeyException, SignatureException, KeyStoreException {
@@ -172,7 +172,7 @@ class ServerCertificate {
         X500Name subject = name.build();
 
         X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
-                issuer, serial, NOT_BEFORE, NOT_AFTER, subject,
+                issuer, serial, peerCertificate.getNotBefore(), peerCertificate.getNotAfter(), subject,
                 keyPair.getPublic());
 
         builder.addExtension(Extension.subjectKeyIdentifier, false,
@@ -222,21 +222,6 @@ class ServerCertificate {
 
     private static final String SIGNATURE_ALGORITHM = "SHA512WithRSAEncryption";
 
-    /**
-     * Current time minus 1 year, just in case software clock goes back due to
-     * time synchronization
-     */
-    private static final Date NOT_BEFORE = new Date(System.currentTimeMillis() - 86400000L * 365);
-
-    /**
-     * The maximum possible value in X.509 specification: 9999-12-31 23:59:59,
-     * new Date(253402300799000L), but Apple iOS 8 fails with a certificate
-     * expiration date grater than Mon, 24 Jan 6084 02:07:59 GMT (issue #6).
-     * Hundred years in the future from starting the proxy should be enough.
-     */
-    private static final Date NOT_AFTER = new Date(
-            System.currentTimeMillis() + 86400000L * 365);
-
     private static final String KEYGEN_ALGORITHM = "RSA";
 
     private static final String SECURE_RANDOM_ALGORITHM = "SHA1PRNG";
@@ -256,10 +241,10 @@ class ServerCertificate {
         rnd.setSeed(System.currentTimeMillis());
         // prevent browser certificate caches, cause of doubled serial numbers
         // using 48bit random number
-        long sl = ((long) rnd.nextInt()) << 32 | (rnd.nextInt() & 0xFFFFFFFFL);
+        long random = ((long) rnd.nextInt()) << 32 | (rnd.nextInt() & 0xffffffffL);
         // let reserve of 16 bit for increasing, serials have to be positive
-        sl = sl & 0x0000FFFFFFFFFFFFL;
-        return sl;
+        random = random & 0x0000ffffffffffffL;
+        return random;
     }
 
 }

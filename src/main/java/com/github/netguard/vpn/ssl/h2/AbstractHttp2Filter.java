@@ -87,6 +87,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
             Map.Entry<String, String> entry = iterator.next();
             String name = entry.getKey();
             if ("x-netguard-session".equalsIgnoreCase(name) ||
+                    "x-netguard-fake-response".equals(name) ||
                     "x-http2-stream-id".equalsIgnoreCase(name) ||
                     "x-http2-stream-weight".equalsIgnoreCase(name)) {
                 continue;
@@ -120,8 +121,8 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     protected abstract byte[] filterPollingResponseInternal(HttpRequest request, HttpResponse response, byte[] responseData);
 
     @Override
-    public boolean cancelRequest(HttpRequest request, byte[] requestData, boolean polling) {
-        return false;
+    public CancelResult cancelRequest(HttpRequest request, byte[] requestData, boolean polling) {
+        return null;
     }
 
     @Override
