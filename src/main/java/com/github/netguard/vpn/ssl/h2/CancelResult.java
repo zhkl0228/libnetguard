@@ -4,8 +4,10 @@ import io.netty.handler.codec.http.HttpResponse;
 
 public class CancelResult {
 
+    private static final CancelResult CANCEL_RESULT = new CancelResult(true, null, null);
+
     public static CancelResult cancel() {
-        return new CancelResult(true, null, null);
+        return CANCEL_RESULT;
     }
 
     public static CancelResult fake(HttpResponse response, byte[] responseData) {
