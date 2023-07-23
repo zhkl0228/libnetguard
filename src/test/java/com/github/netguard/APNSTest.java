@@ -27,17 +27,21 @@ public class APNSTest {
                     .setClientCredentials(inputStream, "")
                     .setConcurrentConnections(1)
                     .build();
-            String apnsToken = "11df5144a2f4eb0a82389a13fc9b2a03009ddbf60f16c83b45cb19872cddcc14";
-            ApnsPayloadBuilder builder = new SimpleApnsPayloadBuilder();
-            builder.setContentAvailable(true);
-            ApnsPushNotification notification = new SimpleApnsPushNotification(apnsToken, "com.github.zhkl0228.inspector.vpn", builder.build(),
-                    null, DeliveryPriority.CONSERVE_POWER, PushType.BACKGROUND, null, null);
-            System.out.println(notification);
-            Future<PushNotificationResponse<ApnsPushNotification>> future = client.sendNotification(notification);
-            PushNotificationResponse<ApnsPushNotification> response = future.get(30, TimeUnit.SECONDS);
-            System.out.println(response);
-            if (!response.isAccepted()) {
-                throw new IllegalStateException(response.getRejectionReason().orElse(response.toString()));
+            try {
+                String apnsToken = "11df5144a2f4eb0a82389a13fc9b2a03009ddbf60f16c83b45cb19872cddcc14";
+                ApnsPayloadBuilder builder = new SimpleApnsPayloadBuilder();
+                builder.setContentAvailable(true);
+                ApnsPushNotification notification = new SimpleApnsPushNotification(apnsToken, "com.github.zhkl0228.inspector.vpn", builder.build(),
+                        null, DeliveryPriority.CONSERVE_POWER, PushType.BACKGROUND, null, null);
+                System.out.println(notification);
+                Future<PushNotificationResponse<ApnsPushNotification>> future = client.sendNotification(notification);
+                PushNotificationResponse<ApnsPushNotification> response = future.get(30, TimeUnit.SECONDS);
+                System.out.println(response);
+                if (!response.isAccepted()) {
+                    throw new IllegalStateException(response.getRejectionReason().orElse(response.toString()));
+                }
+            } finally {
+                client.close();
             }
         }
     }
