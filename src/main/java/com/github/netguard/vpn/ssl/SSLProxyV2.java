@@ -1,6 +1,7 @@
 package com.github.netguard.vpn.ssl;
 
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.net.DefaultTrustManager;
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
@@ -16,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ServerSocketFactory;
 import javax.net.SocketFactory;
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLPeerUnverifiedException;
@@ -23,6 +25,7 @@ import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.DataInput;
@@ -39,7 +42,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -81,6 +87,7 @@ public class SSLProxyV2 implements Runnable {
         this.hostName = null;
         this.applicationProtocol = null;
         this.allowFilterH2 = false;
+        this.applicationLayerProtocols = Collections.emptyList();
 
         ServerSocketFactory factory = ServerSocketFactory.getDefault();
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
@@ -94,18 +101,20 @@ public class SSLProxyV2 implements Runnable {
     private final String hostName;
     private final String applicationProtocol;
     private final boolean allowFilterH2;
+    private final List<String> applicationLayerProtocols;
 
     private SSLProxyV2(IPacketCapture packetCapture, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket,
-                       String hostName, String applicationProtocol, boolean allowFilterH2) throws IOException {
+                       ClientHelloRecord record, String applicationProtocol, boolean allowFilterH2) throws IOException {
         this.rootCert = null;
 
         this.packetCapture = packetCapture;
         this.packet = packet;
         this.timeout = timeout;
         this.secureSocket = secureSocket;
-        this.hostName = hostName;
+        this.hostName = record.hostName;
         this.applicationProtocol = applicationProtocol;
         this.allowFilterH2 = allowFilterH2;
+        this.applicationLayerProtocols = record.applicationLayerProtocols;
 
         SSLServerSocketFactory factory = context.getServerSocketFactory();
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
@@ -195,12 +204,21 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private void handleSSLSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName) throws IOException, InterruptedException {
-        log.debug("ssl proxy remote={}, socket={}, local={}, hostName={}, applicationProtocol={}", remote, socket, local, hostName, applicationProtocol);
-        if (applicationProtocol != null && !applicationProtocol.isEmpty()) {
+        log.debug("ssl proxy remote={}, socket={}, local={}, hostName={}, applicationLayerProtocols={}", remote, socket, local, hostName, applicationLayerProtocols);
+        if (!applicationLayerProtocols.isEmpty()) {
             SSLSocket sslSocket = (SSLSocket) local;
-            SSLParameters parameters = sslSocket.getSSLParameters();
-            parameters.setApplicationProtocols(new String[]{applicationProtocol});
-            sslSocket.setSSLParameters(parameters);
+            sslSocket.setHandshakeApplicationProtocolSelector((sslSocket1, clientProtocols) -> {
+                log.debug("handshakeApplicationProtocolSelector sslSocket={}, clientProtocols={}, applicationProtocol={}", sslSocket1, clientProtocols, applicationProtocol);
+                if (clientProtocols.contains(applicationProtocol)) {
+                    return applicationProtocol;
+                }
+                for (String protocol : clientProtocols) {
+                    if (applicationProtocol.startsWith(protocol)) {
+                        return protocol;
+                    }
+                }
+                return applicationProtocol;
+            });
         }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
@@ -292,7 +310,11 @@ public class SSLProxyV2 implements Runnable {
                 }
             }
         } else {
-            SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+            SSLContext context = SSLContext.getInstance("TLSv1.2");
+            SecureRandom random = new SecureRandom();
+            random.setSeed(System.currentTimeMillis());
+            context.init(new KeyManager[0], new TrustManager[]{DefaultTrustManager.INSTANCE}, random);
+            SSLSocketFactory factory = context.getSocketFactory();
             Socket app = null;
             SSLSocket secureSocket = null;
             try {
@@ -326,7 +348,7 @@ public class SSLProxyV2 implements Runnable {
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
                 SSLContext serverContext = serverCertificate.createSSLContext(rootCert);
                 SSLProxyV2 proxy = new SSLProxyV2(packetCapture, packet, timeout, serverContext, secureSocket,
-                        record.hostName, secureSocket.getApplicationProtocol(), allowRule == AllowRule.FILTER_H2);
+                        record, secureSocket.getApplicationProtocol(), allowRule == AllowRule.FILTER_H2);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                         socketOut.write(record.readData);

@@ -1,7 +1,7 @@
 package com.github.netguard.vpn.ssl;
 
 import java.io.ByteArrayOutputStream;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ClientHelloRecord {
@@ -10,7 +10,7 @@ public class ClientHelloRecord {
     public final List<String> applicationLayerProtocols;
 
     ClientHelloRecord(ByteArrayOutputStream baos) {
-        this(baos, null, Collections.<String>emptyList());
+        this(baos, null, new ArrayList<>());
     }
 
     ClientHelloRecord(ByteArrayOutputStream baos, String hostName, List<String> applicationLayerProtocols) {

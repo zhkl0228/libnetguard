@@ -98,7 +98,11 @@ public class StreamForward implements Runnable {
                 }
             }
         } catch (SSLHandshakeException e) {
-            log.info(String.format("handshake with %s => %s/%d failed: {}", hostName, serverIp, serverPort), e.getMessage());
+            if (log.isDebugEnabled()) {
+                log.warn(String.format("handshake with %s => %s/%d failed: {}", hostName, serverIp, serverPort), e);
+            } else {
+                log.info(String.format("handshake with %s => %s/%d failed: {}", hostName, serverIp, serverPort), e.getMessage());
+            }
             socketException = e;
         } catch (IOException e) {
             log.trace("stream forward exception: socket={}", socket, e);

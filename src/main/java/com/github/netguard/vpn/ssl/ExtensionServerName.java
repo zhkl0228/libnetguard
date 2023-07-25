@@ -14,7 +14,6 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class ExtensionServerName {
@@ -135,7 +134,7 @@ public class ExtensionServerName {
             return new ClientHelloRecord(baos);
         } else {
             String hostName = serverNames.get(0);
-            return new ClientHelloRecord(baos, hostName, Collections.unmodifiableList(applicationLayerProtocols));
+            return new ClientHelloRecord(baos, hostName, applicationLayerProtocols);
         }
     }
 
