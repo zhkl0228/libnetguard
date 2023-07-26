@@ -206,7 +206,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         log.debug("onSSLProxyEstablish {} {} => {} applicationProtocol={}", hostName, client, server, applicationProtocol);
         try {
             TcpSessionKey key = new SSLSessionKey(client.getAddress(), server.getAddress(), client.getPort(), server.getPort(), hostName);
-            httpDecoder.onEstablish(new SSLProxySession(key, applicationProtocol));
+            httpDecoder.onEstablish(new SSLProxySession(key, hostName, applicationProtocol));
         } catch (Exception e) {
             log.warn("onSSLProxyEstablish", e);
         }
