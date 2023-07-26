@@ -37,6 +37,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.text.SimpleDateFormat;
@@ -63,9 +64,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private final Http2Filter filter;
     private final String sessionKey;
 
-    public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName,
+    public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName,
                             Http2Session session) {
-        super(inputStream, outputStream, server, clientIp, serverIp, clientPort, serverPort, countDownLatch, socket, packetCapture, hostName, true);
+        super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, packetCapture, hostName, true);
         this.frameDecoder = new NetGuardFrameDecoder(server, this);
         this.frameEncoder = new HttpFrameEncoder();
 
@@ -74,7 +75,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
         this.session = session;
         this.filter = packetCapture == null ? null : packetCapture.getH2Filter();
-        this.sessionKey = String.format("%s:%d => %s:%d", clientIp, clientPort, serverIp, serverPort);
+        this.sessionKey = String.format("%s:%d => %s:%d", clientSocketAddress.getAddress().getHostAddress(), clientSocketAddress.getPort(),
+                serverSocketAddress.getAddress().getHostAddress(), serverSocketAddress.getPort());
     }
 
     private HttpFrameForward peer;
@@ -101,7 +103,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 outputStream.write(preface);
 
                 if (packetCapture != null) {
-                    packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, preface);
+                    packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, preface);
                 }
             }
             while (!canStop) {
@@ -145,6 +147,10 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     log.debug("forward server={}, inHash={}, outHash={}, input={}, output={}", server, DigestUtil.md5Hex(input), DigestUtil.md5Hex(output), HexUtil.encodeHexStr(input), HexUtil.encodeHexStr(output));
                 }
                 if (log.isTraceEnabled()) {
+                    String clientIp = clientSocketAddress.getAddress().getHostAddress();
+                    int clientPort = clientSocketAddress.getPort();
+                    String serverIp = serverSocketAddress.getAddress().getHostAddress();
+                    int serverPort = serverSocketAddress.getPort();
                     String date = new SimpleDateFormat("[HH:mm:ss SSS]").format(new Date());
                     if (server) {
                         File outbound = new File("target/" + String.format("%s:%d_%s:%d_outbound.txt", clientIp, clientPort, serverIp, serverPort));
@@ -164,9 +170,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
                     if (packetCapture != null) {
                         if (server) {
-                            packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, output);
+                            packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, output);
                         } else {
-                            packetCapture.onSSLProxyRx(clientIp, serverIp, clientPort, serverPort, output);
+                            packetCapture.onSSLProxyRx(clientSocketAddress, serverSocketAddress, output);
                         }
                     }
                 }

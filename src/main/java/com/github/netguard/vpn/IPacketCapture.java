@@ -2,20 +2,21 @@ package com.github.netguard.vpn;
 
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 
 public interface IPacketCapture {
 
     void onPacket(byte[] packetData, String type);
-    void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName, String applicationProtocol);
-    void onSSLProxyTx(String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
-    void onSSLProxyRx(String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
-    void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName);
+    void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName, String applicationProtocol);
+    void onSSLProxyTx(InetSocketAddress client, InetSocketAddress server, byte[] data);
+    void onSSLProxyRx(InetSocketAddress client, InetSocketAddress server, byte[] data);
+    void onSSLProxyFinish(InetSocketAddress client, InetSocketAddress server, String hostName);
 
-    void onSocketEstablish(String clientIp, String serverIp, int clientPort, int serverPort);
-    void onSocketTx(String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
-    void onSocketRx(String clientIp, java.lang.String serverIp, int clientPort, int serverPort, byte[] data);
-    void onSocketFinish(String clientIp, String serverIp, int clientPort, int serverPort);
+    void onSocketEstablish(InetSocketAddress client, InetSocketAddress server);
+    void onSocketTx(InetSocketAddress client, InetSocketAddress server, byte[] data);
+    void onSocketRx(InetSocketAddress client, InetSocketAddress server, byte[] data);
+    void onSocketFinish(InetSocketAddress client, InetSocketAddress server);
 
     void notifyFinish();
 

@@ -9,6 +9,7 @@ import javax.net.ssl.SSLHandshakeException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.util.Arrays;
@@ -24,23 +25,21 @@ public class StreamForward implements Runnable {
      * 是否做为服务端
      */
     protected final boolean server;
-    protected final String clientIp, serverIp;
-    protected final int clientPort, serverPort;
+    protected final InetSocketAddress clientSocketAddress;
+    protected final InetSocketAddress serverSocketAddress;
     private final CountDownLatch countDownLatch;
     private final Socket socket;
     protected final IPacketCapture packetCapture;
     protected final String hostName;
     private final boolean isSSL;
 
-    protected StreamForward(InputStream inputStream, OutputStream outputStream, boolean server, String clientIp, String serverIp, int clientPort, int serverPort, CountDownLatch countDownLatch, Socket socket,
+    protected StreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
                             IPacketCapture packetCapture, String hostName, boolean isSSL) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.server = server;
-        this.clientIp = clientIp;
-        this.serverIp = serverIp;
-        this.clientPort = clientPort;
-        this.serverPort = serverPort;
+        this.clientSocketAddress = clientSocketAddress;
+        this.serverSocketAddress = serverSocketAddress;
         this.countDownLatch = countDownLatch;
         this.socket = socket;
         this.packetCapture = packetCapture;
@@ -49,7 +48,7 @@ public class StreamForward implements Runnable {
     }
 
     final void startThread() {
-        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + clientIp + ":" + clientPort + "_" + serverIp + ":" + serverPort);
+        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + clientSocketAddress + "_" + serverSocketAddress);
         thread.setDaemon(true);
         thread.start();
     }
@@ -68,15 +67,15 @@ public class StreamForward implements Runnable {
                 if (packetCapture != null) {
                     if (server) {
                         if (isSSL) {
-                            packetCapture.onSSLProxyTx(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                            packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
                         } else {
-                            packetCapture.onSocketTx(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                            packetCapture.onSocketTx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
                         }
                     } else {
                         if (isSSL) {
-                            packetCapture.onSSLProxyRx(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                            packetCapture.onSSLProxyRx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
                         } else {
-                            packetCapture.onSocketRx(clientIp, serverIp, clientPort, serverPort, Arrays.copyOf(buf, read));
+                            packetCapture.onSocketRx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
                         }
                     }
                 }
@@ -99,9 +98,9 @@ public class StreamForward implements Runnable {
             }
         } catch (SSLHandshakeException e) {
             if (log.isDebugEnabled()) {
-                log.warn(String.format("handshake with %s => %s/%d failed: {}", hostName, serverIp, serverPort), e);
+                log.warn(String.format("handshake with %s => %s failed: {}", hostName, serverSocketAddress), e);
             } else {
-                log.info(String.format("handshake with %s => %s/%d failed: {}", hostName, serverIp, serverPort), e.getMessage());
+                log.info(String.format("handshake with %s => %s failed: {}", hostName, serverSocketAddress), e.getMessage());
             }
             socketException = e;
         } catch (IOException e) {

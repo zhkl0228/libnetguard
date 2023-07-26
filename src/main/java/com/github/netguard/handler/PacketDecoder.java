@@ -43,13 +43,14 @@ import java.io.File;
 import java.io.IOException;
 import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
-    private static final Logger log = LoggerFactory.getLogger(PacketDecoder.class);
+    private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final IpDecoder ip;
     private final Ipv6Decoder ipv6;
@@ -109,12 +110,12 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public void onSocketEstablish(String clientIp, String serverIp, int clientPort, int serverPort) {
-        log.debug("onSocketEstablish {}:{} => {}:{}", clientIp, clientPort, serverIp, serverPort);
+    public void onSocketEstablish(InetSocketAddress client, InetSocketAddress server) {
+        log.debug("onSocketEstablish {} => {}", client, server);
     }
 
     @Override
-    public void onSocketTx(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+    public void onSocketTx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
         if (log.isTraceEnabled()) {
             byte[] tmp;
             if (data.length > 256) {
@@ -122,14 +123,14 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             } else {
                 tmp = data;
             }
-            log.trace(Inspector.inspectString(tmp, String.format("onSocketTx %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+            log.trace(Inspector.inspectString(tmp, String.format("onSocketTx %d bytes %s => %s", data.length, client, server)));
         } else if (log.isDebugEnabled()) {
-            log.debug("onSocketTx {} bytes {}:{} => {}:{}", data.length, clientIp, clientPort, serverIp, serverPort);
+            log.debug("onSocketTx {} bytes {} => {}", data.length, client, server);
         }
     }
 
     @Override
-    public void onSocketRx(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+    public void onSocketRx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
         if (log.isTraceEnabled()) {
             byte[] tmp;
             if (data.length > 256) {
@@ -137,15 +138,15 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             } else {
                 tmp = data;
             }
-            log.trace(Inspector.inspectString(tmp, String.format("onSocketRx %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+            log.trace(Inspector.inspectString(tmp, String.format("onSocketRx %d bytes %s => %s", data.length, client, server)));
         } else if (log.isDebugEnabled()) {
-            log.debug("onSocketRx {} bytes {}:{} => {}:{}", data.length, clientIp, clientPort, serverIp, serverPort);
+            log.debug("onSocketRx {} bytes {} => {}", data.length, client, server);
         }
     }
 
     @Override
-    public void onSocketFinish(String clientIp, String serverIp, int clientPort, int serverPort) {
-        log.debug("onSocketFinish {}:{} => {}:{}", clientIp, clientPort, serverIp, serverPort);
+    public void onSocketFinish(InetSocketAddress client, InetSocketAddress server) {
+        log.debug("onSocketFinish {} => {}", client, server);
     }
 
     private ProtocolDetector protocolDetector;
@@ -201,10 +202,10 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyEstablish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName, String applicationProtocol) {
-        log.debug("onSSLProxyEstablish {} {}:{} => {}:{} applicationProtocol={}", hostName, clientIp, clientPort, serverIp, serverPort, applicationProtocol);
+    public final void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName, String applicationProtocol) {
+        log.debug("onSSLProxyEstablish {} {} => {} applicationProtocol={}", hostName, client, server, applicationProtocol);
         try {
-            TcpSessionKey key = new SSLSessionKey(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort, hostName);
+            TcpSessionKey key = new SSLSessionKey(client.getAddress(), server.getAddress(), client.getPort(), server.getPort(), hostName);
             httpDecoder.onEstablish(new SSLProxySession(key, applicationProtocol));
         } catch (Exception e) {
             log.warn("onSSLProxyEstablish", e);
@@ -212,7 +213,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyTx(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+    public final void onSSLProxyTx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
         if (log.isTraceEnabled()) {
             byte[] tmp;
             if (data.length > 256) {
@@ -220,10 +221,10 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             } else {
                 tmp = data;
             }
-            log.trace(Inspector.inspectString(tmp, String.format("onSSLProxyTX %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+            log.trace(Inspector.inspectString(tmp, String.format("onSSLProxyTX %d bytes %s => %s", data.length, client, server)));
         }
         try {
-            TcpSessionKey key = new TcpSessionKeyImpl(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort);
+            TcpSessionKey key = new TcpSessionKeyImpl(client.getAddress(), server.getAddress(), client.getPort(), server.getPort());
             httpDecoder.handleTx(key, new ChainBuffer(data));
         } catch (Exception e) {
             log.warn("onSSLProxyTX", e);
@@ -231,7 +232,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyRx(String clientIp, String serverIp, int clientPort, int serverPort, byte[] data) {
+    public final void onSSLProxyRx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
         if (log.isTraceEnabled()) {
             byte[] tmp;
             if (data.length > 256) {
@@ -239,21 +240,21 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             } else {
                 tmp = data;
             }
-            log.trace(Inspector.inspectString(tmp, String.format("onSSLProxyRX %d bytes %s:%d => %s:%d", data.length, clientIp, clientPort, serverIp, serverPort)));
+            log.trace(Inspector.inspectString(tmp, String.format("onSSLProxyRX %d bytes %s => %s", data.length, client, server)));
         }
         try {
-            TcpSessionKey key = new TcpSessionKeyImpl(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort);
+            TcpSessionKey key = new TcpSessionKeyImpl(client.getAddress(), server.getAddress(), client.getPort(), server.getPort());
             httpDecoder.handleRx(key, new ChainBuffer(data));
         } catch (Exception e) {
-            log.warn("onSSLProxyRX: " + clientIp + ":" + clientPort + " => " + serverIp + ":" + serverPort, e);
+            log.warn("onSSLProxyRX: {} => {}", client, server, e);
         }
     }
 
     @Override
-    public final void onSSLProxyFinish(String clientIp, String serverIp, int clientPort, int serverPort, String hostName) {
-        log.debug("onSSLProxyFinish {} {}:{} => {}:{}", hostName, clientIp, clientPort, serverIp, serverPort);
+    public final void onSSLProxyFinish(InetSocketAddress client, InetSocketAddress server, String hostName) {
+        log.debug("onSSLProxyFinish {} {} => {}", hostName, client, server);
         try {
-            TcpSessionKey key = new SSLSessionKey(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort, hostName);
+            TcpSessionKey key = new SSLSessionKey(client.getAddress(), server.getAddress(), client.getPort(), server.getPort(), hostName);
             httpDecoder.onFinish(key);
         } catch (Exception e) {
             log.warn("onSSLProxyFinish", e);
@@ -371,7 +372,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         for (String pair : values) {
             index = pair.indexOf('=');
             if (index == -1) {
-                log.debug("parseParameters failed {}", parameters);
+                LoggerFactory.getLogger(PacketDecoder.class).debug("parseParameters failed {}", parameters);
                 continue;
             }
             String name = pair.substring(0, index);

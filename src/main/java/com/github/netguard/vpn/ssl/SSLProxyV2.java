@@ -238,24 +238,24 @@ public class SSLProxyV2 implements Runnable {
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
         if (packetCapture != null) {
             if (isSSL) {
-                packetCapture.onSSLProxyEstablish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName, applicationProtocol);
+                packetCapture.onSSLProxyEstablish(client, server, hostName, applicationProtocol);
             } else {
-                packetCapture.onSocketEstablish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort());
+                packetCapture.onSocketEstablish(client, server);
             }
         }
         CountDownLatch countDownLatch = new CountDownLatch(2);
         StreamForward inbound, outbound;
         if (filterHttp2) {
-            Http2Session session = new Http2Session(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName);
-            HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName,
+            Http2Session session = new Http2Session(client.getAddress().getHostAddress(), server.getAddress().getHostAddress(), client.getPort(), server.getPort(), hostName);
+            HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client, server, countDownLatch, local, packetCapture, hostName,
                     session);
-            outbound = new HttpFrameForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName,
+            outbound = new HttpFrameForward(socketIn, localOut, false, client, server, countDownLatch, socket, packetCapture, hostName,
                     session)
                     .setPeer(inboundForward);
             inbound = inboundForward;
         } else {
-            inbound = new StreamForward(localIn, socketOut, true, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, local, packetCapture, hostName, isSSL);
-            outbound = new StreamForward(socketIn, localOut, false, client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), countDownLatch, socket, packetCapture, hostName, isSSL);
+            inbound = new StreamForward(localIn, socketOut, true, client, server, countDownLatch, local, packetCapture, hostName, isSSL);
+            outbound = new StreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, packetCapture, hostName, isSSL);
         }
         inbound.startThread();
         outbound.startThread();
@@ -263,9 +263,9 @@ public class SSLProxyV2 implements Runnable {
 
         if (packetCapture != null) {
             if (isSSL) {
-                packetCapture.onSSLProxyFinish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort(), hostName);
+                packetCapture.onSSLProxyFinish(client, server, hostName);
             } else {
-                packetCapture.onSocketFinish(client.getHostString(), server.getHostString(), client.getPort(), server.getPort());
+                packetCapture.onSocketFinish(client, server);
             }
         }
     }
@@ -287,7 +287,7 @@ public class SSLProxyV2 implements Runnable {
             }
         }
         if (redirectAddress == null) {
-            redirectAddress = record.hostName == null ? remote.getHostString() : record.hostName;
+            redirectAddress = remote.getAddress().getHostAddress();
         }
         if (redirectPort <= 0) {
             redirectPort = remote.getPort();
@@ -299,10 +299,9 @@ public class SSLProxyV2 implements Runnable {
         if (allowRule == AllowRule.DISCONNECT) {
             throw new IOException(packet.daddr + ":" + packet.dport + " is not allowed connect: hostName=" + record.hostName);
         }
-        boolean isSocksProxy = socketProxy.type() == Proxy.Type.SOCKS;
         if (record.hostName == null || allowRule == AllowRule.CONNECT_TCP) {
             try (Socket socket = new Socket(socketProxy)) {
-                socket.connect(isSocksProxy ? InetSocketAddress.createUnresolved(redirectAddress, redirectPort) : new InetSocketAddress(redirectAddress, redirectPort), timeout);
+                socket.connect(new InetSocketAddress(redirectAddress, redirectPort), timeout);
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     socketOut.write(record.readData);
                     socketOut.flush();
@@ -319,7 +318,7 @@ public class SSLProxyV2 implements Runnable {
             SSLSocket secureSocket = null;
             try {
                 app = new Socket(socketProxy);
-                app.connect(isSocksProxy ? InetSocketAddress.createUnresolved(redirectAddress, redirectPort) : new InetSocketAddress(redirectAddress, redirectPort), timeout);
+                app.connect(new InetSocketAddress(redirectAddress, redirectPort), timeout);
                 secureSocket = (SSLSocket) factory.createSocket(app, record.hostName, redirectPort, true);
                 if (!record.applicationLayerProtocols.isEmpty()) {
                     SSLParameters parameters = secureSocket.getSSLParameters();

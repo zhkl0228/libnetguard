@@ -21,7 +21,7 @@ public class SSLProxySession extends TcpSessionImpl implements TcpSession {
     public Protocol getProtocol() {
         if ("h2".equals(applicationProtocol)) {
             return Protocol.HTTP2;
-        } else if ("http/1.1".equals(applicationProtocol)) {
+        } else if ("http/1.1".equals(applicationProtocol) || applicationProtocol == null || applicationProtocol.isEmpty()) {
             return Protocol.HTTP;
         }
         return Protocol.SSL;
@@ -35,5 +35,10 @@ public class SSLProxySession extends TcpSessionImpl implements TcpSession {
     @Override
     public TcpState getServerState() {
         return TcpState.ESTABLISHED;
+    }
+
+    @Override
+    public String getApplicationProtocol() {
+        return applicationProtocol;
     }
 }
