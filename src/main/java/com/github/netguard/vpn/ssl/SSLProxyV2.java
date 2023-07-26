@@ -273,7 +273,7 @@ public class SSLProxyV2 implements Runnable {
     private void handleSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local) throws Exception {
         DataInput dataInput = new DataInputStream(localIn);
         final ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
-        AllowRule allowRule = AllowRule.FILTER_H2;
+        AllowRule allowRule = AllowRule.CONNECT_TCP;
         Proxy socketProxy = Proxy.NO_PROXY;
         String redirectAddress = null;
         int redirectPort = 0;
