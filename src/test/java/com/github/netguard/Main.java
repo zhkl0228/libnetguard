@@ -1,6 +1,8 @@
 package com.github.netguard;
 
 import com.github.netguard.handler.PacketDecoder;
+import com.github.netguard.vpn.AcceptResult;
+import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
@@ -23,6 +25,7 @@ import org.krakenapps.pcap.decoder.http.HttpDecoder;
 
 import java.io.IOException;
 import java.util.Date;
+import java.util.List;
 import java.util.Scanner;
 
 public class Main {
@@ -58,6 +61,14 @@ public class Main {
                 @Override
                 public Http2Filter getH2Filter() {
                     return MyVpnListener.this;
+                }
+
+                @Override
+                public AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols) {
+                    if ("weixin.qq.com".equals(hostName)) {
+                        return AcceptResult.builder(AllowRule.FILTER_H2).build();
+                    }
+                    return super.acceptSSL(serverIp, port, hostName, applicationLayerProtocols);
                 }
             };
             vpn.setPacketCapture(packetCapture);
