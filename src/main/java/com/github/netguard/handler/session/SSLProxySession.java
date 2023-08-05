@@ -6,25 +6,33 @@ import org.krakenapps.pcap.decoder.tcp.TcpSessionImpl;
 import org.krakenapps.pcap.decoder.tcp.TcpSessionKey;
 import org.krakenapps.pcap.decoder.tcp.TcpState;
 
+import java.util.Collection;
+
 public class SSLProxySession extends TcpSessionImpl implements TcpSession {
 
     private final String hostName;
-    private final String applicationProtocol;
+    private final Collection<String> applicationProtocols;
+    private final String selectedApplicationProtocol;
 
-    public SSLProxySession(TcpSessionKey key, String hostName, String applicationProtocol) {
+    public SSLProxySession(TcpSessionKey key, String hostName, Collection<String> applicationProtocols, String selectedApplicationProtocol) {
         super(null);
         this.hostName = hostName;
-        this.applicationProtocol = applicationProtocol;
+        this.applicationProtocols = applicationProtocols;
+        this.selectedApplicationProtocol = selectedApplicationProtocol;
 
         this.setKey(key);
     }
 
     @Override
     public Protocol getProtocol() {
-        if ("h2".equals(applicationProtocol)) {
+        if ("h2".equals(selectedApplicationProtocol)) {
             return Protocol.HTTP2;
-        } else if ("http/1.1".equals(applicationProtocol) || applicationProtocol == null || applicationProtocol.isEmpty()) {
+        } else if ("http/1.1".equals(selectedApplicationProtocol)) {
             return Protocol.HTTP;
+        } else if (selectedApplicationProtocol == null || selectedApplicationProtocol.isEmpty()) {
+            if (applicationProtocols != null && applicationProtocols.contains("http/1.1")) {
+                return Protocol.HTTP;
+            }
         }
         return Protocol.SSL;
     }
@@ -40,8 +48,13 @@ public class SSLProxySession extends TcpSessionImpl implements TcpSession {
     }
 
     @Override
-    public String getApplicationProtocol() {
-        return applicationProtocol;
+    public String[] getApplicationProtocols() {
+        return applicationProtocols == null ? null : applicationProtocols.toArray(new String[0]);
+    }
+
+    @Override
+    public String getSelectedApplicationProtocol() {
+        return selectedApplicationProtocol;
     }
 
     @Override

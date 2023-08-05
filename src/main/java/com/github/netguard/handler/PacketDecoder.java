@@ -202,11 +202,11 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName, String applicationProtocol) {
-        log.debug("onSSLProxyEstablish {} {} => {} applicationProtocol={}", hostName, client, server, applicationProtocol);
+    public final void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName, Collection<String> applicationProtocols, String selectedApplicationProtocol) {
+        log.debug("onSSLProxyEstablish {} {} => {} selectedApplicationProtocol={}", hostName, client, server, selectedApplicationProtocol);
         try {
             TcpSessionKey key = new SSLSessionKey(client.getAddress(), server.getAddress(), client.getPort(), server.getPort(), hostName);
-            httpDecoder.onEstablish(new SSLProxySession(key, hostName, applicationProtocol));
+            httpDecoder.onEstablish(new SSLProxySession(key, hostName, applicationProtocols, selectedApplicationProtocol));
         } catch (Exception e) {
             log.warn("onSSLProxyEstablish", e);
         }
