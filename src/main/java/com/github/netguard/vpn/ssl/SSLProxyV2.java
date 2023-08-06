@@ -65,8 +65,18 @@ public class SSLProxyV2 implements Runnable {
             log.debug("create tcp proxy packet={}, allowed={}", packet, allowed);
             return allowed;
         } catch (IOException e) {
-            log.warn("create SSLProxy failed", e);
-            return null;
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public static void create(final InspectorVpn vpn, RootCert rootCert, final Packet packet, final int timeout, Socket socket) {
+        try {
+            log.debug("create tcp proxy packet={}", packet);
+            IPacketCapture packetCapture = vpn.getPacketCapture();
+            new SSLProxyV2(rootCert, packetCapture, packet, timeout, socket);
+            log.debug("create tcp proxy packet={}", packet);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
         }
     }
 
@@ -77,6 +87,27 @@ public class SSLProxyV2 implements Runnable {
     private final int timeout;
     private final ServerSocket serverSocket;
     private final SSLSocket secureSocket;
+    private final Socket acceptedSocket;
+
+    private SSLProxyV2(RootCert rootCert, IPacketCapture packetCapture, Packet packet, int timeout, Socket socket) throws IOException {
+        this.rootCert = rootCert;
+
+        this.packetCapture = packetCapture;
+        this.packet = packet;
+        this.timeout = timeout;
+        this.secureSocket = null;
+        this.hostName = null;
+        this.applicationProtocol = null;
+        this.allowFilterH2 = false;
+        this.applicationLayerProtocols = Collections.emptyList();
+
+        this.serverSocket = null;
+        this.acceptedSocket = socket;
+
+        Thread thread = new Thread(this, "Proxy for " + packet);
+        thread.setDaemon(true);
+        thread.start();
+    }
 
     private SSLProxyV2(RootCert rootCert, IPacketCapture packetCapture, Packet packet, int timeout) throws IOException {
         this.rootCert = rootCert;
@@ -93,6 +124,7 @@ public class SSLProxyV2 implements Runnable {
         ServerSocketFactory factory = ServerSocketFactory.getDefault();
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
+        this.acceptedSocket = null;
 
         Thread thread = new Thread(this, "Proxy for " + packet);
         thread.setDaemon(true);
@@ -120,6 +152,7 @@ public class SSLProxyV2 implements Runnable {
         SSLServerSocketFactory factory = context.getServerSocketFactory();
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
+        this.acceptedSocket = null;
 
         Thread thread = new Thread(this, "SSLProxy for " + packet);
         thread.setDaemon(true);
@@ -129,7 +162,7 @@ public class SSLProxyV2 implements Runnable {
     @Override
     public void run() {
         InetSocketAddress remote = packet.createServerAddress();
-        try (Socket local = serverSocket.accept()) {
+        try (Socket local = (serverSocket == null ? acceptedSocket : serverSocket.accept())) {
             try (InputStream localIn = local.getInputStream(); OutputStream localOut = local.getOutputStream()) {
                 if (packet.isInstallRootCert()) {
                     downloadRootCert(localIn, localOut);

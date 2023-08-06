@@ -2,6 +2,7 @@ package com.github.netguard;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
+import com.github.netguard.transparent.TransparentProxying;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.ssl.RootCert;
 import eu.faircode.netguard.ServiceSinkhole;
@@ -36,6 +37,7 @@ public class VpnServer {
     private static final Logger log = LoggerFactory.getLogger(VpnServer.class);
 
     private static final int UDP_PORT = 20230;
+    private static final int PROXY_PORT = 20238;
 
     private final ServerSocket serverSocket;
     private final RootCert rootCert = RootCert.load();
@@ -70,12 +72,52 @@ public class VpnServer {
         serverSocket.setSoTimeout(broadcastSeconds * 1000);
     }
 
+    /**
+     * see osx_pf/enable.sh
+     */
+    public void enableTransparentProxying() {
+        enableTransparentProxying(PROXY_PORT);
+    }
+
+    private int transparentProxyingPort;
+    private Thread transparentProxyingThread;
+    private ServerSocket transparentProxyingServer;
+
+    public void enableTransparentProxying(int port) {
+        this.transparentProxyingPort = port;
+    }
+
     public void start() {
         if (thread != null) {
             throw new IllegalStateException("Already started.");
         }
         if (broadcast) {
             sendBroadcast();
+        }
+        if (transparentProxyingPort > 0) {
+            try {
+                transparentProxyingServer = new ServerSocket(transparentProxyingPort);
+                transparentProxyingThread = new Thread(() -> {
+                    while (!shutdown) {
+                        try {
+                            Socket socket = transparentProxyingServer.accept();
+                            ProxyVpn vpn = new TransparentProxying(clients, rootCert, socket);
+                            if (vpnListener != null) {
+                                vpnListener.onConnectClient(vpn);
+                            }
+                            Thread vpnThread = new Thread(vpn, "socket: " + socket + "_TP");
+                            vpnThread.setPriority(Thread.MAX_PRIORITY);
+                            vpnThread.start();
+                        } catch (SocketException ignored) {
+                        } catch (IOException e) {
+                            log.warn("accept", e);
+                        }
+                    }
+                }, getClass().getSimpleName() + "_TP");
+                transparentProxyingThread.start();
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
+            }
         }
         thread = new Thread(() -> {
             while (!shutdown) {
@@ -122,12 +164,19 @@ public class VpnServer {
         }
         shutdown = true;
         IoUtil.close(serverSocket);
+        IoUtil.close(transparentProxyingServer);
         for (ProxyVpn vpn : clients.toArray(new ProxyVpn[0])) {
             vpn.stop();
         }
         if (thread != null) {
             try {
                 thread.join();
+            } catch (InterruptedException ignored) {
+            }
+        }
+        if (transparentProxyingThread != null) {
+            try {
+                transparentProxyingThread.join();
             } catch (InterruptedException ignored) {
             }
         }

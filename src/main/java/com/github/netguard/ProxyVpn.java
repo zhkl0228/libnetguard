@@ -13,11 +13,16 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
 
     protected final List<ProxyVpn> clients;
 
-    private final RootCert rootCert;
+    protected final RootCert rootCert;
 
     protected ProxyVpn(List<ProxyVpn> clients, RootCert rootCert) {
         this.clients = clients;
         this.rootCert = rootCert;
+    }
+
+    @Override
+    public boolean isTransparentProxying() {
+        return false;
     }
 
     protected abstract void stop();

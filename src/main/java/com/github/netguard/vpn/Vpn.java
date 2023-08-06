@@ -8,4 +8,6 @@ public interface Vpn {
 
     void setPacketCapture(IPacketCapture packetCapture);
 
+    boolean isTransparentProxying();
+
 }
