@@ -1,20 +1,36 @@
 package com.github.netguard.vpn.ssl;
 
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ClientHelloRecord {
-    public final byte[] readData;
+
+    private static final int PROLOGUE_MAX_LENGTH = 128;
+
+    static ClientHelloRecord prologue(ByteArrayOutputStream baos, DataInputStream dataInput) throws IOException {
+        int available = dataInput.available();
+        int count = PROLOGUE_MAX_LENGTH - baos.size();
+        if (available > 0 && count > 0) {
+            byte[] buf = new byte[Math.min(count, available)];
+            dataInput.readFully(buf);
+            baos.write(buf);
+        }
+        return new ClientHelloRecord(baos);
+    }
+
+    public final byte[] prologue;
     public final String hostName;
     public final List<String> applicationLayerProtocols;
 
-    ClientHelloRecord(ByteArrayOutputStream baos) {
+    private ClientHelloRecord(ByteArrayOutputStream baos) {
         this(baos, null, new ArrayList<>());
     }
 
     ClientHelloRecord(ByteArrayOutputStream baos, String hostName, List<String> applicationLayerProtocols) {
-        this.readData = baos.toByteArray();
+        this.prologue = baos.toByteArray();
         this.hostName = hostName;
         this.applicationLayerProtocols = applicationLayerProtocols;
     }

@@ -6,7 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
-import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -31,7 +31,7 @@ public class ExtensionServerName {
         return tlsVer;
     }
 
-    public static ClientHelloRecord parseServerNames(DataInput dataInput, InetSocketAddress server) throws IOException {
+    public static ClientHelloRecord parseServerNames(DataInputStream dataInput, InetSocketAddress server) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutput dataOutput = new DataOutputStream(baos);
         byte contentType = dataInput.readByte();
@@ -40,7 +40,7 @@ public class ExtensionServerName {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Not handshake record: contentType=0x%x, server=%s", contentType, server));
             }
-            return new ClientHelloRecord(baos);
+            return ClientHelloRecord.prologue(baos, dataInput);
         }
         short version = dataInput.readShort();
         dataOutput.writeShort(version);
@@ -49,7 +49,7 @@ public class ExtensionServerName {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls version=0x%x, server=%s", version, server));
             }
-            return new ClientHelloRecord(baos);
+            return ClientHelloRecord.prologue(baos, dataInput);
         }
         int length = dataInput.readUnsignedShort();
         dataOutput.writeShort(length);
@@ -57,7 +57,7 @@ public class ExtensionServerName {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls length=0x%x, server=%s", length, server));
             }
-            return new ClientHelloRecord(baos);
+            return ClientHelloRecord.prologue(baos, dataInput);
         }
 
         byte[] clientHelloData = new byte[length];
@@ -66,7 +66,7 @@ public class ExtensionServerName {
         Handshake handshake = HandshakeParser.parseHandshake(ByteBuffer.wrap(clientHelloData));
         if (handshake.getType() != HandshakeType.ClientHello) {
             log.debug("Not tls: handshakeType={}, server={}", handshake.getType(), server);
-            return new ClientHelloRecord(baos);
+            return ClientHelloRecord.prologue(baos, dataInput);
         }
 
         ByteBuffer buffer = handshake.getBuffer();
@@ -76,7 +76,7 @@ public class ExtensionServerName {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls handshake version=0x%x, server=%s", version, server));
             }
-            return new ClientHelloRecord(baos);
+            return ClientHelloRecord.prologue(baos, dataInput);
         }
         buffer.get(new byte[32]); // clientRandom
         buffer.get(new byte[buffer.get() & 0xff]); // sessionId
@@ -84,7 +84,7 @@ public class ExtensionServerName {
         buffer.get(new byte[buffer.get() & 0xff]); // compression methods
         if (buffer.remaining() < 2) {
             log.debug("Not tls: extension data is empty: server={}", server);
-            return new ClientHelloRecord(baos);
+            return ClientHelloRecord.prologue(baos, dataInput);
         }
         int extensionLength = buffer.getShort() & 0xffff;
         byte[] extensionData = new byte[extensionLength];
@@ -131,7 +131,7 @@ public class ExtensionServerName {
 
         if (serverNames.isEmpty()) {
             log.debug("Not tls: extension name is empty: server={}", server);
-            return new ClientHelloRecord(baos);
+            return ClientHelloRecord.prologue(baos, dataInput);
         } else {
             String hostName = serverNames.get(0);
             return new ClientHelloRecord(baos, hostName, applicationLayerProtocols);

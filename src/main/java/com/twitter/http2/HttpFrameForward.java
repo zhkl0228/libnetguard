@@ -13,7 +13,7 @@ import com.github.netguard.vpn.ssl.h2.Http2SessionKey;
 import com.github.netguard.vpn.ssl.h2.HttpHeaderBlockDecoder;
 import com.github.netguard.vpn.ssl.h2.HttpHeaderBlockEncoder;
 import edu.baylor.cs.csi5321.spdy.frames.H2FrameRstStream;
-import edu.baylor.cs.csi5321.spdy.frames.SpdyUtil;
+import edu.baylor.cs.csi5321.spdy.frames.H2Util;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultHttpRequest;
@@ -108,7 +108,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             }
             while (!canStop) {
                 int header = dataInput.readInt();
-                int length = (header >>> 8) & SpdyUtil.MASK_LENGTH_HEADER;
+                int length = (header >>> 8) & H2Util.MASK_LENGTH_HEADER;
                 byte flags = dataInput.readByte();
                 int stream = dataInput.readInt();
 
@@ -116,7 +116,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 byteBuf.writeByte(flags);
                 byteBuf.writeInt(stream);
                 if (log.isDebugEnabled()) {
-                    int streamId = stream & SpdyUtil.MASK_STREAM_ID_HEADER;
+                    int streamId = stream & H2Util.MASK_STREAM_ID_HEADER;
                     log.debug("read frame length server={}, length={}, flags=0x{}, streamId={}", server, length, Integer.toHexString(flags & 0xff), streamId);
                 }
                 while (length > 0) {

@@ -334,7 +334,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols) {
+    public AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols, byte[] prologue) {
         log.debug("acceptSSL {}:{} hostName={}, applicationLayerProtocols={}", serverIp, port, hostName, applicationLayerProtocols);
         if (hostName != null) {
             if (hostName.endsWith(".icloud.com") ||

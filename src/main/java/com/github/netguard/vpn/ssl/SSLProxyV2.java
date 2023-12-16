@@ -28,7 +28,6 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -305,14 +304,14 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private void handleSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local) throws Exception {
-        DataInput dataInput = new DataInputStream(localIn);
+        DataInputStream dataInput = new DataInputStream(localIn);
         final ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
         AllowRule allowRule = AllowRule.CONNECT_TCP;
         Proxy socketProxy = Proxy.NO_PROXY;
         String redirectAddress = null;
         int redirectPort = 0;
         if (packetCapture != null) {
-            AcceptResult result = packetCapture.acceptSSL(packet.daddr, packet.dport, record.hostName, record.applicationLayerProtocols);
+            AcceptResult result = packetCapture.acceptSSL(packet.daddr, packet.dport, record.hostName, record.applicationLayerProtocols, record.prologue);
             if (result != null) {
                 allowRule = result.getRule();
                 socketProxy = result.getSocketProxy();
@@ -337,7 +336,7 @@ public class SSLProxyV2 implements Runnable {
             try (Socket socket = new Socket(socketProxy)) {
                 socket.connect(new InetSocketAddress(redirectAddress, redirectPort), timeout);
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
-                    socketOut.write(record.readData);
+                    socketOut.write(record.prologue);
                     socketOut.flush();
                     doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, null, false, null, null, false);
                 }
@@ -384,7 +383,7 @@ public class SSLProxyV2 implements Runnable {
                         record, secureSocket.getApplicationProtocol(), allowRule == AllowRule.FILTER_H2);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
-                        socketOut.write(record.readData);
+                        socketOut.write(record.prologue);
                         socketOut.flush();
                         doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false, null, null, false);
                     }

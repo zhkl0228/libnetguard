@@ -65,11 +65,11 @@ public class Main {
                 }
 
                 @Override
-                public AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols) {
+                public AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols, byte[] prologue) {
                     if ("weixin.qq.com".equals(hostName)) {
                         return AcceptResult.builder(AllowRule.FILTER_H2).build();
                     }
-                    return super.acceptSSL(serverIp, port, hostName, applicationLayerProtocols);
+                    return super.acceptSSL(serverIp, port, hostName, applicationLayerProtocols, prologue);
                 }
             };
             vpn.setPacketCapture(packetCapture);
