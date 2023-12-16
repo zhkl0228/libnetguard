@@ -57,10 +57,11 @@ class KrakenHttpRequest implements com.github.netguard.handler.http.HttpRequest 
     }
     @Override
     public String getHost() {
-        URL url = request.getURL();
-        if(url.getPort() != -1) {
-            return url.getHost() + ':' + url.getPort();
+        String host = getHeader(request, HttpHeaders.HOST);
+        if (host != null) {
+            return host;
         }
+        URL url = request.getURL();
         return url.getHost();
     }
 
