@@ -176,7 +176,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private int getUidQ(int version, int protocol, String saddr, int sport, String daddr, int dport) {
-        if (protocol != 6 /* TCP */ && protocol != 17 /* UDP */)
+        if (protocol != TCP_PROTOCOL && protocol != UDP_PROTOCOL)
             return -1;
 
         InetSocketAddress local = new InetSocketAddress(saddr, sport);
@@ -194,6 +194,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
                 protocol == UDP_PROTOCOL);
     }
 
+    private static final int IP_V4 = 4;
+    private static final int IP_V6 = 6;
     private static final int SYSTEM_UID = 2000;
     private static final int TCP_PROTOCOL = 6;
     private static final int UDP_PROTOCOL = 17;
@@ -203,15 +205,12 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     private Allowed isAddressAllowed(Packet packet) {
         packet.allowed = false;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
-            if (packet.version == 4 && packet.protocol == TCP_PROTOCOL) { // ipv4
-                Allowed redirect = redirect(packet);
-                if (redirect != null) {
-                    return redirect;
-                }
+            if (packet.version == IP_V4 && packet.protocol == TCP_PROTOCOL) { // ipv4
+                return redirect(packet);
             }
-            if (packet.version == 4 && packet.protocol == UDP_PROTOCOL) {
+            if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) {
                 packet.allowed = packet.dport == 53; // DNS
-            } else {
+            } else if(packet.version != IP_V6) { // Disallow ipv6
                 packet.allowed = true;
             }
             log.debug("isAddressAllowed: packet={}, allowed={}", packet, packet.allowed);
