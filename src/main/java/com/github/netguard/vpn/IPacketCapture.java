@@ -1,5 +1,6 @@
 package com.github.netguard.vpn;
 
+import com.github.netguard.vpn.ssl.ConnectRequest;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 
 import java.net.InetSocketAddress;
@@ -23,9 +24,8 @@ public interface IPacketCapture {
 
     /**
      * 默认返回 <code>null</code> 表示允许连接
-     * @param hostName 如果是 SSL 不为 <code>null</code>
      */
-    AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols, byte[] prologue);
+    AcceptResult acceptTcp(ConnectRequest connectRequest);
     Http2Filter getH2Filter();
 
 }

@@ -311,7 +311,7 @@ public class SSLProxyV2 implements Runnable {
         String redirectAddress = null;
         int redirectPort = 0;
         if (packetCapture != null) {
-            AcceptResult result = packetCapture.acceptSSL(packet.daddr, packet.dport, record.hostName, record.applicationLayerProtocols, record.prologue);
+            AcceptResult result = packetCapture.acceptTcp(record.newConnectRequest(packet));
             if (result != null) {
                 allowRule = result.getRule();
                 socketProxy = result.getSocketProxy();

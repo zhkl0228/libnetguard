@@ -11,6 +11,7 @@ import com.github.netguard.handler.session.SessionFactory;
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
+import com.github.netguard.vpn.ssl.ConnectRequest;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.ethernet.EthernetDecoder;
@@ -334,21 +335,18 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public AcceptResult acceptSSL(String serverIp, int port, String hostName, List<String> applicationLayerProtocols, byte[] prologue) {
-        log.debug("acceptSSL {}:{} hostName={}, applicationLayerProtocols={}", serverIp, port, hostName, applicationLayerProtocols);
-        if (hostName != null) {
-            if (hostName.endsWith(".icloud.com") ||
-                    hostName.endsWith(".apple.com")) {
-                return configAcceptResultBuilder(hostName, port, AcceptResult.builder(AllowRule.CONNECT_TCP)).build(); // Enable iOS traffic.
-            }
-            if (hostName.endsWith(".googleapis.com") ||
-                    hostName.endsWith(".google.com") ||
-                    "www.gstatic.com".equals(hostName)) {
-                return AcceptResult.builder(AllowRule.DISCONNECT).build(); // Disable android traffic.
-            }
+    public AcceptResult acceptTcp(ConnectRequest connectRequest) {
+        log.debug("acceptTcp connectRequest={}", connectRequest);
+        if (connectRequest.isAppleHost()) {
+            return configAcceptResultBuilder(connectRequest.hostName, connectRequest.port, connectRequest.connectTcpDirect()).build(); // Enable iOS traffic.
+        }
+        if (connectRequest.isAndroidHost()) {
+            return connectRequest.disconnect(); // Disable android traffic.
+        }
+        if (connectRequest.isSSL()) {
             return null;
         } else {
-            return configAcceptResultBuilder(null, port, AcceptResult.builder(AllowRule.CONNECT_TCP)).build();
+            return configAcceptResultBuilder(null, connectRequest.port, AcceptResult.builder(AllowRule.CONNECT_TCP)).build();
         }
     }
 
