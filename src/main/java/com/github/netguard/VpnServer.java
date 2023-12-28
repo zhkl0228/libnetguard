@@ -28,6 +28,7 @@ import java.net.URL;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 /**
  * Download root cert: <a href="http://88.88.88.88:88">LINK</a>
@@ -153,6 +154,18 @@ public class VpnServer {
             }
         }, getClass().getSimpleName());
         thread.start();
+    }
+
+    public void waitShutdown() {
+        try (Scanner scanner = new Scanner(System.in)) {
+            String cmd;
+            while ((cmd = scanner.nextLine()) != null) {
+                if ("q".equals(cmd) || "exit".equals(cmd)) {
+                    break;
+                }
+            }
+            this.shutdown();
+        }
     }
 
     private boolean shutdown;

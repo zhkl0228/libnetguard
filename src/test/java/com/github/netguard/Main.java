@@ -26,7 +26,6 @@ import org.krakenapps.pcap.decoder.http.HttpDecoder;
 
 import java.io.IOException;
 import java.util.Date;
-import java.util.Scanner;
 
 public class Main {
 
@@ -45,14 +44,7 @@ public class Main {
         vpnServer.start();
 
         System.out.println("vpn server listen on: " + vpnServer.getPort());
-        Scanner scanner = new Scanner(System.in);
-        String cmd;
-        while ((cmd = scanner.nextLine()) != null) {
-            if ("q".equals(cmd) || "exit".equals(cmd)) {
-                break;
-            }
-        }
-        vpnServer.shutdown();
+        vpnServer.waitShutdown();
     }
 
     private static class MyVpnListener extends AbstractHttp2Filter implements VpnListener, Http2Filter {
