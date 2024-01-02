@@ -1,12 +1,10 @@
 package com.github.netguard.handler;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URL;
-import java.net.URLDecoder;
-import java.util.Set;
-
 import org.krakenapps.pcap.decoder.http.HttpHeaders;
 import org.krakenapps.pcap.decoder.http.HttpRequest;
+
+import java.net.URL;
+import java.util.Set;
 
 class KrakenHttpRequest implements com.github.netguard.handler.http.HttpRequest {
     private final HttpRequest request;
@@ -72,18 +70,7 @@ class KrakenHttpRequest implements com.github.netguard.handler.http.HttpRequest 
 
     @Override
     public String getRequestUri() {
-        StringBuilder buffer = new StringBuilder();
-        buffer.append(request.getURL().getPath());
-        String queryString = request.getQueryString();
-        if(queryString != null) {
-            buffer.append('?');
-            try {
-                buffer.append(URLDecoder.decode(queryString, "UTF-8"));
-            } catch (UnsupportedEncodingException e) {
-                buffer.append(queryString);
-            }
-        }
-        return buffer.toString();
+        return request.getURL().getPath();
     }
     @Override
     public String getRequestMethod() {
