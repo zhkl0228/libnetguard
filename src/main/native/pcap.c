@@ -42,9 +42,24 @@ void write_pcap_rec(const struct arguments *args, const uint8_t *buffer, size_t 
         return;
     }
 
+#if defined(__APPLE__)
+#define TIMEVAL_TO_TIMESPEC(tv, ts) {                               \
+	(ts)->tv_sec = (tv)->tv_sec;                                    \
+	(ts)->tv_nsec = (tv)->tv_usec * 1000;                           \
+}
+    struct timespec ts;
+    struct timeval tv;
+    int ret = gettimeofday(&tv, NULL);
+    if (ret)
+        log_android(ANDROID_LOG_ERROR, "clock_gettime error %d: %s", errno, strerror(errno));
+    else {
+        TIMEVAL_TO_TIMESPEC(&tv, &ts);
+    }
+#else
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts))
         log_android(ANDROID_LOG_ERROR, "clock_gettime error %d: %s", errno, strerror(errno));
+#endif
 
     size_t plen = (length < pcap_record_size ? length : pcap_record_size);
     size_t rlen = sizeof(struct pcaprec_hdr_s) + plen;

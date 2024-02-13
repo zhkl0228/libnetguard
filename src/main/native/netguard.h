@@ -33,6 +33,9 @@
 #include <sys/time.h>
 
 #if defined(__APPLE__)
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0x80000         /* do not generate SIGPIPE on EOF */
+#endif
 #define __be16 uint16_t
 #define __be32 uint32_t
 typedef uint16_t __u16;

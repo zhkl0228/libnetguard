@@ -7,8 +7,16 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#undef eu_faircode_netguard_ServiceSinkhole_IP_V4
+#define eu_faircode_netguard_ServiceSinkhole_IP_V4 4L
+#undef eu_faircode_netguard_ServiceSinkhole_IP_V6
+#define eu_faircode_netguard_ServiceSinkhole_IP_V6 6L
 #undef eu_faircode_netguard_ServiceSinkhole_SYSTEM_UID
 #define eu_faircode_netguard_ServiceSinkhole_SYSTEM_UID 2000L
+#undef eu_faircode_netguard_ServiceSinkhole_TCP_PROTOCOL
+#define eu_faircode_netguard_ServiceSinkhole_TCP_PROTOCOL 6L
+#undef eu_faircode_netguard_ServiceSinkhole_UDP_PROTOCOL
+#define eu_faircode_netguard_ServiceSinkhole_UDP_PROTOCOL 17L
 /*
  * Class:     eu_faircode_netguard_ServiceSinkhole
  * Method:    jni_init
