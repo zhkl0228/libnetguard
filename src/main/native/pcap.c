@@ -43,10 +43,6 @@ void write_pcap_rec(const struct arguments *args, const uint8_t *buffer, size_t 
     }
 
 #if defined(__APPLE__)
-#define TIMEVAL_TO_TIMESPEC(tv, ts) {                               \
-	(ts)->tv_sec = (tv)->tv_sec;                                    \
-	(ts)->tv_nsec = (tv)->tv_usec * 1000;                           \
-}
     struct timespec ts;
     struct timeval tv;
     int ret = gettimeofday(&tv, NULL);

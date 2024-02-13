@@ -180,3 +180,12 @@ long long get_ms() {
     gettimeofday(&tv, NULL);
     return tv.tv_sec * 1000LL + tv.tv_usec / 1e3;
 }
+
+#if defined(__APPLE__)
+int clock_gettime(clockid_t clk_id, struct timespec *tp) {
+    struct timeval tv;
+    int ret = gettimeofday(&tv, NULL);
+    TIMEVAL_TO_TIMESPEC(&tv, tp);
+    return ret;
+}
+#endif

@@ -33,6 +33,10 @@
 #include <sys/time.h>
 
 #if defined(__APPLE__)
+#define TIMEVAL_TO_TIMESPEC(tv, ts) {                               \
+	(ts)->tv_sec = (tv)->tv_sec;                                    \
+	(ts)->tv_nsec = (tv)->tv_usec * 1000;                           \
+}
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0x80000         /* do not generate SIGPIPE on EOF */
 #endif
