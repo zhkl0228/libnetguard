@@ -33,6 +33,10 @@
 #include <sys/time.h>
 
 #if defined(__APPLE__)
+#ifndef CLOCK_MONOTONIC
+#define clockid_t int
+#define CLOCK_MONOTONIC 6
+#endif
 #define TIMEVAL_TO_TIMESPEC(tv, ts) {                               \
 	(ts)->tv_sec = (tv)->tv_sec;                                    \
 	(ts)->tv_nsec = (tv)->tv_usec * 1000;                           \
