@@ -23,7 +23,10 @@ public class AcceptResult {
             return this;
         }
         public AcceptResult build() {
-            return new AcceptResult(rule, proxy, redirectAddress, redirectPort);
+            return build(null);
+        }
+        public AcceptResult build(String redirectHost) {
+            return new AcceptResult(rule, proxy, redirectAddress, redirectPort, redirectHost);
         }
     }
 
@@ -39,12 +42,14 @@ public class AcceptResult {
     private final Proxy socketProxy;
     private final String redirectAddress;
     private final int redirectPort;
+    private final String redirectHost;
 
-    private AcceptResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort) {
+    private AcceptResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost) {
         this.rule = rule;
         this.socketProxy = socketProxy;
         this.redirectAddress = redirectAddress;
         this.redirectPort = redirectPort;
+        this.redirectHost = redirectHost;
     }
 
     public AllowRule getRule() {
@@ -61,5 +66,9 @@ public class AcceptResult {
 
     public int getRedirectPort() {
         return redirectPort;
+    }
+
+    public String getRedirectHost() {
+        return redirectHost;
     }
 }

@@ -310,6 +310,7 @@ public class SSLProxyV2 implements Runnable {
         Proxy socketProxy = Proxy.NO_PROXY;
         String redirectAddress = null;
         int redirectPort = 0;
+        String redirectHost = null;
         if (packetCapture != null) {
             AcceptResult result = packetCapture.acceptTcp(record.newConnectRequest(packet));
             if (result != null) {
@@ -317,6 +318,7 @@ public class SSLProxyV2 implements Runnable {
                 socketProxy = result.getSocketProxy();
                 redirectAddress = result.getRedirectAddress();
                 redirectPort = result.getRedirectPort();
+                redirectHost = result.getRedirectHost();
             }
         }
         if (redirectAddress == null) {
@@ -334,7 +336,13 @@ public class SSLProxyV2 implements Runnable {
         }
         if (record.hostName == null || allowRule == AllowRule.CONNECT_TCP) {
             try (Socket socket = new Socket(socketProxy)) {
-                socket.connect(new InetSocketAddress(redirectAddress, redirectPort), timeout);
+                InetSocketAddress address;
+                if (socketProxy != Proxy.NO_PROXY && socketProxy.type() == Proxy.Type.SOCKS && redirectHost != null) {
+                    address = InetSocketAddress.createUnresolved(redirectHost, redirectPort);
+                } else {
+                    address = new InetSocketAddress(redirectAddress, redirectPort);
+                }
+                socket.connect(address, timeout);
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     socketOut.write(record.prologue);
                     socketOut.flush();
