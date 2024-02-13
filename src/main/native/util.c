@@ -176,16 +176,7 @@ int is_writable(int fd) {
 }
 
 long long get_ms() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return tv.tv_sec * 1000LL + tv.tv_usec / 1e3;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000LL + ts.tv_nsec / 1e6;
 }
-
-#if defined(__APPLE__)
-int clock_gettime(clockid_t clk_id, struct timespec *tp) {
-    struct timeval tv;
-    int ret = gettimeofday(&tv, NULL);
-    TIMEVAL_TO_TIMESPEC(&tv, tp);
-    return ret;
-}
-#endif

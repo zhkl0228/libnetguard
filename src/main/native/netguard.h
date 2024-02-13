@@ -37,6 +37,7 @@
 	(ts)->tv_sec = (tv)->tv_sec;                                    \
 	(ts)->tv_nsec = (tv)->tv_usec * 1000;                           \
 }
+int clock_gettime(clockid_t clk_id, struct timespec *tp);
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0x80000         /* do not generate SIGPIPE on EOF */
 #endif

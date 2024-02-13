@@ -39,6 +39,15 @@ extern long pcap_file_size;
 extern int uid_cache_size;
 extern struct uid_cache_entry *uid_cache;
 
+#if defined(__APPLE__)
+int clock_gettime(clockid_t clk_id, struct timespec *tp) {
+    struct timeval tv;
+    int ret = gettimeofday(&tv, NULL);
+    TIMEVAL_TO_TIMESPEC(&tv, tp);
+    return ret;
+}
+#endif
+
 // JNI
 
 jclass clsPacket;
