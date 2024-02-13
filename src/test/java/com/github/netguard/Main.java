@@ -38,6 +38,7 @@ public class Main {
         Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
         Logger.getLogger("edu.baylor.cs.csi5321.spdy.frames").setLevel(Level.INFO);
         VpnServer vpnServer = new VpnServer();
+        vpnServer.preparePreMasterSecretsLogFile();
         vpnServer.enableBroadcast(10);
         vpnServer.enableTransparentProxying();
         vpnServer.setVpnListener(new MyVpnListener());

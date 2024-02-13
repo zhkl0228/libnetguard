@@ -223,7 +223,7 @@ public class VpnServer {
         return serverSocket.getLocalPort();
     }
 
-    static {
+    public final void preparePreMasterSecretsLogFile() {
         File preMasterSecretsLogFile = new File("target/pre_master_secrets.log");
         String preMasterSecretsLogPath = preMasterSecretsLogFile.getAbsolutePath();
         FileUtil.del(preMasterSecretsLogFile);
