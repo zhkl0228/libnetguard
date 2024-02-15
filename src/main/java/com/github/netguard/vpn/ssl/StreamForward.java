@@ -12,7 +12,10 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.concurrent.CountDownLatch;
 
 public class StreamForward implements Runnable {
@@ -48,7 +51,8 @@ public class StreamForward implements Runnable {
     }
 
     final void startThread() {
-        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + clientSocketAddress + "_" + serverSocketAddress);
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + clientSocketAddress + "_" + serverSocketAddress + "_" + dateFormat.format(new Date()));
         thread.setDaemon(true);
         thread.start();
     }

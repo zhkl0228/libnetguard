@@ -43,8 +43,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -103,7 +106,8 @@ public class SSLProxyV2 implements Runnable {
         this.serverSocket = null;
         this.acceptedSocket = socket;
 
-        Thread thread = new Thread(this, "Proxy for " + packet);
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        Thread thread = new Thread(this, "Proxy for " + packet + " " + dateFormat.format(new Date()));
         thread.setDaemon(true);
         thread.start();
     }
@@ -125,7 +129,8 @@ public class SSLProxyV2 implements Runnable {
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
         this.acceptedSocket = null;
 
-        Thread thread = new Thread(this, "Proxy for " + packet);
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        Thread thread = new Thread(this, "Proxy for " + packet + " " + dateFormat.format(new Date()));
         thread.setDaemon(true);
         thread.start();
     }
@@ -153,7 +158,8 @@ public class SSLProxyV2 implements Runnable {
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
         this.acceptedSocket = null;
 
-        Thread thread = new Thread(this, "SSLProxy for " + packet);
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        Thread thread = new Thread(this, "SSLProxy for " + packet + " " + dateFormat.format(new Date()));
         thread.setDaemon(true);
         thread.start();
     }

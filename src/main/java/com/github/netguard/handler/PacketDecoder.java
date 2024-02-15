@@ -59,6 +59,13 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     private final TcpPortProtocolMapper tcpPortProtocolMapper;
 
     public PacketDecoder() {
+        this(true);
+    }
+
+    private final boolean decodePacket;
+
+    public PacketDecoder(boolean decodePacket) {
+        this.decodePacket = decodePacket;
         this.httpDecoder = new HttpDecoder();
         this.httpDecoder.register(this);
 
@@ -175,6 +182,10 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public final void onPacket(byte[] packetData, String type) {
+        if (!decodePacket) {
+            return;
+        }
+
         try {
             if (pcapFileOutputStream != null) {
                 pcapFileOutputStream.writePacket(packetData);
