@@ -203,6 +203,9 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private Allowed isAddressAllowed(Packet packet) {
+        if (directAllowAll) {
+            return new Allowed();
+        }
         packet.allowed = false;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
             if (packet.version == IP_V4 && packet.protocol == TCP_PROTOCOL) { // ipv4

@@ -39,6 +39,13 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
         return packetCapture;
     }
 
+    protected boolean directAllowAll;
+
+    @Override
+    public void setDirectAllowAll() {
+        directAllowAll = true;
+    }
+
     protected final Allowed redirect(Packet packet) {
         int timeout = 10000; // default 10 seconds;
         return SSLProxyV2.create(this, rootCert, packet, timeout);

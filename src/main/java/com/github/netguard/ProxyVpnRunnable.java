@@ -142,13 +142,14 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
 
     @Override
     public Allowed redirect(String ip, int port) {
+        if (directAllowAll) {
+            return null;
+        }
         Packet packet = new Packet();
         packet.daddr = ip;
         packet.dport = port;
         Allowed allowed = redirect(packet);
-        if (allowed == null) {
-            return new Allowed("127.0.0.1", 222); // blocked
-        } else if (allowed.raddr != null && allowed.rport > 0) {
+        if (allowed.raddr != null && allowed.rport > 0) {
             return allowed;
         } else {
             return null;
