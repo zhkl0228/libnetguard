@@ -8,12 +8,21 @@ import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.SocketImpl;
 import java.util.List;
 
@@ -92,16 +101,74 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     }
 
     private Thread tunnelThread;
+    private DatagramSocket udp;
+
+    @Override
+    public String[] queryApplications(int hash) {
+        DatagramSocket udp = this.udp;
+        if (udp != null) {
+            SocketAddress address = socket.getRemoteSocketAddress();
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                DataOutput dataOutput = new DataOutputStream(baos);
+                dataOutput.writeByte(0x2);
+                dataOutput.writeInt(hash);
+                byte[] data = baos.toByteArray();
+                log.debug("queryApplication address={}", address);
+                udp.send(new DatagramPacket(data, data.length, address));
+
+                byte[] buffer = new byte[1024];
+                DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length);
+                udp.receive(datagramPacket);
+                DataInput dataInput = new DataInputStream(new ByteArrayInputStream(buffer));
+                if (dataInput.readUnsignedByte() == 0x2 &&
+                        dataInput.readInt() == hash) {
+                    int size = dataInput.readUnsignedByte();
+                    if (size > 0) {
+                        String[] applications = new String[size];
+                        for (int i = 0; i < size; i++) {
+                            applications[i] = dataInput.readUTF();
+                        }
+                        return applications;
+                    }
+                }
+            } catch (IOException e) {
+                log.debug("queryApplication address={}", address, e);
+            }
+        }
+        return super.queryApplications(hash);
+    }
 
     @Override
     public void run() {
         tunnelThread = Thread.currentThread();
+        if (!directAllowAll) {
+            try {
+                udp = new DatagramSocket();
+                udp.setSoTimeout(1500);
+                byte[] data = new byte[]{0x8};
+                SocketAddress address = socket.getRemoteSocketAddress();
+                udp.send(new DatagramPacket(data, data.length, address));
+                DatagramPacket ack = new DatagramPacket(data, data.length);
+                udp.receive(ack);
+                if (ack.getLength() != 1 || ack.getData()[0] != 0x8) {
+                    throw new IllegalStateException("Ack failed: " + ack);
+                } else {
+                    log.debug("Udp ack ok.");
+                }
+            } catch (Exception e) {
+                log.debug("create udp failed.", e);
+                IoUtil.close(udp);
+                udp = null;
+            }
+        }
 
         log.debug("Vpn thread starting");
 
         log.debug("Running tunnel");
         jni_run(jni_context, fd, true, 3);
         log.debug("Tunnel exited");
+        IoUtil.close(udp);
+        udp = null;
 
         IoUtil.close(socket);
         log.debug("Vpn thread shutting down");
@@ -176,15 +243,11 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private int getUidQ(int version, int protocol, String saddr, int sport, String daddr, int dport) {
-        if (protocol != TCP_PROTOCOL && protocol != UDP_PROTOCOL)
+        if (protocol != TCP_PROTOCOL && protocol != UDP_PROTOCOL) {
             return -1;
-
-        InetSocketAddress local = new InetSocketAddress(saddr, sport);
-        InetSocketAddress remote = new InetSocketAddress(daddr, dport);
-
-        int uid = SYSTEM_UID; // cm.getConnectionOwnerUid(protocol, local, remote);
-        log.debug("Get uid local={} remote={}, uid={}", local, remote, uid);
-        return uid;
+        } else {
+            return SYSTEM_UID;
+        }
     }
 
     private boolean isSupported(int protocol) {
@@ -206,9 +269,13 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         if (directAllowAll) {
             return new Allowed();
         }
+        DatagramSocket udp = this.udp;
         packet.allowed = false;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
             if (packet.version == IP_V4 && packet.protocol == TCP_PROTOCOL) { // ipv4
+                if (udp != null) {
+                    packet.sendAllowed(udp, socket.getRemoteSocketAddress());
+                }
                 return redirect(packet);
             }
             if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) {
@@ -217,6 +284,10 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
                 packet.allowed = true;
             }
             log.debug("isAddressAllowed: packet={}, allowed={}", packet, packet.allowed);
+        }
+
+        if (udp != null && packet.allowed) {
+            packet.sendAllowed(udp, socket.getRemoteSocketAddress());
         }
 
         return packet.allowed ? new Allowed() : null;

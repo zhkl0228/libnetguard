@@ -2,6 +2,8 @@ package com.github.netguard.vpn.ssl;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.IPacketCapture;
+import com.github.netguard.vpn.InspectorVpn;
+import eu.faircode.netguard.Packet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,12 +34,14 @@ public class StreamForward implements Runnable {
     protected final InetSocketAddress serverSocketAddress;
     private final CountDownLatch countDownLatch;
     private final Socket socket;
+    private final InspectorVpn vpn;
     protected final IPacketCapture packetCapture;
     protected final String hostName;
     private final boolean isSSL;
+    private final Packet packet;
 
     protected StreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
-                            IPacketCapture packetCapture, String hostName, boolean isSSL) {
+                            InspectorVpn vpn, String hostName, boolean isSSL, Packet packet) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.server = server;
@@ -45,9 +49,11 @@ public class StreamForward implements Runnable {
         this.serverSocketAddress = serverSocketAddress;
         this.countDownLatch = countDownLatch;
         this.socket = socket;
-        this.packetCapture = packetCapture;
+        this.vpn = vpn;
+        this.packetCapture = vpn == null ? null : vpn.getPacketCapture();
         this.hostName = hostName;
         this.isSSL = isSSL;
+        this.packet = packet;
     }
 
     final void startThread() {
@@ -101,10 +107,14 @@ public class StreamForward implements Runnable {
                 }
             }
         } catch (SSLHandshakeException e) {
+            String[] applications = new String[0];
+            if (vpn != null && packet != null) {
+                applications = vpn.queryApplications(packet.hashCode());
+            }
             if (log.isDebugEnabled()) {
-                log.warn("[{}]handshake with {} => {} failed", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, e);
+                log.warn("[{}]handshake with {} => {} failed: {}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, applications, e);
             } else {
-                log.info("[{}]handshake with {} => {} failed: {}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, e.getMessage());
+                log.info("[{}]handshake with {} => {} failed: {}, packet={}, applications={}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, e.getMessage(), packet, applications);
             }
             socketException = e;
         } catch (IOException e) {

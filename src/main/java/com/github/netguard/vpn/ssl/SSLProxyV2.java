@@ -61,8 +61,7 @@ public class SSLProxyV2 implements Runnable {
     public static Allowed create(final InspectorVpn vpn, RootCert rootCert, final Packet packet, final int timeout) {
         try {
             log.debug("create tcp proxy packet={}", packet);
-            IPacketCapture packetCapture = vpn.getPacketCapture();
-            SSLProxyV2 proxy = new SSLProxyV2(rootCert, packetCapture, packet, timeout);
+            SSLProxyV2 proxy = new SSLProxyV2(vpn, rootCert, packet, timeout);
             Allowed allowed = proxy.redirect();
             log.debug("create tcp proxy packet={}, allowed={}", packet, allowed);
             return allowed;
@@ -74,27 +73,26 @@ public class SSLProxyV2 implements Runnable {
     public static void create(final InspectorVpn vpn, RootCert rootCert, final Packet packet, final int timeout, Socket socket) {
         try {
             log.debug("create tcp proxy packet={}", packet);
-            IPacketCapture packetCapture = vpn.getPacketCapture();
-            new SSLProxyV2(rootCert, packetCapture, packet, timeout, socket);
+            new SSLProxyV2(vpn, rootCert, packet, timeout, socket);
             log.debug("create tcp proxy packet={}", packet);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
     }
 
+    private final InspectorVpn vpn;
     private final RootCert rootCert;
 
     private final Packet packet;
-    private final IPacketCapture packetCapture;
     private final int timeout;
     private final ServerSocket serverSocket;
     private final SSLSocket secureSocket;
     private final Socket acceptedSocket;
 
-    private SSLProxyV2(RootCert rootCert, IPacketCapture packetCapture, Packet packet, int timeout, Socket socket) throws IOException {
+    private SSLProxyV2(InspectorVpn vpn, RootCert rootCert, Packet packet, int timeout, Socket socket) throws IOException {
+        this.vpn = vpn;
         this.rootCert = rootCert;
 
-        this.packetCapture = packetCapture;
         this.packet = packet;
         this.timeout = timeout;
         this.secureSocket = null;
@@ -112,10 +110,10 @@ public class SSLProxyV2 implements Runnable {
         thread.start();
     }
 
-    private SSLProxyV2(RootCert rootCert, IPacketCapture packetCapture, Packet packet, int timeout) throws IOException {
+    private SSLProxyV2(InspectorVpn vpn, RootCert rootCert, Packet packet, int timeout) throws IOException {
+        this.vpn = vpn;
         this.rootCert = rootCert;
 
-        this.packetCapture = packetCapture;
         this.packet = packet;
         this.timeout = timeout;
         this.secureSocket = null;
@@ -140,11 +138,11 @@ public class SSLProxyV2 implements Runnable {
     private final boolean allowFilterH2;
     private final List<String> applicationLayerProtocols;
 
-    private SSLProxyV2(IPacketCapture packetCapture, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket,
+    private SSLProxyV2(InspectorVpn vpn, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket,
                        ClientHelloRecord record, String applicationProtocol, boolean allowFilterH2) throws IOException {
+        this.vpn = vpn;
         this.rootCert = null;
 
-        this.packetCapture = packetCapture;
         this.packet = packet;
         this.timeout = timeout;
         this.secureSocket = secureSocket;
@@ -260,9 +258,10 @@ public class SSLProxyV2 implements Runnable {
             });
         }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
+            IPacketCapture packetCapture = vpn.getPacketCapture();
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
             boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.filterHost(hostName);
-            doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, hostName, filterHttp2, applicationLayerProtocols, applicationProtocol, true);
+            doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, hostName, filterHttp2, applicationLayerProtocols, applicationProtocol, true, packet);
         }
     }
 
@@ -270,11 +269,12 @@ public class SSLProxyV2 implements Runnable {
         return "h2".equals(applicationProtocol);
     }
 
-    private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, IPacketCapture packetCapture,
-                                  String hostName, boolean filterHttp2, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL) throws InterruptedException {
+    private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, InspectorVpn vpn,
+                                  String hostName, boolean filterHttp2, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet) throws InterruptedException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
+        IPacketCapture packetCapture = vpn == null ? null : vpn.getPacketCapture();
         if (packetCapture != null) {
             if (isSSL) {
                 packetCapture.onSSLProxyEstablish(client, server, hostName, applicationProtocols, applicationProtocol);
@@ -286,15 +286,15 @@ public class SSLProxyV2 implements Runnable {
         StreamForward inbound, outbound;
         if (filterHttp2) {
             Http2Session session = new Http2Session(client.getAddress().getHostAddress(), server.getAddress().getHostAddress(), client.getPort(), server.getPort(), hostName);
-            HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client, server, countDownLatch, local, packetCapture, hostName,
-                    session);
-            outbound = new HttpFrameForward(socketIn, localOut, false, client, server, countDownLatch, socket, packetCapture, hostName,
-                    session)
+            HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName,
+                    session, packet);
+            outbound = new HttpFrameForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName,
+                    session, packet)
                     .setPeer(inboundForward);
             inbound = inboundForward;
         } else {
-            inbound = new StreamForward(localIn, socketOut, true, client, server, countDownLatch, local, packetCapture, hostName, isSSL);
-            outbound = new StreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, packetCapture, hostName, isSSL);
+            inbound = new StreamForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName, isSSL, packet);
+            outbound = new StreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName, isSSL, packet);
         }
         inbound.startThread();
         outbound.startThread();
@@ -317,6 +317,7 @@ public class SSLProxyV2 implements Runnable {
         String redirectAddress = null;
         int redirectPort = 0;
         String redirectHost = null;
+        IPacketCapture packetCapture = vpn.getPacketCapture();
         if (packetCapture != null) {
             AcceptResult result = packetCapture.acceptTcp(record.newConnectRequest(packet));
             if (result != null) {
@@ -352,7 +353,7 @@ public class SSLProxyV2 implements Runnable {
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     socketOut.write(record.prologue);
                     socketOut.flush();
-                    doForward(localIn, localOut, local, socketIn, socketOut, socket, packetCapture, null, false, null, null, false);
+                    doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, null, false, null, null, false, packet);
                 }
             }
         } else {
@@ -393,13 +394,13 @@ public class SSLProxyV2 implements Runnable {
 
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
                 SSLContext serverContext = serverCertificate.createSSLContext(rootCert);
-                SSLProxyV2 proxy = new SSLProxyV2(packetCapture, packet, timeout, serverContext, secureSocket,
+                SSLProxyV2 proxy = new SSLProxyV2(vpn, packet, timeout, serverContext, secureSocket,
                         record, secureSocket.getApplicationProtocol(), allowRule == AllowRule.FILTER_H2);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                         socketOut.write(record.prologue);
                         socketOut.flush();
-                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false, null, null, false);
+                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false, null, null, false, packet);
                     }
                 }
             } catch (IOException e) {

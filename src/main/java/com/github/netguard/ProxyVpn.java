@@ -21,6 +21,11 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
     }
 
     @Override
+    public String[] queryApplications(int hash) {
+        return new String[0];
+    }
+
+    @Override
     public boolean isTransparentProxying() {
         return false;
     }

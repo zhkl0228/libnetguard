@@ -4,4 +4,6 @@ public interface InspectorVpn extends Vpn {
 
     IPacketCapture getPacketCapture();
 
+    String[] queryApplications(int hash);
+
 }

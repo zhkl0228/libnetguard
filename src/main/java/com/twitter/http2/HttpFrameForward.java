@@ -4,7 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.HexUtil;
 import cn.hutool.crypto.digest.DigestUtil;
-import com.github.netguard.vpn.IPacketCapture;
+import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.StreamForward;
 import com.github.netguard.vpn.ssl.h2.CancelResult;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
@@ -14,6 +14,7 @@ import com.github.netguard.vpn.ssl.h2.HttpHeaderBlockDecoder;
 import com.github.netguard.vpn.ssl.h2.HttpHeaderBlockEncoder;
 import edu.baylor.cs.csi5321.spdy.frames.H2FrameRstStream;
 import edu.baylor.cs.csi5321.spdy.frames.H2Util;
+import eu.faircode.netguard.Packet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultHttpRequest;
@@ -64,9 +65,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private final Http2Filter filter;
     private final String sessionKey;
 
-    public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket, IPacketCapture packetCapture, String hostName,
-                            Http2Session session) {
-        super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, packetCapture, hostName, true);
+    public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket, InspectorVpn vpn, String hostName,
+                            Http2Session session, Packet packet) {
+        super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, vpn, hostName, true, packet);
         this.frameDecoder = new NetGuardFrameDecoder(server, this);
         this.frameEncoder = new HttpFrameEncoder();
 
