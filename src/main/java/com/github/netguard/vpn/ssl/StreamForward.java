@@ -114,7 +114,7 @@ public class StreamForward implements Runnable {
             if (log.isDebugEnabled()) {
                 log.warn("[{}]handshake with {} => {} failed: {}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, applications, e);
             } else {
-                log.info("[{}]handshake with {} => {} failed: {}, packet={}, applications={}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, e.getMessage(), packet, applications);
+                log.info("[{}]handshake with {} => {} failed: {}, applications={}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, e.getMessage(), applications);
             }
             socketException = e;
         } catch (IOException e) {
