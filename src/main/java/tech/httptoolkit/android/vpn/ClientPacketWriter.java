@@ -17,6 +17,7 @@
 package tech.httptoolkit.android.vpn;
 
 import com.github.netguard.vpn.IPacketCapture;
+import eu.faircode.netguard.ServiceSinkhole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +52,12 @@ public class ClientPacketWriter implements Runnable {
 		if (data.length > 30000) {
 			throw new IllegalStateException("Packet too large");
 		}
+		if (packetCapture != null) {
+			packetCapture.onPacket(data, "ToyShark");
+		}
+		for (int i = 0; i < data.length; i++) {
+			data[i] ^= ServiceSinkhole.VPN_MAGIC;
+		}
 		packetQueue.addLast(data);
 	}
 
@@ -66,12 +73,9 @@ public class ClientPacketWriter implements Runnable {
 				try {
 					this.clientWriter.writeShort(data.length);
 					this.clientWriter.write(data);
-					if (packetCapture != null) {
-						packetCapture.onPacket(data, "ToyShark");
-					}
 				} catch (IOException e) {
 					log.error("Error writing {} bytes to the VPN", data.length);
-					e.printStackTrace();
+					e.printStackTrace(System.err);
 
 					this.packetQueue.addFirst(data); // Put the data back, so it's resent
 					TimeUnit.MILLISECONDS.sleep(10); // Add an arbitrary tiny pause, in case that helps

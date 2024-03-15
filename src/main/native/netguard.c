@@ -1123,7 +1123,15 @@ ssize_t write_tun(int fd, const void *buffer, size_t size) {
     if(res != 2) {
         return -1;
     }
-    return write(fd, buffer, size);
+    uint8_t *copy = malloc(size);
+    memcpy(copy, buffer, size);
+    int i;
+    for(i = 0; i < size; i++) {
+        copy[i] ^= eu_faircode_netguard_ServiceSinkhole_VPN_MAGIC;
+    }
+    ssize_t ret = write(fd, copy, size);
+    free(copy);
+    return ret;
 }
 
 JNIEXPORT void JNICALL

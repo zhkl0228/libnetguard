@@ -32,6 +32,8 @@
 #include <signal.h>
 #include <sys/time.h>
 
+#include "eu_faircode_netguard_ServiceSinkhole.h"
+
 #if defined(__APPLE__)
 #ifndef CLOCK_MONOTONIC
 #define clockid_t int

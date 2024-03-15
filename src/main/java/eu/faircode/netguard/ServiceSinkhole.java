@@ -2,6 +2,7 @@ package eu.faircode.netguard;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.ProxyVpn;
+import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.RootCert;
 import org.scijava.nativelib.NativeLoader;
@@ -30,6 +31,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     private static final Logger log = LoggerFactory.getLogger(ServiceSinkhole.class);
 
+    public static final byte VPN_MAGIC = 0xe;
+
     static {
         try {
             NativeLoader.loadLibrary("netguard");
@@ -50,6 +53,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
         this.jni_context = jni_init(30);
         try {
+            this.clientOS = new DataInputStream(socket.getInputStream()).readUnsignedByte() == 0x0 ? ClientOS.Android : ClientOS.iOS;
+
             if (getImpl == null) {
                 getImpl = Socket.class.getDeclaredMethod("getImpl");
                 getImpl.setAccessible(true);
@@ -141,20 +146,10 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     @Override
     public void run() {
         tunnelThread = Thread.currentThread();
-        if (!directAllowAll) {
+        if (!directAllowAll && clientOS == ClientOS.Android) {
             try {
                 udp = new DatagramSocket();
                 udp.setSoTimeout(1500);
-                byte[] data = new byte[]{0x8};
-                SocketAddress address = socket.getRemoteSocketAddress();
-                udp.send(new DatagramPacket(data, data.length, address));
-                DatagramPacket ack = new DatagramPacket(data, data.length);
-                udp.receive(ack);
-                if (ack.getLength() != 1 || ack.getData()[0] != 0x8) {
-                    throw new IllegalStateException("Ack failed: " + ack);
-                } else {
-                    log.debug("Udp ack ok.");
-                }
             } catch (Exception e) {
                 log.debug("create udp failed.", e);
                 IoUtil.close(udp);

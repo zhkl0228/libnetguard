@@ -82,6 +82,10 @@ int read_packet(const struct arguments *args) {
     } else {
         ctx->read += size;
         if(ctx->read == ctx->packet_size + 2) {
+            int i;
+            for(i = 0; i < ctx->packet_size; i++) {
+                ctx->packet[i] ^= eu_faircode_netguard_ServiceSinkhole_VPN_MAGIC;
+            }
             ctx->packet_ready = ctx->packet;
             return 0;
         } else if(ctx->read < ctx->packet_size + 2) {

@@ -1,5 +1,6 @@
 package com.github.netguard;
 
+import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.RootCert;
@@ -18,6 +19,13 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
     protected ProxyVpn(List<ProxyVpn> clients, RootCert rootCert) {
         this.clients = clients;
         this.rootCert = rootCert;
+    }
+
+    protected ClientOS clientOS = ClientOS.MacOS;
+
+    @Override
+    public ClientOS getClientOS() {
+        return clientOS;
     }
 
     @Override

@@ -51,6 +51,7 @@ public class Main {
     private static class MyVpnListener extends AbstractHttp2Filter implements VpnListener, Http2Filter {
         @Override
         public void onConnectClient(Vpn vpn) {
+            System.out.println("client: " + vpn.getClientOS() + ", impl=" + vpn.getClass());
             IPacketCapture packetCapture = new PacketDecoder() {
                 @Override
                 public Http2Filter getH2Filter() {

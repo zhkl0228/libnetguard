@@ -7,6 +7,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#undef eu_faircode_netguard_ServiceSinkhole_VPN_MAGIC
+#define eu_faircode_netguard_ServiceSinkhole_VPN_MAGIC 14L
 #undef eu_faircode_netguard_ServiceSinkhole_IP_V4
 #define eu_faircode_netguard_ServiceSinkhole_IP_V4 4L
 #undef eu_faircode_netguard_ServiceSinkhole_IP_V6

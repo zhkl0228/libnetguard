@@ -1,10 +1,12 @@
 package com.github.netguard;
 
 import cn.hutool.core.io.IoUtil;
+import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.PortRedirector;
 import com.github.netguard.vpn.ssl.RootCert;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
+import eu.faircode.netguard.ServiceSinkhole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
@@ -50,6 +52,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
         super(clients, rootCert);
         this.socket = socket;
         this.vpnReadStream = new DataInputStream(socket.getInputStream());
+        this.clientOS = vpnReadStream.readUnsignedByte() == 0x0 ? ClientOS.Android : ClientOS.iOS;
 
         // Packets from upstream servers, received by this VPN
         OutputStream vpnWriteStream = socket.getOutputStream();
@@ -94,6 +97,9 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
                 if (length > 0) {
                     try {
                         packet.limit(length);
+                        for (int i = 0; i < length; i++) {
+                            data[i] ^= ServiceSinkhole.VPN_MAGIC;
+                        }
                         handler.handlePacket(packet);
                     } catch (Exception e) {
                         log.trace("handlePacket", e);

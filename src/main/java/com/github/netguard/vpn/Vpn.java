@@ -12,4 +12,6 @@ public interface Vpn {
 
     void setDirectAllowAll();
 
+    ClientOS getClientOS();
+
 }
