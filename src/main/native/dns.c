@@ -100,7 +100,8 @@ void parse_dns_response(const struct arguments *args, const struct ng_session *s
         uint16_t qclass;
         char qname[DNS_QNAME_MAX + 1];
 
-        for (int q = 0; q < 1; q++) {
+        int q;
+        for (q = 0; q < 1; q++) {
             off = get_qname(data, *datalen, (uint16_t) off, name);
             if (off > 0 && off + 4 <= *datalen) {
                 // TODO multiple qnames?
@@ -121,7 +122,8 @@ void parse_dns_response(const struct arguments *args, const struct ng_session *s
         }
 
         int32_t aoff = off;
-        for (int a = 0; a < acount; a++) {
+        int a;
+        for (a = 0; a < acount; a++) {
             off = get_qname(data, *datalen, (uint16_t) off, name);
             if (off > 0 && off + 10 <= *datalen) {
                 uint16_t qtype = ntohs(*((uint16_t *) (data + off)));

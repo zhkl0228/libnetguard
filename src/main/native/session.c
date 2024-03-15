@@ -201,9 +201,8 @@ void *handle_events(void *a) {
             if (pthread_mutex_lock(&args->ctx->lock))
                 log_android(ANDROID_LOG_ERROR, "pthread_mutex_lock failed");
 
-            int error = 0;
-
-            for (int i = 0; i < ready; i++) {
+            int error = 0, i;
+            for (i = 0; i < ready; i++) {
                 if (ev[i].data.ptr == &ev_pipe) {
                     // Check pipe
                     uint8_t buffer[1];

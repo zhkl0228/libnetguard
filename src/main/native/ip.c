@@ -475,7 +475,8 @@ jint get_uid_sub(const int version, const int protocol,
     int ws = (version == 4 ? 1 : 4);
 
     // Check cache
-    for (int i = 0; i < uid_cache_size; i++)
+    int i;
+    for (i = 0; i < uid_cache_size; i++)
         if (now - uid_cache[i].time <= UID_MAX_AGE &&
             uid_cache[i].version == version &&
             uid_cache[i].protocol == protocol &&
@@ -543,10 +544,11 @@ jint get_uid_sub(const int version, const int protocol,
             hex2bytes(shex, _saddr);
             hex2bytes(dhex, _daddr);
 
-            for (int w = 0; w < ws; w++)
+            int w;
+            for (w = 0; w < ws; w++)
                 ((uint32_t *) _saddr)[w] = htonl(((uint32_t *) _saddr)[w]);
 
-            for (int w = 0; w < ws; w++)
+            for (w = 0; w < ws; w++)
                 ((uint32_t *) _daddr)[w] = htonl(((uint32_t *) _daddr)[w]);
 
             if (_sport == sport &&

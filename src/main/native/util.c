@@ -80,7 +80,8 @@ uint8_t char2nible(const char c) {
 
 void hex2bytes(const char *hex, uint8_t *buffer) {
     size_t len = strlen(hex);
-    for (int i = 0; i < len; i += 2)
+    int i;
+    for (i = 0; i < len; i += 2)
         buffer[i / 2] = (char2nible(hex[i]) << 4) | char2nible(hex[i + 1]);
 }
 
@@ -132,7 +133,8 @@ char *hex(const u_int8_t *data, const size_t len) {
     char *hexout;
     hexout = (char *) ng_malloc(len * 3 + 1, "hex"); // TODO free
 
-    for (size_t i = 0; i < len; i++) {
+    size_t i;
+    for (i = 0; i < len; i++) {
         hexout[i * 3 + 0] = hex_str[(data[i] >> 4) & 0x0F];
         hexout[i * 3 + 1] = hex_str[(data[i]) & 0x0F];
         hexout[i * 3 + 2] = ' ';

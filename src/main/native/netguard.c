@@ -140,13 +140,15 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1init(
     // Create signal pipe
     if (pipe(ctx->pipefds))
         log_android(ANDROID_LOG_ERROR, "Create pipe error %d: %s", errno, strerror(errno));
-    else
-        for (int i = 0; i < 2; i++) {
+    else {
+        int i;
+        for (i = 0; i < 2; i++) {
             int flags = fcntl(ctx->pipefds[i], F_GETFL, 0);
             if (flags < 0 || fcntl(ctx->pipefds[i], F_SETFL, flags | O_NONBLOCK) < 0)
                 log_android(ANDROID_LOG_ERROR, "fcntl pipefds[%d] O_NONBLOCK error %d: %s",
                             i, errno, strerror(errno));
         }
+    }
 
     return (jlong) ctx;
 }
@@ -362,7 +364,8 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1done(
     if (pthread_mutex_destroy(&ctx->lock))
         log_android(ANDROID_LOG_ERROR, "pthread_mutex_destroy failed");
 
-    for (int i = 0; i < 2; i++)
+    int i;
+    for (i = 0; i < 2; i++)
         if (close(ctx->pipefds[i]))
             log_android(ANDROID_LOG_ERROR, "Close pipe error %d: %s", errno, strerror(errno));
 
@@ -1109,8 +1112,8 @@ void ng_free(void *__ptr, const char *file, int line) {
 }
 
 void ng_dump() {
-    int r = 0;
-    for (int c = 0; c < allocs; c++)
+    int r = 0, c;
+    for (c = 0; c < allocs; c++)
         if (alloc[c].ptr != NULL)
             log_android(ANDROID_LOG_WARN,
                         "holding %d [%s] %s",
