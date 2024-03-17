@@ -24,7 +24,7 @@ public class ClientHelloRecord {
     }
 
     ConnectRequest newConnectRequest(Packet packet) {
-        return new ConnectRequest(packet.daddr, packet.dport, this.hostName, this.applicationLayerProtocols, this.prologue);
+        return new ConnectRequest(packet, this.hostName, this.applicationLayerProtocols, this.prologue);
     }
 
     public final byte[] prologue;

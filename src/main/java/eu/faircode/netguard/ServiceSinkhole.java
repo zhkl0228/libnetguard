@@ -108,8 +108,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     private Thread tunnelThread;
 
     @Override
-    public String[] queryApplications(int hash) {
-        String[] applications = this.applications.get(hash);
+    public Package[] queryApplications(int hash) {
+        Package[] applications = this.applications.get(hash);
         if (applications != null) {
             return applications;
         } else {
@@ -117,7 +117,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
     }
 
-    private final Map<Integer, String[]> applications = new HashMap<>();
+    private final Map<Integer, Package[]> applications = new HashMap<>();
 
     private class UdpHandler implements Runnable, AutoCloseable {
         private final DatagramSocket udp;
@@ -145,9 +145,9 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
                         }
                         int hash = dataInput.readInt();
                         int size = dataInput.readUnsignedByte();
-                        String[] applications = new String[size];
+                        Package[] applications = new Package[size];
                         for (int i = 0; i < size; i++) {
-                            applications[i] = dataInput.readUTF();
+                            applications[i] = Package.decodePackage(dataInput);
                         }
                         ServiceSinkhole.this.applications.put(hash, applications);
                         log.debug("applications={}", ServiceSinkhole.this.applications);

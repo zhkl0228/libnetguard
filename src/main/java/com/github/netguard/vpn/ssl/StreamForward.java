@@ -3,6 +3,7 @@ package com.github.netguard.vpn.ssl;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
+import eu.faircode.netguard.Package;
 import eu.faircode.netguard.Packet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,7 +108,7 @@ public class StreamForward implements Runnable {
                 }
             }
         } catch (SSLHandshakeException e) {
-            String[] applications = new String[0];
+            Package[] applications = new Package[0];
             if (vpn != null && packet != null) {
                 applications = vpn.queryApplications(packet.hashCode());
             }
