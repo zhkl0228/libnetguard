@@ -10,11 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -25,7 +22,10 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketImpl;
+import java.net.SocketTimeoutException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
@@ -106,54 +106,85 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     }
 
     private Thread tunnelThread;
-    private DatagramSocket udp;
 
     @Override
     public String[] queryApplications(int hash) {
-        DatagramSocket udp = this.udp;
-        if (udp != null) {
-            SocketAddress address = socket.getRemoteSocketAddress();
-            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                DataOutput dataOutput = new DataOutputStream(baos);
-                dataOutput.writeByte(0x2);
-                dataOutput.writeInt(hash);
-                byte[] data = baos.toByteArray();
-                log.debug("queryApplication address={}", address);
-                udp.send(new DatagramPacket(data, data.length, address));
+        String[] applications = this.applications.get(hash);
+        if (applications != null) {
+            return applications;
+        } else {
+            return super.queryApplications(hash);
+        }
+    }
 
-                byte[] buffer = new byte[1024];
-                DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length);
-                udp.receive(datagramPacket);
-                DataInput dataInput = new DataInputStream(new ByteArrayInputStream(buffer));
-                if (dataInput.readUnsignedByte() == 0x2 &&
-                        dataInput.readInt() == hash) {
-                    int size = dataInput.readUnsignedByte();
-                    if (size > 0) {
+    private final Map<Integer, String[]> applications = new HashMap<>();
+
+    private class UdpHandler implements Runnable, AutoCloseable {
+        private final DatagramSocket udp;
+        private final SocketAddress socketAddress;
+        public UdpHandler() throws IOException {
+            udp = new DatagramSocket();
+            udp.setSoTimeout(1500);
+            socketAddress = socket.getRemoteSocketAddress();
+        }
+        private void sendAllowed(Packet packet) {
+            packet.sendAllowed(udp, socketAddress);
+        }
+        @Override
+        public void run() {
+            byte[] buffer = new byte[1024];
+            try {
+                while (!canStop) {
+                    try {
+                        DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length);
+                        udp.receive(datagramPacket);
+                        DataInput dataInput = new DataInputStream(new ByteArrayInputStream(buffer));
+                        int type = dataInput.readUnsignedByte();
+                        if (type != 0x2) {
+                            throw new IllegalStateException("Invalid type=" + type);
+                        }
+                        int hash = dataInput.readInt();
+                        int size = dataInput.readUnsignedByte();
                         String[] applications = new String[size];
                         for (int i = 0; i < size; i++) {
                             applications[i] = dataInput.readUTF();
                         }
-                        return applications;
+                        ServiceSinkhole.this.applications.put(hash, applications);
+                        log.debug("applications={}", ServiceSinkhole.this.applications);
+                    } catch (SocketTimeoutException ignored) {
                     }
                 }
             } catch (IOException e) {
-                log.debug("queryApplication address={}", address, e);
+                log.debug("handle udp", e);
+            } catch (Exception e) {
+                log.warn("handle udp", e);
+            } finally {
+                IoUtil.close(this);
             }
         }
-        return super.queryApplications(hash);
+        private boolean canStop;
+        @Override
+        public void close() {
+            canStop = true;
+            IoUtil.close(udp);
+        }
     }
+
+    private UdpHandler udpHandler;
 
     @Override
     public void run() {
         tunnelThread = Thread.currentThread();
         if (!directAllowAll && clientOS == ClientOS.Android) {
             try {
-                udp = new DatagramSocket();
-                udp.setSoTimeout(1500);
+                udpHandler = new UdpHandler();
+                Thread thread = new Thread(udpHandler);
+                thread.setDaemon(true);
+                thread.start();
             } catch (Exception e) {
                 log.debug("create udp failed.", e);
-                IoUtil.close(udp);
-                udp = null;
+                IoUtil.close(udpHandler);
+                udpHandler = null;
             }
         }
 
@@ -162,11 +193,12 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         log.debug("Running tunnel");
         jni_run(jni_context, fd, true, 3);
         log.debug("Tunnel exited");
-        IoUtil.close(udp);
-        udp = null;
+        IoUtil.close(udpHandler);
+        udpHandler = null;
 
         IoUtil.close(socket);
         log.debug("Vpn thread shutting down");
+        applications.clear();
 
         clients.remove(this);
 
@@ -264,12 +296,12 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         if (directAllowAll) {
             return new Allowed();
         }
-        DatagramSocket udp = this.udp;
         packet.allowed = false;
+        UdpHandler udp = this.udpHandler;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
             if (packet.version == IP_V4 && packet.protocol == TCP_PROTOCOL) { // ipv4
                 if (udp != null) {
-                    packet.sendAllowed(udp, socket.getRemoteSocketAddress());
+                    udp.sendAllowed(packet);
                 }
                 return redirect(packet);
             }
@@ -282,7 +314,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
 
         if (udp != null && packet.allowed) {
-            packet.sendAllowed(udp, socket.getRemoteSocketAddress());
+            udp.sendAllowed(packet);
         }
 
         return packet.allowed ? new Allowed() : null;
