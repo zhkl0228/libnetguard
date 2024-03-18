@@ -10,6 +10,7 @@ import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Allowed;
+import eu.faircode.netguard.Package;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import org.slf4j.Logger;
@@ -45,6 +46,7 @@ import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -277,7 +279,16 @@ public class SSLProxyV2 implements Runnable {
         IPacketCapture packetCapture = vpn == null ? null : vpn.getPacketCapture();
         if (packetCapture != null) {
             if (isSSL) {
-                packetCapture.onSSLProxyEstablish(client, server, hostName, applicationProtocols, applicationProtocol);
+                String application = null;
+                Package[] packages = vpn.queryApplications(packet.hashCode());
+                if (packages != null) {
+                    List<String> list = new ArrayList<>(packages.length);
+                    for (Package pkg : packages) {
+                        list.add(pkg.getPackageName());
+                    }
+                    application = String.join(",", list);
+                }
+                packetCapture.onSSLProxyEstablish(client, server, hostName, applicationProtocols, applicationProtocol, application);
             } else {
                 packetCapture.onSocketEstablish(client, server);
             }

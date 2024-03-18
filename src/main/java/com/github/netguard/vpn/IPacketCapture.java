@@ -10,7 +10,8 @@ import java.util.List;
 public interface IPacketCapture {
 
     void onPacket(byte[] packetData, String type);
-    void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName, Collection<String> applicationProtocols, String selectedApplicationProtocol);
+    void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName,
+                             Collection<String> applicationProtocols, String selectedApplicationProtocol, String application);
     void onSSLProxyTx(InetSocketAddress client, InetSocketAddress server, byte[] data);
     void onSSLProxyRx(InetSocketAddress client, InetSocketAddress server, byte[] data);
     void onSSLProxyFinish(InetSocketAddress client, InetSocketAddress server, String hostName);

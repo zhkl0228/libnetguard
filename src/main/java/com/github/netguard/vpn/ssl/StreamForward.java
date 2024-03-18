@@ -99,6 +99,14 @@ public class StreamForward implements Runnable {
         return false;
     }
 
+    protected final Package[] queryApplications() {
+        if (vpn != null && packet != null) {
+            return vpn.queryApplications(packet.hashCode());
+        } else {
+            return new Package[0];
+        }
+    }
+
     private void doForward() {
         try {
             byte[] buf = new byte[socket.getReceiveBufferSize()];
@@ -108,10 +116,7 @@ public class StreamForward implements Runnable {
                 }
             }
         } catch (SSLHandshakeException e) {
-            Package[] applications = new Package[0];
-            if (vpn != null && packet != null) {
-                applications = vpn.queryApplications(packet.hashCode());
-            }
+            Package[] applications = queryApplications();
             if (log.isDebugEnabled()) {
                 log.warn("[{}]handshake with {} => {} failed: {}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, applications, e);
             } else {

@@ -214,11 +214,12 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName, Collection<String> applicationProtocols, String selectedApplicationProtocol) {
+    public final void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName,
+                                          Collection<String> applicationProtocols, String selectedApplicationProtocol, String application) {
         log.trace("onSSLProxyEstablish {} {} => {} selectedApplicationProtocol={}", hostName, client, server, selectedApplicationProtocol);
         try {
             TcpSessionKey key = new SSLSessionKey(client.getAddress(), server.getAddress(), client.getPort(), server.getPort(), hostName);
-            httpDecoder.onEstablish(new SSLProxySession(key, hostName, applicationProtocols, selectedApplicationProtocol));
+            httpDecoder.onEstablish(new SSLProxySession(key, hostName, applicationProtocols, selectedApplicationProtocol, application));
         } catch (Exception e) {
             log.warn("onSSLProxyEstablish", e);
         }
@@ -281,7 +282,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onRequest(HttpSession session, com.github.netguard.handler.http.HttpRequest request) {
         if (log.isDebugEnabled()) {
             byte[] data = request.getPostData();
-            log.debug("onRequest {} bytes session={}, request={}\n{}{}\n", data == null ? 0 : data.length, session, request, request.getHeaderString(), parseParameters(request.getRequestUri()));
+            log.debug("onRequest {} bytes session={}, application={}, request={}\n{}{}\n", data == null ? 0 : data.length, session, session.getApplication(), request, request.getHeaderString(), parseParameters(request.getRequestUri()));
         }
     }
 
@@ -293,7 +294,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
-            log.debug("onResponse {} bytes session={}, request={}, response={}\n{}", data == null ? 0 : data.length, session, request, response, response.getHeaderString());
+            log.debug("onResponse {} bytes session={}, application={}, request={}, response={}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request, response, response.getHeaderString());
         }
     }
 

@@ -13,12 +13,14 @@ public class SSLProxySession extends TcpSessionImpl implements TcpSession {
     private final String hostName;
     private final Collection<String> applicationProtocols;
     private final String selectedApplicationProtocol;
+    private final String application;
 
-    public SSLProxySession(TcpSessionKey key, String hostName, Collection<String> applicationProtocols, String selectedApplicationProtocol) {
+    public SSLProxySession(TcpSessionKey key, String hostName, Collection<String> applicationProtocols, String selectedApplicationProtocol, String application) {
         super(null);
         this.hostName = hostName;
         this.applicationProtocols = applicationProtocols;
         this.selectedApplicationProtocol = selectedApplicationProtocol;
+        this.application = application;
 
         this.setKey(key);
     }
@@ -55,6 +57,11 @@ public class SSLProxySession extends TcpSessionImpl implements TcpSession {
     @Override
     public String getSelectedApplicationProtocol() {
         return selectedApplicationProtocol;
+    }
+
+    @Override
+    public String getApplication() {
+        return application;
     }
 
     @Override
