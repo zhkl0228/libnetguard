@@ -307,8 +307,12 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
             }
             if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) {
                 packet.allowed = packet.dport == 53; // DNS
-            } else if(packet.version != IP_V6) { // Disallow ipv6
-                packet.allowed = true;
+            } else {
+                if (packet.version == IP_V6) {
+                    log.debug("Disallow ipv6");
+                } else {
+                    packet.allowed = true;
+                }
             }
             log.debug("isAddressAllowed: packet={}, allowed={}", packet, packet.allowed);
         }

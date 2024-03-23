@@ -29,6 +29,11 @@ public class RootCert {
         this.pem = pem;
     }
 
+    /**
+     * Export charles-ssl-proxying.p12 with password "charles": Charles => Help => SSL Proxying => Export Charles Root Certificate and Private Key...
+     * keytool -genkeypair -keystore charles-ssl-proxying.p12 -storetype PKCS12 -storepass charles -alias charles -keyalg RSA -keysize 2048 -validity 365 -dname "CN=netguard, OU=MTX Ltd, O=MTX, L=GuangZhou, ST=GuangDong, C=CN" -ext BC:critical=CA:TRUE
+     * <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/keytool.html#supported-named-extensions">keytool</a>
+     */
     public static RootCert load() {
         try {
             KeyStore keyStore = KeyStore.getInstance("PKCS12", "BC");

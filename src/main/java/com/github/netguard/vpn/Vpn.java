@@ -8,6 +8,7 @@ public interface Vpn {
 
     void setPacketCapture(IPacketCapture packetCapture);
 
+    @SuppressWarnings("unused")
     boolean isTransparentProxying();
 
     void setDirectAllowAll();
