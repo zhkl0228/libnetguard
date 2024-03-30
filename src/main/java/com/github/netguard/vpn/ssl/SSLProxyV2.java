@@ -330,7 +330,7 @@ public class SSLProxyV2 implements Runnable {
         String redirectHost = null;
         IPacketCapture packetCapture = vpn.getPacketCapture();
         if (packetCapture != null) {
-            AcceptResult result = packetCapture.acceptTcp(record.newConnectRequest(packet));
+            AcceptResult result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
             if (result != null) {
                 allowRule = result.getRule();
                 socketProxy = result.getSocketProxy();

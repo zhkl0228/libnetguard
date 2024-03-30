@@ -3,7 +3,6 @@ package com.github.netguard.vpn.ssl;
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.InspectorVpn;
-import com.github.netguard.vpn.Vpn;
 import eu.faircode.netguard.Package;
 import eu.faircode.netguard.Packet;
 
@@ -18,18 +17,15 @@ public class ConnectRequest {
     public final byte[] prologue;
 
     @SuppressWarnings("unused")
-    public Package[] queryApplications(Vpn vpn) {
-        if (vpn instanceof InspectorVpn) {
-            InspectorVpn inspectorVpn = (InspectorVpn) vpn;
-            return inspectorVpn.queryApplications(packet.hashCode());
-        } else {
-            return null;
-        }
+    public Package[] queryApplications() {
+        return vpn.queryApplications(packet.hashCode());
     }
 
+    private final InspectorVpn vpn;
     private final Packet packet;
 
-    ConnectRequest(Packet packet, String hostName, List<String> applicationLayerProtocols, byte[] prologue) {
+    ConnectRequest(InspectorVpn vpn, Packet packet, String hostName, List<String> applicationLayerProtocols, byte[] prologue) {
+        this.vpn = vpn;
         this.packet = packet;
         this.serverIp = packet.daddr;
         this.port = packet.dport;

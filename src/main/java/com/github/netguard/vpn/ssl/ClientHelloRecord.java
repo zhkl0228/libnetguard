@@ -1,5 +1,6 @@
 package com.github.netguard.vpn.ssl;
 
+import com.github.netguard.vpn.InspectorVpn;
 import eu.faircode.netguard.Packet;
 
 import java.io.ByteArrayOutputStream;
@@ -23,8 +24,8 @@ public class ClientHelloRecord {
         return new ClientHelloRecord(baos);
     }
 
-    ConnectRequest newConnectRequest(Packet packet) {
-        return new ConnectRequest(packet, this.hostName, this.applicationLayerProtocols, this.prologue);
+    ConnectRequest newConnectRequest(InspectorVpn vpn, Packet packet) {
+        return new ConnectRequest(vpn, packet, this.hostName, this.applicationLayerProtocols, this.prologue);
     }
 
     public final byte[] prologue;
