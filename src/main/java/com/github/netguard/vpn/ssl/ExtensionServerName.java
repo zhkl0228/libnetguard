@@ -134,7 +134,7 @@ public class ExtensionServerName {
             return ClientHelloRecord.prologue(baos, dataInput);
         } else {
             String hostName = serverNames.get(0);
-            return new ClientHelloRecord(baos, hostName, applicationLayerProtocols);
+            return new ClientHelloRecord(baos.toByteArray(), hostName, applicationLayerProtocols, null);
         }
     }
 

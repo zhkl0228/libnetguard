@@ -6,7 +6,7 @@ import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.RootCert;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
 import eu.faircode.netguard.Allowed;
-import eu.faircode.netguard.Package;
+import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
 
 import java.util.List;
@@ -30,8 +30,8 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
     }
 
     @Override
-    public Package[] queryApplications(int hash) {
-        return new Package[0];
+    public Application[] queryApplications(int hash) {
+        return new Application[0];
     }
 
     @Override

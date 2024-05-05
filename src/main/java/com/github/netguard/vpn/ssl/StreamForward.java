@@ -3,7 +3,7 @@ package com.github.netguard.vpn.ssl;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
-import eu.faircode.netguard.Package;
+import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,11 +99,11 @@ public class StreamForward implements Runnable {
         return false;
     }
 
-    protected final Package[] queryApplications() {
+    protected final Application[] queryApplications() {
         if (vpn != null && packet != null) {
             return vpn.queryApplications(packet.hashCode());
         } else {
-            return new Package[0];
+            return new Application[0];
         }
     }
 
@@ -116,7 +116,7 @@ public class StreamForward implements Runnable {
                 }
             }
         } catch (SSLHandshakeException e) {
-            Package[] applications = queryApplications();
+            Application[] applications = queryApplications();
             if (log.isDebugEnabled()) {
                 log.warn("[{}]handshake with {} => {} failed: {}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, applications, e);
             } else {

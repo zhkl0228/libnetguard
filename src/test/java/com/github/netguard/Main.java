@@ -12,6 +12,7 @@ import com.github.netguard.vpn.ssl.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.ssl.h2.CancelResult;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.twitter.http2.HttpFrameForward;
+import eu.faircode.netguard.Application;
 import eu.faircode.netguard.ServiceSinkhole;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -25,6 +26,7 @@ import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Date;
 
 public class Main {
@@ -34,7 +36,7 @@ public class Main {
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
         Logger.getLogger(PacketDecoder.class).setLevel(Level.DEBUG);
-        Logger.getLogger(HttpDecoder.class).setLevel(Level.DEBUG);
+        Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
         Logger.getLogger("edu.baylor.cs.csi5321.spdy.frames").setLevel(Level.INFO);
         VpnServer vpnServer = new VpnServer(20260);
@@ -63,6 +65,8 @@ public class Main {
                     if ("weixin.qq.com".equals(connectRequest.hostName)) {
                         return AcceptResult.builder(AllowRule.FILTER_H2).build();
                     }
+                    Application[] applications = connectRequest.queryApplications();
+                    System.out.printf("acceptTcp request=%s, applications=%s, httpRequest=%s%n", connectRequest, Arrays.toString(applications), connectRequest.httpRequest);
                     return super.acceptTcp(connectRequest);
                 }
             };

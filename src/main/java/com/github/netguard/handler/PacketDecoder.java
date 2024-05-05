@@ -294,7 +294,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
-            log.debug("onResponse {} bytes session={}, application={}, request={}, response={}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request, response, response.getHeaderString());
+            log.debug("onResponse {} bytes session={}, application={}, request={}, response={}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request, response, response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
         }
     }
 

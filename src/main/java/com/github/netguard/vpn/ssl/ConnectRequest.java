@@ -3,8 +3,9 @@ package com.github.netguard.vpn.ssl;
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.InspectorVpn;
-import eu.faircode.netguard.Package;
+import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
+import io.netty.handler.codec.http.HttpRequest;
 
 import java.util.List;
 
@@ -15,16 +16,19 @@ public class ConnectRequest {
     public final String hostName;
     public final List<String> applicationLayerProtocols;
     public final byte[] prologue;
+    public final HttpRequest httpRequest;
+
 
     @SuppressWarnings("unused")
-    public Package[] queryApplications() {
+    public Application[] queryApplications() {
         return vpn.queryApplications(packet.hashCode());
     }
 
     private final InspectorVpn vpn;
     private final Packet packet;
 
-    ConnectRequest(InspectorVpn vpn, Packet packet, String hostName, List<String> applicationLayerProtocols, byte[] prologue) {
+    ConnectRequest(InspectorVpn vpn, Packet packet, String hostName, List<String> applicationLayerProtocols, byte[] prologue,
+                   HttpRequest httpRequest) {
         this.vpn = vpn;
         this.packet = packet;
         this.serverIp = packet.daddr;
@@ -32,6 +36,7 @@ public class ConnectRequest {
         this.hostName = hostName;
         this.applicationLayerProtocols = applicationLayerProtocols;
         this.prologue = prologue;
+        this.httpRequest = httpRequest;
     }
 
     public AcceptResult.AcceptResultBuilder connectTcpDirect() {
@@ -55,6 +60,13 @@ public class ConnectRequest {
 
     public boolean isSSL() {
         return hostName != null;
+    }
+
+    /**
+     * 是否为普通 http 请求
+     */
+    public boolean isHttp() {
+        return httpRequest != null;
     }
 
     @Override

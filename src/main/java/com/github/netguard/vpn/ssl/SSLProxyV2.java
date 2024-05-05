@@ -10,7 +10,7 @@ import com.github.netguard.vpn.ssl.h2.Http2Filter;
 import com.github.netguard.vpn.ssl.h2.Http2Session;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Allowed;
-import eu.faircode.netguard.Package;
+import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import org.slf4j.Logger;
@@ -74,9 +74,9 @@ public class SSLProxyV2 implements Runnable {
 
     public static void create(final InspectorVpn vpn, RootCert rootCert, final Packet packet, final int timeout, Socket socket) {
         try {
-            log.debug("create tcp proxy packet={}", packet);
+            log.debug("create tcp proxy packet={}, socket={}", packet, socket);
             new SSLProxyV2(vpn, rootCert, packet, timeout, socket);
-            log.debug("create tcp proxy packet={}", packet);
+            log.debug("create tcp proxy packet={}, socket={}", packet, socket);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
@@ -280,11 +280,11 @@ public class SSLProxyV2 implements Runnable {
         if (packetCapture != null) {
             if (isSSL) {
                 String application = null;
-                Package[] packages = vpn.queryApplications(packet.hashCode());
-                if (packages != null) {
-                    List<String> list = new ArrayList<>(packages.length);
-                    for (Package pkg : packages) {
-                        list.add(pkg.getPackageName());
+                Application[] applications = vpn.queryApplications(packet.hashCode());
+                if (applications != null) {
+                    List<String> list = new ArrayList<>(applications.length);
+                    for (Application app : applications) {
+                        list.add(app.getPackageName());
                     }
                     application = String.join(",", list);
                 }

@@ -1,11 +1,11 @@
 package com.github.netguard.vpn;
 
-import eu.faircode.netguard.Package;
+import eu.faircode.netguard.Application;
 
 public interface InspectorVpn extends Vpn {
 
     IPacketCapture getPacketCapture();
 
-    Package[] queryApplications(int hash);
+    Application[] queryApplications(int hash);
 
 }
