@@ -33,14 +33,11 @@ public class ClientHelloRecord {
             dataInput.readFully(buf);
             baos.write(buf);
         }
-        ClientHelloRecord http = detectHttp(baos, dataInput);
-        if (http != null) {
-            return http;
-        }
-        return new ClientHelloRecord(baos.toByteArray(), null);
+        HttpRequest httpRequest = detectHttp(baos, dataInput);
+        return new ClientHelloRecord(baos.toByteArray(), httpRequest);
     }
 
-    private static ClientHelloRecord detectHttp(ByteArrayOutputStream baos, DataInputStream dataInput) throws IOException {
+    private static HttpRequest detectHttp(ByteArrayOutputStream baos, DataInputStream dataInput) throws IOException {
         byte[] data = baos.toByteArray();
         Buffer buffer = new ChainBuffer(data);
         if (!buffer.isEOB()) {
@@ -90,7 +87,7 @@ public class ClientHelloRecord {
         return null;
     }
 
-    private static ClientHelloRecord decodeHttpRequest(ByteArrayOutputStream baos, DataInputStream dataInput, HttpMethod httpMethod) throws IOException {
+    private static HttpRequest decodeHttpRequest(ByteArrayOutputStream baos, DataInputStream dataInput, HttpMethod httpMethod) throws IOException {
         log.debug("decodeHttpRequest httpMethod={}", httpMethod);
         PrologueInputStream inputStream = new PrologueInputStream(baos, dataInput);
         for (byte b : httpMethod.name().getBytes()) {
@@ -156,7 +153,7 @@ public class ClientHelloRecord {
             HttpHeaders headers = new ReadOnlyHttpHeaders(false, nameValuePairs.toArray(new CharSequence[0]));
             HttpRequest httpRequest = new DefaultHttpRequest(version, httpMethod, uri, headers);
             log.debug("decodeHttpRequest httpRequest={}, nameValuePairs={}", httpRequest, nameValuePairs);
-            return new ClientHelloRecord(baos.toByteArray(), httpRequest);
+            return httpRequest;
         }
         return null;
     }
