@@ -27,6 +27,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.CodeSource;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Scanner;
 
@@ -39,10 +40,12 @@ public class VpnServer {
 
     private static final int UDP_PORT = 20230;
     private static final int PROXY_PORT = 20238;
+    private static final int NO_CLIENT_BROADCAST_DELAY_MILLIS = 1000;
 
     private final ServerSocket serverSocket;
     private final RootCert rootCert = RootCert.load();
 
+    @SuppressWarnings("unused")
     public VpnServer() throws IOException {
         this(UDP_PORT);
     }
@@ -57,7 +60,7 @@ public class VpnServer {
         this.vpnListener = vpnListener;
     }
 
-    private final List<ProxyVpn> clients = new ArrayList<>();
+    private final List<ProxyVpn> clients = Collections.synchronizedList(new ArrayList<>());
 
     private boolean useNetGuardCore = true;
 
@@ -67,10 +70,14 @@ public class VpnServer {
     }
 
     private boolean broadcast;
+    private int broadcastSeconds;
 
-    public void enableBroadcast(int broadcastSeconds) throws SocketException {
-        broadcast = true;
-        serverSocket.setSoTimeout(broadcastSeconds * 1000);
+    public void enableBroadcast(int broadcastSeconds) {
+        if (broadcastSeconds < 1) {
+            throw new IllegalArgumentException("broadcastSeconds=" + broadcastSeconds);
+        }
+        this.broadcast = true;
+        this.broadcastSeconds = broadcastSeconds;
     }
 
     /**
@@ -123,6 +130,9 @@ public class VpnServer {
         thread = new Thread(() -> {
             while (!shutdown) {
                 try {
+                    if (clients.isEmpty()) {
+                        serverSocket.setSoTimeout(NO_CLIENT_BROADCAST_DELAY_MILLIS);
+                    }
                     Socket socket = serverSocket.accept();
                     ProxyVpn vpn = null;
                     if (useNetGuardCore) {
@@ -143,6 +153,7 @@ public class VpnServer {
                     vpnThread.setPriority(Thread.MAX_PRIORITY);
                     vpnThread.start();
                     clients.add(vpn);
+                    serverSocket.setSoTimeout(broadcastSeconds * 1000);
                 } catch (SocketTimeoutException e) {
                     if (broadcast) {
                         sendBroadcast();
