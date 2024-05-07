@@ -1,5 +1,6 @@
 package com.github.netguard;
 
+import cn.hutool.core.net.DefaultTrustManager;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
@@ -8,6 +9,7 @@ import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.ssl.ConnectRequest;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
+import com.github.netguard.vpn.ssl.StreamForward;
 import com.github.netguard.vpn.ssl.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.ssl.h2.CancelResult;
 import com.github.netguard.vpn.ssl.h2.Http2Filter;
@@ -24,10 +26,20 @@ import io.netty.util.ResourceLeakDetector;
 import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
+import org.wildfly.openssl.OpenSSLProvider;
+import org.wildfly.openssl.SSL;
 
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.Security;
 import java.util.Arrays;
 import java.util.Date;
 
@@ -43,6 +55,7 @@ public class Main {
         Logger.getLogger(PacketDecoder.class).setLevel(Level.DEBUG);
         Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
+        Logger.getLogger(StreamForward.class).setLevel(Level.INFO);
         Logger.getLogger("edu.baylor.cs.csi5321.spdy.frames").setLevel(Level.INFO);
         VpnServer vpnServer = new VpnServer(20260);
         vpnServer.preparePreMasterSecretsLogFile();
@@ -116,16 +129,53 @@ public class Main {
             public Http2Filter getH2Filter() {
                 return MyVpnListener.this;
             }
+            private SSLContext createWeiXinSSLContext() {
+                try {
+                    SSLContext context = SSLContext.getInstance("TLSv1.2", BouncyCastleJsseProvider.PROVIDER_NAME);
+                    context.init(new KeyManager[0], new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
+                    return context;
+                } catch (NoSuchAlgorithmException | NoSuchProviderException | KeyManagementException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+            private SSLContext createSSLContext() {
+                try {
+                    SSLContext context = SSLContext.getInstance("openssl.TLS");
+                    context.init(null, new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
+                    return context;
+                } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
             @Override
             public AcceptResult acceptTcp(ConnectRequest connectRequest) {
                 if ("weixin.qq.com".equals(connectRequest.hostName)) {
-                    return AcceptResult.builder(AllowRule.FILTER_H2).build();
+                    return AcceptResult.builder(AllowRule.FILTER_H2)
+                            .configClientSSLContext(createWeiXinSSLContext())
+                            .build();
+                }
+                if (connectRequest.isSSL()) {
+                    return AcceptResult.builder(AllowRule.CONNECT_SSL)
+                            .configClientSSLContext(createSSLContext())
+                            .build();
                 }
                 Application[] applications = connectRequest.queryApplications();
                 System.out.printf("acceptTcp request=%s, applications=%s, httpRequest=%s%n", connectRequest, Arrays.toString(applications), connectRequest.httpRequest);
                 return super.acceptTcp(connectRequest);
             }
         }
+    }
+
+    static {
+        Security.addProvider(new BouncyCastleJsseProvider());
+
+        /*
+         * https://github.com/wildfly-security/wildfly-openssl-natives
+         */
+        System.setProperty(SSL.ORG_WILDFLY_LIBWFSSL_PATH, new File(FileUtils.getUserDirectory(),
+                "git/wildfly-openssl-natives/macosx-aarch64/target/classes/macosx-aarch64/libwfssl.dylib").getAbsolutePath());
+        System.setProperty(SSL.ORG_WILDFLY_OPENSSL_PATH, "/opt/local/lib");
+        Security.addProvider(new OpenSSLProvider());
     }
 
 }

@@ -241,19 +241,21 @@ public class SSLProxyV2 implements Runnable {
     private void handleSSLSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName) throws IOException, InterruptedException {
         log.debug("ssl proxy remote={}, socket={}, local={}, hostName={}, applicationLayerProtocols={}", remote, socket, local, hostName, applicationLayerProtocols);
         if (!applicationLayerProtocols.isEmpty()) {
-            SSLSocket sslSocket = (SSLSocket) local;
-            sslSocket.setHandshakeApplicationProtocolSelector((sslSocket1, clientProtocols) -> {
-                log.debug("handshakeApplicationProtocolSelector sslSocket={}, clientProtocols={}, applicationProtocol={}", sslSocket1, clientProtocols, applicationProtocol);
-                if (clientProtocols.contains(applicationProtocol)) {
-                    return applicationProtocol;
-                }
-                for (String protocol : clientProtocols) {
-                    if (applicationProtocol.startsWith(protocol)) {
-                        return protocol;
+            if (applicationProtocol != null) {
+                SSLSocket sslSocket = (SSLSocket) local;
+                sslSocket.setHandshakeApplicationProtocolSelector((sslSocket1, clientProtocols) -> {
+                    log.debug("handshakeApplicationProtocolSelector sslSocket={}, clientProtocols={}, applicationProtocol={}", sslSocket1, clientProtocols, applicationProtocol);
+                    if (clientProtocols.contains(applicationProtocol)) {
+                        return applicationProtocol;
                     }
-                }
-                return applicationProtocol;
-            });
+                    for (String protocol : clientProtocols) {
+                        if (applicationProtocol.startsWith(protocol)) {
+                            return protocol;
+                        }
+                    }
+                    return applicationProtocol;
+                });
+            }
         }
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
             IPacketCapture packetCapture = vpn.getPacketCapture();
@@ -392,7 +394,11 @@ public class SSLProxyV2 implements Runnable {
                 });
                 secureSocket.startHandshake();
                 countDownLatch.await();
-                log.debug("secureSocket={}, applicationProtocol={}", secureSocket, secureSocket.getApplicationProtocol());
+                String applicationProtocol = null;
+                try {
+                    applicationProtocol = secureSocket.getApplicationProtocol();
+                } catch(UnsupportedOperationException ignored) {}
+                log.debug("secureSocket={}, applicationProtocol={}", secureSocket, applicationProtocol);
                 if (peerCertificate == null) {
                     throw new IOException("Handshake failed with: " + record.hostName + ", remote=" + remote);
                 }
@@ -400,7 +406,7 @@ public class SSLProxyV2 implements Runnable {
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
                 SSLContext serverContext = serverCertificate.createSSLContext(rootCert);
                 SSLProxyV2 proxy = new SSLProxyV2(vpn, packet, timeout, serverContext, secureSocket,
-                        record, secureSocket.getApplicationProtocol(), allowRule == AllowRule.FILTER_H2);
+                        record, applicationProtocol, allowRule == AllowRule.FILTER_H2);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                         socketOut.write(record.prologue);

@@ -1,17 +1,22 @@
 package com.github.netguard;
 
+import cn.hutool.core.net.DefaultTrustManager;
 import cn.hutool.core.util.HexUtil;
 import com.github.netguard.vpn.ssl.ClientHelloRecord;
 import com.github.netguard.vpn.ssl.ExtensionServerName;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import junit.framework.TestCase;
+import org.apache.commons.io.FileUtils;
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.wildfly.openssl.OpenSSLProvider;
+import org.wildfly.openssl.SSL;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.File;
 import java.security.Security;
 
 public class SSLTest extends TestCase {
@@ -23,13 +28,14 @@ public class SSLTest extends TestCase {
         byteBuf.release();
         System.out.println(byteBuf);
 
-        System.setProperty("jdk.tls.disabledAlgorithms", "");
-        Class<?> cls = Class.forName("sun.security.ssl.SupportedGroupsExtension");
-        assertNotNull(cls);
+        System.setProperty(SSL.ORG_WILDFLY_OPENSSL_PATH, "/opt/local/lib");
+        System.setProperty(SSL.ORG_WILDFLY_LIBWFSSL_PATH, new File(FileUtils.getUserDirectory(),
+                "git/wildfly-openssl-natives/macosx-aarch64/target/classes/macosx-aarch64/libwfssl.dylib").getAbsolutePath());
         Security.addProvider(new BouncyCastleJsseProvider(true));
         Security.addProvider(new OpenSSLProvider());
-        SSLContext context = SSLContext.getInstance("TLS", BouncyCastleJsseProvider.PROVIDER_NAME);
+        SSLContext context = SSLContext.getInstance("openssl.TLS");
         assertNotNull(context);
+        context.init(null, new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
     }
 
     public void testClientHello() throws Exception {
