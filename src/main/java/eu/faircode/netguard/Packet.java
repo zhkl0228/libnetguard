@@ -60,6 +60,14 @@ public class Packet {
         return "88.88.88.88".equals(daddr) && dport == 88;
     }
 
+    public InetSocketAddress createClientAddress() {
+        try {
+            return new InetSocketAddress(InetAddress.getByName(saddr), sport);
+        } catch (UnknownHostException e) {
+            throw new IllegalStateException("createClientAddress daddr=" + daddr + ", dport=" + dport, e);
+        }
+    }
+
     public InetSocketAddress createServerAddress() {
         try {
             return new InetSocketAddress(InetAddress.getByName(daddr), dport);

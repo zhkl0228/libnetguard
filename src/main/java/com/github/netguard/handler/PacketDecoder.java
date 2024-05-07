@@ -362,6 +362,12 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         }
     }
 
+    @Override
+    public boolean acceptUdp(InetSocketAddress client, InetSocketAddress server) {
+        log.debug("acceptUdp client={}, server={}", client, server);
+        return false;
+    }
+
     @SuppressWarnings("unused")
     protected AcceptResult.AcceptResultBuilder configAcceptResultBuilder(String hostName, int port, AcceptResult.AcceptResultBuilder builder) {
         return builder;

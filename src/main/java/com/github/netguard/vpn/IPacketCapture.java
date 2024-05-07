@@ -5,7 +5,6 @@ import com.github.netguard.vpn.ssl.h2.Http2Filter;
 
 import java.net.InetSocketAddress;
 import java.util.Collection;
-import java.util.List;
 
 public interface IPacketCapture {
 
@@ -28,5 +27,7 @@ public interface IPacketCapture {
      */
     AcceptResult acceptTcp(ConnectRequest connectRequest);
     Http2Filter getH2Filter();
+
+    boolean acceptUdp(InetSocketAddress client, InetSocketAddress server);
 
 }

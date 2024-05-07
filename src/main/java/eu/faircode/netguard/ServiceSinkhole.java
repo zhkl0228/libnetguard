@@ -3,6 +3,7 @@ package eu.faircode.netguard;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
+import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.ssl.RootCert;
 import org.scijava.nativelib.NativeLoader;
@@ -119,10 +120,10 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     private final Map<Integer, Application[]> applications = new HashMap<>();
 
-    private class UdpHandler implements Runnable, AutoCloseable {
+    private class ApplicationDiscoverHandler implements Runnable, AutoCloseable {
         private final DatagramSocket udp;
         private final SocketAddress socketAddress;
-        public UdpHandler() throws IOException {
+        public ApplicationDiscoverHandler() throws IOException {
             udp = new DatagramSocket();
             udp.setSoTimeout(1500);
             socketAddress = socket.getRemoteSocketAddress();
@@ -170,21 +171,21 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
     }
 
-    private UdpHandler udpHandler;
+    private ApplicationDiscoverHandler applicationDiscoverHandler;
 
     @Override
     public void run() {
         tunnelThread = Thread.currentThread();
         if (!directAllowAll && clientOS == ClientOS.Android) {
             try {
-                udpHandler = new UdpHandler();
-                Thread thread = new Thread(udpHandler);
+                applicationDiscoverHandler = new ApplicationDiscoverHandler();
+                Thread thread = new Thread(applicationDiscoverHandler);
                 thread.setDaemon(true);
                 thread.start();
             } catch (Exception e) {
                 log.debug("create udp failed.", e);
-                IoUtil.close(udpHandler);
-                udpHandler = null;
+                IoUtil.close(applicationDiscoverHandler);
+                applicationDiscoverHandler = null;
             }
         }
 
@@ -193,8 +194,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         log.debug("Running tunnel");
         jni_run(jni_context, fd, true, 3);
         log.debug("Tunnel exited");
-        IoUtil.close(udpHandler);
-        udpHandler = null;
+        IoUtil.close(applicationDiscoverHandler);
+        applicationDiscoverHandler = null;
 
         IoUtil.close(socket);
         log.debug("Vpn thread shutting down");
@@ -297,31 +298,42 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
             return new Allowed();
         }
         packet.allowed = false;
-        UdpHandler udp = this.udpHandler;
+        ApplicationDiscoverHandler handler = this.applicationDiscoverHandler;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
             if (packet.version == IP_V4 && packet.protocol == TCP_PROTOCOL) { // ipv4
-                if (udp != null) {
-                    udp.sendAllowed(packet);
+                if (handler != null) {
+                    handler.sendAllowed(packet);
                 }
                 return redirect(packet);
             }
-            if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) {
-                packet.allowed = packet.dport == 53; // DNS
+            if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) { // udpv4
+                packet.allowed = isUdpAllowed(packet);
+            } else if(packet.version == IP_V6) {
+                log.info("Disallow ipv6: packet={}", packet);
             } else {
-                if (packet.version == IP_V6) {
-                    log.debug("Disallow ipv6");
-                } else {
-                    packet.allowed = true;
-                }
+                log.debug("Disallow packet={}", packet);
             }
             log.debug("isAddressAllowed: packet={}, allowed={}", packet, packet.allowed);
         }
 
-        if (udp != null && packet.allowed) {
-            udp.sendAllowed(packet);
+        if (handler != null && packet.allowed) {
+            handler.sendAllowed(packet);
         }
 
         return packet.allowed ? new Allowed() : null;
+    }
+
+    private boolean isUdpAllowed(Packet packet) {
+        IPacketCapture packetCapture = this.packetCapture;
+        if(packetCapture != null) {
+            InetSocketAddress client = packet.createClientAddress();
+            InetSocketAddress server = packet.createServerAddress();
+            if (packetCapture.acceptUdp(client, server)) {
+                return true;
+            }
+        }
+
+        return packet.dport == 53; // DNS
     }
 
     // Called from native code

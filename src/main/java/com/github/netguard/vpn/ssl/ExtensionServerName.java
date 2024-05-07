@@ -127,14 +127,19 @@ public class ExtensionServerName {
                 log.trace(Inspector.inspectString(data, "parseExtensions type=0x" + Integer.toHexString(type) + ", length=" + length));
             }
         }
-        log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}", serverNames, server, applicationLayerProtocols);
+        byte[] prologue = baos.toByteArray();
+        if (log.isDebugEnabled()) {
+            JA3Signature signature = new JA3Signature();
+            String ja3 = signature.ja3Signature(ByteBuffer.wrap(prologue));
+            log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}, ja3={}", serverNames, server, applicationLayerProtocols, ja3);
+        }
 
         if (serverNames.isEmpty()) {
             log.debug("Not tls: extension name is empty: server={}", server);
             return ClientHelloRecord.prologue(baos, dataInput);
         } else {
             String hostName = serverNames.get(0);
-            return new ClientHelloRecord(baos.toByteArray(), hostName, applicationLayerProtocols, null);
+            return new ClientHelloRecord(prologue, hostName, applicationLayerProtocols, null);
         }
     }
 
