@@ -1,7 +1,6 @@
 package com.github.netguard.vpn.ssl;
 
 import cn.hutool.core.io.IoUtil;
-import cn.hutool.core.net.DefaultTrustManager;
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
@@ -18,7 +17,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ServerSocketFactory;
 import javax.net.SocketFactory;
-import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLPeerUnverifiedException;
@@ -26,7 +24,6 @@ import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.DataInputStream;
@@ -42,7 +39,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -329,8 +325,9 @@ public class SSLProxyV2 implements Runnable {
         int redirectPort = 0;
         String redirectHost = null;
         IPacketCapture packetCapture = vpn.getPacketCapture();
+        AcceptResult result = null;
         if (packetCapture != null) {
-            AcceptResult result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
+            result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
             if (result != null) {
                 allowRule = result.getRule();
                 socketProxy = result.getSocketProxy();
@@ -368,10 +365,7 @@ public class SSLProxyV2 implements Runnable {
                 }
             }
         } else {
-            SSLContext context = SSLContext.getInstance("TLSv1.2");
-            SecureRandom random = new SecureRandom();
-            random.setSeed(System.currentTimeMillis());
-            context.init(new KeyManager[0], new TrustManager[]{DefaultTrustManager.INSTANCE}, random);
+            SSLContext context = AcceptResult.newSSLContext(result);
             SSLSocketFactory factory = context.getSocketFactory();
             Socket app = null;
             SSLSocket secureSocket = null;

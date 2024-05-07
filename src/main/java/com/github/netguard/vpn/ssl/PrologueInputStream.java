@@ -1,5 +1,7 @@
 package com.github.netguard.vpn.ssl;
 
+import org.apache.commons.io.IOUtils;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -25,7 +27,7 @@ class PrologueInputStream extends InputStream {
             return bais.read();
         }
         int b = dataInput.read();
-        if(b == -1) {
+        if(b == IOUtils.EOF) {
             throw new EOFException();
         }
         baos.write(b);

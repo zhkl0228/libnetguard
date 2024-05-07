@@ -36,7 +36,7 @@ public class RootCert {
      */
     public static RootCert load() {
         try {
-            KeyStore keyStore = KeyStore.getInstance("PKCS12", "BC");
+            KeyStore keyStore = KeyStore.getInstance("PKCS12", BouncyCastleProvider.PROVIDER_NAME);
             String alias = "charles";
             try (InputStream inputStream = ServiceSinkhole.class.getResourceAsStream("/charles-ssl-proxying.p12")) {
                 keyStore.load(inputStream, alias.toCharArray());

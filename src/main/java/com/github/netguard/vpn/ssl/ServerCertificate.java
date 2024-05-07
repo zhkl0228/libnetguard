@@ -27,6 +27,7 @@ import javax.net.ssl.SSLContext;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyManagementException;
@@ -37,12 +38,12 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
-import java.security.SecureRandom;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.security.spec.ECGenParameterSpec;
 import java.util.Date;
 import java.util.Map;
 import java.util.Random;
@@ -85,15 +86,15 @@ class ServerCertificate {
         throw new IllegalStateException("Missed CN in Subject DN: " + c.getSubjectDN());
     }
 
-    private SSLContext generateServerContext(String commonName, SubjectAlternativeNameHolder subjectAlternativeNames, RootCert rootCert) throws CertificateException, OperatorCreationException, IOException, NoSuchAlgorithmException, NoSuchProviderException, KeyManagementException, SignatureException, KeyStoreException, InvalidKeyException, UnrecoverableKeyException {
+    private SSLContext generateServerContext(String commonName, SubjectAlternativeNameHolder subjectAlternativeNames, RootCert rootCert) throws CertificateException, OperatorCreationException, IOException, NoSuchAlgorithmException, NoSuchProviderException, KeyManagementException, SignatureException, KeyStoreException, InvalidKeyException, UnrecoverableKeyException, InvalidAlgorithmParameterException {
         String alias = "tcpcap";
         Authority authority = new Authority(null, alias, alias.toCharArray(), "TCPcap Proxy SSL Proxying", "MTX", "MTX Ltd", "MTX", "MTX Ltd");
-        KeyStore ks = createServerCertificate(commonName,
+        KeyStore keyStore = createServerCertificate(commonName,
                 subjectAlternativeNames, authority, rootCert.rootCert, rootCert.privateKey, peerCertificate);
         if (log.isTraceEnabled()) {
-            log.trace("generateServerContext: {}", ks.getCertificate(alias));
+            log.trace("generateServerContext: {}", keyStore.getCertificate(alias));
         }
-        KeyManager[] keyManagers = getKeyManagers(ks, authority);
+        KeyManager[] keyManagers = getKeyManagers(keyStore, authority);
         return newServerContext(keyManagers);
     }
 
@@ -102,67 +103,37 @@ class ServerCertificate {
             UnrecoverableKeyException,
             KeyStoreException {
         String keyManAlg = KeyManagerFactory.getDefaultAlgorithm();
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(keyManAlg
-                /* , PROVIDER_NAME */);
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(keyManAlg);
         kmf.init(keyStore, authority.password());
         return kmf.getKeyManagers();
     }
 
     private static SSLContext newServerContext(KeyManager[] keyManagers)
-            throws NoSuchAlgorithmException,
-            KeyManagementException {
+            throws KeyManagementException {
         SSLContext result = newSSLContext();
-        SecureRandom random = new SecureRandom();
-        random.setSeed(System.currentTimeMillis());
-        result.init(keyManagers, null, random);
+        result.init(keyManagers, null, null);
         return result;
     }
 
-    /**
-     * Enforce TLS 1.2 if available, since it's not default up to Java 8.
-     * <p>
-     * Java 7 disables TLS 1.1 and 1.2 for clients. From <a href=
-     * "http://docs.oracle.com/javase/7/docs/technotes/guides/security/SunProviders.html"
-     * >Java Cryptography Architecture Oracle Providers Documentation:</a>
-     * Although SunJSSE in the Java SE 7 release supports TLS 1.1 and TLS 1.2,
-     * neither version is enabled by default for client connections. Some
-     * servers do not implement forward compatibility correctly and refuse to
-     * talk to TLS 1.1 or TLS 1.2 clients. For interoperability, SunJSSE does
-     * not enable TLS 1.1 or TLS 1.2 by default for client connections.
-     */
-    private static final String SSL_CONTEXT_PROTOCOL = "TLSv1.2";
-    /**
-     * {@link SSLContext}: Every implementation of the Java platform is required
-     * to support the following standard SSLContext protocol: TLSv1
-     */
-    private static final String SSL_CONTEXT_FALLBACK_PROTOCOL = "TLSv1";
-
-    public static SSLContext newSSLContext() throws NoSuchAlgorithmException {
+    public static SSLContext newSSLContext() {
         try {
-            log.debug("Using protocol {}", SSL_CONTEXT_PROTOCOL);
-            return SSLContext.getInstance(SSL_CONTEXT_PROTOCOL
-                    /* , PROVIDER_NAME */);
+            return SSLContext.getInstance("TLSv1.3");
         } catch (NoSuchAlgorithmException e) {
-            log.warn("Protocol {} not available, falling back to {}", SSL_CONTEXT_PROTOCOL,
-                    SSL_CONTEXT_FALLBACK_PROTOCOL);
-            return SSLContext.getInstance(SSL_CONTEXT_FALLBACK_PROTOCOL
-                    /* , PROVIDER_NAME */);
+            throw new IllegalStateException("Protocol not available", e);
         }
     }
-
-    private static final int FAKE_KEYSIZE = 2048;
 
     private static KeyStore createServerCertificate(String commonName,
                                                     SubjectAlternativeNameHolder subjectAlternativeNames,
                                                     Authority authority, X509Certificate caCert, PrivateKey caPrivateKey, X509Certificate peerCertificate)
             throws NoSuchAlgorithmException, NoSuchProviderException,
             IOException, OperatorCreationException, CertificateException,
-            InvalidKeyException, SignatureException, KeyStoreException {
+            InvalidKeyException, SignatureException, KeyStoreException, InvalidAlgorithmParameterException {
+        String algorithm = peerCertificate.getPublicKey().getAlgorithm();
+        log.debug("createServerCertificate algorithm={}, commonName={}, authority={}, peerCertificate={}", algorithm, commonName, authority, peerCertificate);
+        KeyPair keyPair = generateKeyPair(algorithm);
 
-        KeyPair keyPair = generateKeyPair();
-
-        X500Name issuer = new X509CertificateHolder(caCert.getEncoded())
-                .getSubject();
+        X500Name issuer = new X509CertificateHolder(caCert.getEncoded()).getSubject();
         BigInteger serial = BigInteger.valueOf(initRandomSerial());
 
         X500NameBuilder name = new X500NameBuilder(BCStyle.INSTANCE);
@@ -175,24 +146,20 @@ class ServerCertificate {
                 issuer, serial, peerCertificate.getNotBefore(), peerCertificate.getNotAfter(), subject,
                 keyPair.getPublic());
 
-        builder.addExtension(Extension.subjectKeyIdentifier, false,
-                createSubjectKeyIdentifier(keyPair.getPublic()));
-        builder.addExtension(Extension.basicConstraints, false,
-                new BasicConstraints(false));
+        builder.addExtension(Extension.subjectKeyIdentifier, false, createSubjectKeyIdentifier(keyPair.getPublic()));
+        builder.addExtension(Extension.basicConstraints, false, new BasicConstraints(false));
 
         subjectAlternativeNames.fillInto(builder);
 
-        X509Certificate cert = signCertificate(builder, caPrivateKey);
+        X509Certificate cert = signCertificate(caCert.getSigAlgName(), builder, caPrivateKey);
 
         cert.checkValidity(new Date());
         cert.verify(caCert.getPublicKey());
 
-        KeyStore result = KeyStore.getInstance(KeyStore.getDefaultType()
-                /* , PROVIDER_NAME */);
+        KeyStore result = KeyStore.getInstance(KeyStore.getDefaultType());
         result.load(null, null);
         Certificate[] chain = { cert, caCert };
-        result.setKeyEntry(authority.alias(), keyPair.getPrivate(),
-                authority.password(), chain);
+        result.setKeyEntry(authority.alias(), keyPair.getPrivate(), authority.password(), chain);
 
         return result;
     }
@@ -209,36 +176,36 @@ class ServerCertificate {
     }
 
     private static X509Certificate signCertificate(
-            X509v3CertificateBuilder certificateBuilder,
+            String signatureAlgorithm,
+            X509v3CertificateBuilder builder,
             PrivateKey signedWithPrivateKey) throws OperatorCreationException,
             CertificateException {
-        ContentSigner signer = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM)
+        log.debug("signCertificate signatureAlgorithm={}, signedWithPrivateKey={}", signatureAlgorithm, signedWithPrivateKey);
+        ContentSigner signer = new JcaContentSignerBuilder(signatureAlgorithm)
                 .setProvider(PROVIDER_NAME).build(signedWithPrivateKey);
-        return new JcaX509CertificateConverter().setProvider(
-                PROVIDER_NAME).getCertificate(certificateBuilder.build(signer));
+        return new JcaX509CertificateConverter().setProvider(PROVIDER_NAME).getCertificate(builder.build(signer));
     }
 
     public static final String PROVIDER_NAME = BouncyCastleProvider.PROVIDER_NAME;
 
-    private static final String SIGNATURE_ALGORITHM = "SHA512WithRSAEncryption";
-
-    private static final String KEYGEN_ALGORITHM = "RSA";
-
-    private static final String SECURE_RANDOM_ALGORITHM = "SHA1PRNG";
-
-    private static KeyPair generateKeyPair()
-            throws NoSuchAlgorithmException {
-        KeyPairGenerator generator = KeyPairGenerator
-                .getInstance(KEYGEN_ALGORITHM/* , PROVIDER_NAME */);
-        SecureRandom secureRandom = SecureRandom
-                .getInstance(SECURE_RANDOM_ALGORITHM/* , PROVIDER_NAME */);
-        generator.initialize(ServerCertificate.FAKE_KEYSIZE, secureRandom);
+    private static KeyPair generateKeyPair(String algorithm)
+            throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance(algorithm, PROVIDER_NAME);
+        switch (algorithm) {
+            case "EC":
+                generator.initialize(new ECGenParameterSpec("secp256r1"));
+                break;
+            case "RSA":
+                generator.initialize(2048);
+                break;
+            default:
+                throw new UnsupportedOperationException("algorithm=" + algorithm);
+        }
         return generator.generateKeyPair();
     }
 
     public static long initRandomSerial() {
-        final Random rnd = new Random();
-        rnd.setSeed(System.currentTimeMillis());
+        Random rnd = new Random();
         // prevent browser certificate caches, cause of doubled serial numbers
         // using 48bit random number
         long random = ((long) rnd.nextInt()) << 32 | (rnd.nextInt() & 0xffffffffL);

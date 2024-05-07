@@ -6,18 +6,30 @@ import com.github.netguard.vpn.ssl.ExtensionServerName;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import junit.framework.TestCase;
+import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
+import org.wildfly.openssl.OpenSSLProvider;
 
+import javax.net.ssl.SSLContext;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.security.Security;
 
 public class SSLTest extends TestCase {
 
-    public void testByteBuf() {
+    public void testByteBuf() throws Exception {
         ByteBuf byteBuf = Unpooled.buffer();
         assertNotNull(byteBuf);
         System.out.println(byteBuf);
         byteBuf.release();
         System.out.println(byteBuf);
+
+        System.setProperty("jdk.tls.disabledAlgorithms", "");
+        Class<?> cls = Class.forName("sun.security.ssl.SupportedGroupsExtension");
+        assertNotNull(cls);
+        Security.addProvider(new BouncyCastleJsseProvider(true));
+        Security.addProvider(new OpenSSLProvider());
+        SSLContext context = SSLContext.getInstance("TLS", BouncyCastleJsseProvider.PROVIDER_NAME);
+        assertNotNull(context);
     }
 
     public void testClientHello() throws Exception {

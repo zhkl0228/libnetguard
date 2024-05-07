@@ -53,7 +53,7 @@ public class ExtensionServerName {
         }
         int length = dataInput.readUnsignedShort();
         dataOutput.writeShort(length);
-        if(length >= 0x800) {
+        if(length > 0x1200) {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Tls length=0x%x, server=%s", length, server));
             }

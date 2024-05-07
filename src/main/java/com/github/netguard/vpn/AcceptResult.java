@@ -1,7 +1,14 @@
 package com.github.netguard.vpn;
 
+import cn.hutool.core.net.DefaultTrustManager;
+
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 
 public class AcceptResult {
 
@@ -22,11 +29,16 @@ public class AcceptResult {
             this.redirectPort = port;
             return this;
         }
+        private SSLContext sslContext;
+        public AcceptResultBuilder configClientSSLContext(SSLContext context) {
+            this.sslContext = context;
+            return this;
+        }
         public AcceptResult build() {
             return build(null);
         }
         public AcceptResult build(String redirectHost) {
-            return new AcceptResult(rule, proxy, redirectAddress, redirectPort, redirectHost);
+            return new AcceptResult(rule, proxy, redirectAddress, redirectPort, redirectHost, sslContext);
         }
     }
 
@@ -43,13 +55,16 @@ public class AcceptResult {
     private final String redirectAddress;
     private final int redirectPort;
     private final String redirectHost;
+    private final SSLContext context;
 
-    private AcceptResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost) {
+    private AcceptResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost,
+                         SSLContext context) {
         this.rule = rule;
         this.socketProxy = socketProxy;
         this.redirectAddress = redirectAddress;
         this.redirectPort = redirectPort;
         this.redirectHost = redirectHost;
+        this.context = context;
     }
 
     public AllowRule getRule() {
@@ -71,4 +86,19 @@ public class AcceptResult {
     public String getRedirectHost() {
         return redirectHost;
     }
+
+    public static SSLContext newSSLContext(AcceptResult result) {
+        if (result != null && result.context != null) {
+            return result.context;
+        } else {
+            try {
+                SSLContext context = SSLContext.getInstance("TLSv1.2");
+                context.init(new KeyManager[0], new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
+                return context;
+            } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                throw new IllegalStateException("newSSLContext", e);
+            }
+        }
+    }
+
 }

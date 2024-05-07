@@ -21,14 +21,19 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.ResourceLeakDetector;
+import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Date;
 
+/**
+ * --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED
+ */
 public class Main {
 
     public static void main(String[] args) throws IOException {
@@ -54,22 +59,7 @@ public class Main {
         @Override
         public void onConnectClient(Vpn vpn) {
             System.out.println("client: " + vpn.getClientOS() + ", impl=" + vpn.getClass());
-            IPacketCapture packetCapture = new PacketDecoder() {
-                @Override
-                public Http2Filter getH2Filter() {
-                    return MyVpnListener.this;
-                }
-
-                @Override
-                public AcceptResult acceptTcp(ConnectRequest connectRequest) {
-                    if ("weixin.qq.com".equals(connectRequest.hostName)) {
-                        return AcceptResult.builder(AllowRule.FILTER_H2).build();
-                    }
-                    Application[] applications = connectRequest.queryApplications();
-                    System.out.printf("acceptTcp request=%s, applications=%s, httpRequest=%s%n", connectRequest, Arrays.toString(applications), connectRequest.httpRequest);
-                    return super.acceptTcp(connectRequest);
-                }
-            };
+            IPacketCapture packetCapture = new MyPacketDecoder();
             vpn.setPacketCapture(packetCapture);
         }
         @Override
@@ -110,6 +100,31 @@ public class Main {
         @Override
         protected byte[] filterPollingResponseInternal(HttpRequest request, HttpResponse response, byte[] responseData) {
             return responseData;
+        }
+
+        private class MyPacketDecoder extends PacketDecoder {
+            MyPacketDecoder() {
+                try {
+                    File pcapFile = new File("target/vpn.pcap");
+                    FileUtils.deleteQuietly(pcapFile);
+                    setOutputPcapFile(pcapFile);
+                } catch (IOException e) {
+                    throw new IllegalStateException("setOutputPcapFile", e);
+                }
+            }
+            @Override
+            public Http2Filter getH2Filter() {
+                return MyVpnListener.this;
+            }
+            @Override
+            public AcceptResult acceptTcp(ConnectRequest connectRequest) {
+                if ("weixin.qq.com".equals(connectRequest.hostName)) {
+                    return AcceptResult.builder(AllowRule.FILTER_H2).build();
+                }
+                Application[] applications = connectRequest.queryApplications();
+                System.out.printf("acceptTcp request=%s, applications=%s, httpRequest=%s%n", connectRequest, Arrays.toString(applications), connectRequest.httpRequest);
+                return super.acceptTcp(connectRequest);
+            }
         }
     }
 

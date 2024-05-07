@@ -8,7 +8,7 @@ import eu.faircode.netguard.Packet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -115,7 +115,7 @@ public class StreamForward implements Runnable {
                     break;
                 }
             }
-        } catch (SSLHandshakeException e) {
+        } catch (SSLException e) {
             Application[] applications = queryApplications();
             if (log.isDebugEnabled()) {
                 log.warn("[{}]handshake with {} => {} failed: {}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, applications, e);
@@ -124,12 +124,11 @@ public class StreamForward implements Runnable {
             }
             socketException = e;
         } catch (IOException e) {
-            log.trace("stream forward exception: socket={}", socket, e);
+            Application[] applications = queryApplications();
+            log.trace("[{}]stream forward exception {} => {} failed: {}, socket={}", server ? "AsServer" : "AsClient", hostName, serverSocketAddress, applications, socket, e);
             socketException = e;
         } catch (RuntimeException e) {
             log.warn("stream forward exception: socket={}", socket, e);
-        } catch (Exception e) {
-            log.debug("stream forward exception: socket={}", socket, e);
         } finally {
             IoUtil.close(inputStream);
             IoUtil.close(outputStream);
