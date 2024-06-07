@@ -7,12 +7,15 @@ package com.github.netguard.vpn.ssl;
 
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Generates JA3 signature based on the implementation described at <a href="https://github.com/salesforce/ja3">ja3</a>.
  *
  */
-final class JA3Signature {
+public final class JA3Signature {
     /**
      * Handshake identifier.
      */
@@ -87,7 +90,7 @@ final class JA3Signature {
      * @return JA3 fingerprint or null if no TLS ClientHello detected in given packet
      * @see <a href="https://github.com/salesforce/ja3">Original JA3 implementation</a>
      */
-    public String ja3Signature(final ByteBuffer packet) {
+    public static JA3Signature parse(ByteBuffer packet) {
         // Check there is enough remaining to be able to read TLS record header
         if (packet.remaining() < MIN_PACKET_LENGTH) {
             return null;
@@ -143,32 +146,82 @@ final class JA3Signature {
                 return null; // invalid packet, cipher suite length must always be even
             }
 
-            final StringBuilder ja3 = new StringBuilder();
-
-            ja3.append(clientVersion);
-            ja3.append(',');
-
-            convertUInt16ArrayToJa3(packet, off, off + cipherSuiteLength, ja3);
+            List<Integer> cipherSuites = new ArrayList<>();
+            convertUInt16ArrayToJa3(packet, off, off + cipherSuiteLength, cipherSuites);
             off += cipherSuiteLength;
-            ja3.append(',');
 
             off += packet.get(off) + SSL_VERSION_LENGTH; // Skip Compression Methods and length of extensions
 
-            final StringBuilder ec = new StringBuilder(); // elliptic curves
-            final StringBuilder ecpf = new StringBuilder(); // elliptic curve point formats
-
-            parseExtensions(packet, off, end, ja3, ec, ecpf);
-            ja3.append(',');
-
-            ja3.append(ec);
-            ja3.append(',');
-
-            ja3.append(ecpf);
-
-            return ja3.toString();
+            final List<Integer> ec = new ArrayList<>(); // elliptic curves
+            final List<Integer> ecpf = new ArrayList<>(); // elliptic curve point formats
+            List<Integer> extensionTypes = parseExtensions(packet, off, end, ec, ecpf);
+            return new JA3Signature(clientVersion, cipherSuites, extensionTypes, ec, ecpf);
         } catch (BufferUnderflowException | ArrayIndexOutOfBoundsException e) {
             return null;
         }
+    }
+
+    private final int clientVersion;
+    private final List<Integer> cipherSuites;
+    private final List<Integer> extensionTypes;
+    private final List<Integer> ec;
+    private final List<Integer> ecpf;
+
+    private JA3Signature(int clientVersion, List<Integer> cipherSuites, List<Integer> extensionTypes,
+                         List<Integer> ec, List<Integer> ecpf) {
+        this.clientVersion = clientVersion;
+        this.cipherSuites = Collections.unmodifiableList(cipherSuites);
+        this.extensionTypes = Collections.unmodifiableList(extensionTypes);
+        this.ec = Collections.unmodifiableList(ec);
+        this.ecpf = Collections.unmodifiableList(ecpf);
+    }
+
+    private void appendIntegers(List<Integer> list, StringBuilder builder) {
+        if (!list.isEmpty()) {
+            int first = list.get(0);
+            builder.append(first);
+            for (int i = 1; i < list.size(); i++) {
+                builder.append("-").append(list.get(i));
+            }
+        }
+    }
+
+    public String getJa3Text() {
+        final StringBuilder ja3 = new StringBuilder();
+        ja3.append(clientVersion);
+        ja3.append(',');
+
+        appendIntegers(cipherSuites, ja3);
+        ja3.append(',');
+
+        appendIntegers(extensionTypes, ja3);
+        ja3.append(',');
+
+        appendIntegers(ec, ja3);
+        ja3.append(',');
+
+        appendIntegers(ecpf, ja3);
+        return ja3.toString();
+    }
+
+    public String getJa3nText() {
+        final StringBuilder ja3 = new StringBuilder();
+        ja3.append(clientVersion);
+        ja3.append(',');
+
+        appendIntegers(cipherSuites, ja3);
+        ja3.append(',');
+
+        List<Integer> list = new ArrayList<>(extensionTypes);
+        Collections.sort(list);
+        appendIntegers(list, ja3);
+        ja3.append(',');
+
+        appendIntegers(ec, ja3);
+        ja3.append(',');
+
+        appendIntegers(ecpf, ja3);
+        return ja3.toString();
     }
 
     /**
@@ -177,14 +230,13 @@ final class JA3Signature {
      * @param packet clienthello packet
      * @param off offset to start reading extensions
      * @param packetEnd offset where packet ends
-     * @param ei string builder to output the generated ja3 string for extensions identifiers
      * @param ec string builder to output the generated ja3 string for elliptic curves
      * @param ecpf string builder to output the generated ja3 string for elliptic curve points
      */
-    private void parseExtensions(final ByteBuffer packet, final int off, final int packetEnd, final StringBuilder ei, final StringBuilder ec,
-                                 final StringBuilder ecpf) {
-        boolean first = true;
+    private static List<Integer> parseExtensions(final ByteBuffer packet, final int off, final int packetEnd, final List<Integer> ec,
+                                                 final List<Integer> ecpf) {
         int offset = off;
+        List<Integer> extensionTypes = new ArrayList<>();
         while (offset < packetEnd) {
             int extensionType = getUInt16(packet, offset, packetEnd);
             offset += UINT16_LENGTH;
@@ -202,15 +254,12 @@ final class JA3Signature {
             }
 
             if (isNotGrease(extensionType)) {
-                if (!first) {
-                    ei.append('-');
-                }
-                ei.append(extensionType);
-                first = false;
+                extensionTypes.add(extensionType);
             }
 
             offset += extensionLength;
         }
+        return extensionTypes;
     }
 
     /**
@@ -223,7 +272,7 @@ final class JA3Signature {
      * @return false if value matches GREASE value, true otherwise
      * @see <a href="https://tools.ietf.org/html/draft-ietf-tls-grease">draft-ietf-tls-grease</a>
      */
-    private boolean isNotGrease(final int value) {
+    private static boolean isNotGrease(final int value) {
         for (int j : GREASE) {
             if (value == j) {
                 return false;
@@ -244,17 +293,12 @@ final class JA3Signature {
      * @param out string builder to output the generated JA3 string
      * @throws BufferUnderflowException when source packet does not have enough bytes to read
      */
-    private void convertUInt16ArrayToJa3(final ByteBuffer source, final int start, final int end, final StringBuilder out) {
-        boolean first = true;
+    private static void convertUInt16ArrayToJa3(final ByteBuffer source, final int start, final int end, final List<Integer> out) {
         int st = start;
         for (; st < end; st += UINT16_LENGTH) {
             int value = getUInt16(source, st, end);
             if (isNotGrease(value)) {
-                if (!first) {
-                    out.append('-');
-                }
-                out.append(value);
-                first = false;
+                out.add(value);
             }
         }
     }
@@ -268,13 +312,10 @@ final class JA3Signature {
      * @param out string builder to output the generated JA3 string
      * @throws BufferUnderflowException when source packet does not have enough bytes to read
      */
-    private void convertUInt8ArrayToJa3(final ByteBuffer source, final int start, final int end, final StringBuilder out) {
+    private static void convertUInt8ArrayToJa3(final ByteBuffer source, final int start, final int end, final List<Integer> out) {
         int st = start;
         for (; st < end; st++) {
-            out.append(getByte(source, st, end));
-            if (st < end - 1) {
-                out.append('-');
-            }
+            out.add(getByte(source, st, end) & 0xff);
         }
     }
 
@@ -287,7 +328,7 @@ final class JA3Signature {
      * @return 24-bit integer from network
      * @throws BufferUnderflowException when source buffer does not have enough bytes to read
      */
-    private int getUInt24(final ByteBuffer source, final int start, final int end) {
+    private static int getUInt24(final ByteBuffer source, final int start, final int end) {
         if (start + UINT24_LENGTH > end) {
             throw new BufferUnderflowException();
         }
@@ -305,7 +346,7 @@ final class JA3Signature {
      * @return unsigned integer
      * @throws BufferUnderflowException when source buffer does not have enough bytes to read
      */
-    private int getUInt16(final ByteBuffer source, final int start, final int end) {
+    private static int getUInt16(final ByteBuffer source, final int start, final int end) {
         if (start + UINT16_LENGTH > end) {
             throw new BufferUnderflowException();
         }
@@ -322,7 +363,7 @@ final class JA3Signature {
      * @return a byte
      * @throws BufferUnderflowException when source buffer does not have enough bytes to read
      */
-    private byte getByte(final ByteBuffer source, final int start, final int end) {
+    private static byte getByte(final ByteBuffer source, final int start, final int end) {
         if (start + 1 > end) {
             throw new BufferUnderflowException();
         }

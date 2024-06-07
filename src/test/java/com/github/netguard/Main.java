@@ -1,6 +1,9 @@
 package com.github.netguard;
 
 import cn.hutool.core.net.DefaultTrustManager;
+import cn.hutool.crypto.digest.DigestUtil;
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
@@ -28,6 +31,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
+import org.krakenapps.pcap.decoder.http.impl.HttpSession;
 import org.wildfly.openssl.OpenSSLProvider;
 import org.wildfly.openssl.SSL;
 
@@ -36,6 +40,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
@@ -125,6 +130,16 @@ public class Main {
                     throw new IllegalStateException("setOutputPcapFile", e);
                 }
             }
+
+            @Override
+            protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
+                if ("application/json".equals(response.getContentType())) {
+                    JSONObject obj = JSONObject.parseObject(new String(response.getResponseData(), StandardCharsets.UTF_8));
+                    System.out.println(obj.toString(SerializerFeature.PrettyFormat));
+                }
+                super.onResponse(session, request, response);
+            }
+
             @Override
             public Http2Filter getH2Filter() {
                 return MyVpnListener.this;
@@ -152,6 +167,16 @@ public class Main {
                 if ("weixin.qq.com".equals(connectRequest.hostName)) {
                     return AcceptResult.builder(AllowRule.FILTER_H2)
                             .configClientSSLContext(createWeiXinSSLContext())
+                            .build();
+                }
+                if ("tls.browserleaks.com".equals(connectRequest.hostName)) { // https://tls.browserleaks.com/json
+                    System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja3_text=%s, ja3n_text=%s%n", connectRequest,
+                            DigestUtil.md5Hex(connectRequest.ja3.getJa3Text()),
+                            DigestUtil.md5Hex(connectRequest.ja3.getJa3nText()),
+                            connectRequest.ja3.getJa3Text(),
+                            connectRequest.ja3.getJa3nText());
+                    return AcceptResult.builder(AllowRule.CONNECT_SSL)
+                            .configClientSSLContext(createSSLContext())
                             .build();
                 }
                 if (connectRequest.isSSL()) {

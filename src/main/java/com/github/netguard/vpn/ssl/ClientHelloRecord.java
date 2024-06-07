@@ -26,6 +26,10 @@ public class ClientHelloRecord {
     private static final int PROLOGUE_MAX_LENGTH = 128;
 
     static ClientHelloRecord prologue(ByteArrayOutputStream baos, DataInputStream dataInput) throws IOException {
+        return prologue(baos, dataInput, null);
+    }
+
+    static ClientHelloRecord prologue(ByteArrayOutputStream baos, DataInputStream dataInput, JA3Signature ja3) throws IOException {
         int available = dataInput.available();
         int count = PROLOGUE_MAX_LENGTH - baos.size();
         if (available > 0 && count > 0) {
@@ -34,7 +38,7 @@ public class ClientHelloRecord {
             baos.write(buf);
         }
         HttpRequest httpRequest = detectHttp(baos, dataInput);
-        return new ClientHelloRecord(baos.toByteArray(), httpRequest);
+        return new ClientHelloRecord(baos.toByteArray(), httpRequest, ja3);
     }
 
     private static HttpRequest detectHttp(ByteArrayOutputStream baos, DataInputStream dataInput) throws IOException {
@@ -159,23 +163,25 @@ public class ClientHelloRecord {
     }
 
     ConnectRequest newConnectRequest(InspectorVpn vpn, Packet packet) {
-        return new ConnectRequest(vpn, packet, this.hostName, this.applicationLayerProtocols, this.prologue, httpRequest);
+        return new ConnectRequest(vpn, packet, this.hostName, this.applicationLayerProtocols, this.prologue, this.httpRequest, this.ja3);
     }
 
     public final byte[] prologue;
     public final String hostName;
     public final List<String> applicationLayerProtocols;
     private final HttpRequest httpRequest;
+    private final JA3Signature ja3;
 
-    private ClientHelloRecord(byte[] prologue, HttpRequest httpRequest) {
-        this(prologue, null, new ArrayList<>(0), httpRequest);
+    private ClientHelloRecord(byte[] prologue, HttpRequest httpRequest, JA3Signature ja3) {
+        this(prologue, null, new ArrayList<>(0), httpRequest, ja3);
     }
 
-    ClientHelloRecord(byte[] prologue, String hostName, List<String> applicationLayerProtocols, HttpRequest httpRequest) {
+    ClientHelloRecord(byte[] prologue, String hostName, List<String> applicationLayerProtocols, HttpRequest httpRequest, JA3Signature ja3) {
         this.prologue = prologue;
         this.hostName = hostName;
         this.applicationLayerProtocols = applicationLayerProtocols;
         this.httpRequest = httpRequest;
+        this.ja3 = ja3;
     }
 
     @Override

@@ -182,12 +182,6 @@
         </dependency>
         <dependency>
             <groupId>org.wildfly.openssl</groupId>
-            <artifactId>wildfly-openssl-java</artifactId>
-            <version>2.2.5.Final</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.wildfly.openssl</groupId>
             <artifactId>wildfly-openssl</artifactId>
             <version>2.2.5.Final</version>
             <scope>test</scope>

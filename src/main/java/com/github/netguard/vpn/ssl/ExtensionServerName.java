@@ -128,18 +128,15 @@ public class ExtensionServerName {
             }
         }
         byte[] prologue = baos.toByteArray();
-        if (log.isDebugEnabled()) {
-            JA3Signature signature = new JA3Signature();
-            String ja3 = signature.ja3Signature(ByteBuffer.wrap(prologue));
-            log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}, ja3={}", serverNames, server, applicationLayerProtocols, ja3);
-        }
+        JA3Signature ja3 = JA3Signature.parse(ByteBuffer.wrap(prologue));
+        log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}, ja3={}", serverNames, server, applicationLayerProtocols, ja3);
 
         if (serverNames.isEmpty()) {
             log.debug("Not tls: extension name is empty: server={}", server);
-            return ClientHelloRecord.prologue(baos, dataInput);
+            return ClientHelloRecord.prologue(baos, dataInput, ja3);
         } else {
             String hostName = serverNames.get(0);
-            return new ClientHelloRecord(prologue, hostName, applicationLayerProtocols, null);
+            return new ClientHelloRecord(prologue, hostName, applicationLayerProtocols, null, ja3);
         }
     }
 

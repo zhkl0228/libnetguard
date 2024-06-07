@@ -17,6 +17,7 @@ public class ConnectRequest {
     public final List<String> applicationLayerProtocols;
     public final byte[] prologue;
     public final HttpRequest httpRequest;
+    public final JA3Signature ja3;
 
 
     @SuppressWarnings("unused")
@@ -28,7 +29,7 @@ public class ConnectRequest {
     private final Packet packet;
 
     ConnectRequest(InspectorVpn vpn, Packet packet, String hostName, List<String> applicationLayerProtocols, byte[] prologue,
-                   HttpRequest httpRequest) {
+                   HttpRequest httpRequest, JA3Signature ja3) {
         this.vpn = vpn;
         this.packet = packet;
         this.serverIp = packet.daddr;
@@ -37,6 +38,7 @@ public class ConnectRequest {
         this.applicationLayerProtocols = applicationLayerProtocols;
         this.prologue = prologue;
         this.httpRequest = httpRequest;
+        this.ja3 = ja3;
     }
 
     public AcceptResult.AcceptResultBuilder connectTcpDirect() {
