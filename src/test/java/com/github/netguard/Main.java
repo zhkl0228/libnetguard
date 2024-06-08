@@ -29,13 +29,9 @@ import io.netty.util.ResourceLeakDetector;
 import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
 import org.krakenapps.pcap.decoder.http.impl.HttpSession;
-import org.wildfly.openssl.OpenSSLProvider;
-import org.wildfly.openssl.SSL;
 
-import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import java.io.File;
@@ -56,8 +52,8 @@ public class Main {
     public static void main(String[] args) throws IOException {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
-        Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
-        Logger.getLogger(PacketDecoder.class).setLevel(Level.DEBUG);
+        Logger.getLogger(SSLProxyV2.class).setLevel(Level.DEBUG);
+        Logger.getLogger(PacketDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
         Logger.getLogger(StreamForward.class).setLevel(Level.INFO);
@@ -134,8 +130,10 @@ public class Main {
             @Override
             protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
                 if ("application/json".equals(response.getContentType())) {
-                    JSONObject obj = JSONObject.parseObject(new String(response.getResponseData(), StandardCharsets.UTF_8));
-                    System.out.println(obj.toString(SerializerFeature.PrettyFormat));
+                    try {
+                        JSONObject obj = JSONObject.parseObject(new String(response.getResponseData(), StandardCharsets.UTF_8));
+                        System.out.println(obj.toString(SerializerFeature.PrettyFormat));
+                    } catch(Exception ignored) {}
                 }
                 super.onResponse(session, request, response);
             }
@@ -144,44 +142,32 @@ public class Main {
             public Http2Filter getH2Filter() {
                 return MyVpnListener.this;
             }
-            private SSLContext createWeiXinSSLContext() {
+            private SSLContext createConscryptContext() {
                 try {
-                    SSLContext context = SSLContext.getInstance("TLSv1.2", BouncyCastleJsseProvider.PROVIDER_NAME);
-                    context.init(new KeyManager[0], new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
-                    return context;
-                } catch (NoSuchAlgorithmException | NoSuchProviderException | KeyManagementException e) {
-                    throw new IllegalStateException(e);
-                }
-            }
-            private SSLContext createSSLContext() {
-                try {
-                    SSLContext context = SSLContext.getInstance("openssl.TLS");
+                    SSLContext context = SSLContext.getInstance("TLSv1.3", "Conscrypt");
                     context.init(null, new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
                     return context;
-                } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                } catch (NoSuchAlgorithmException | KeyManagementException | NoSuchProviderException e) {
                     throw new IllegalStateException(e);
                 }
             }
             @Override
             public AcceptResult acceptTcp(ConnectRequest connectRequest) {
-                if ("weixin.qq.com".equals(connectRequest.hostName)) {
-                    return AcceptResult.builder(AllowRule.FILTER_H2)
-                            .configClientSSLContext(createWeiXinSSLContext())
-                            .build();
-                }
-                if ("tls.browserleaks.com".equals(connectRequest.hostName)) { // https://tls.browserleaks.com/json
+                if (connectRequest.ja3 != null) {
                     System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja3_text=%s, ja3n_text=%s%n", connectRequest,
                             DigestUtil.md5Hex(connectRequest.ja3.getJa3Text()),
                             DigestUtil.md5Hex(connectRequest.ja3.getJa3nText()),
                             connectRequest.ja3.getJa3Text(),
                             connectRequest.ja3.getJa3nText());
-                    return AcceptResult.builder(AllowRule.CONNECT_SSL)
-                            .configClientSSLContext(createSSLContext())
+                }
+                if ("weixin.qq.com".equals(connectRequest.hostName)) {
+                    return AcceptResult.builder(AllowRule.FILTER_H2)
+                            .configClientSSLContext(createConscryptContext())
                             .build();
                 }
                 if (connectRequest.isSSL()) {
                     return AcceptResult.builder(AllowRule.CONNECT_SSL)
-                            .configClientSSLContext(createSSLContext())
+                            .configClientSSLContext(createConscryptContext())
                             .build();
                 }
                 Application[] applications = connectRequest.queryApplications();
@@ -192,15 +178,10 @@ public class Main {
     }
 
     static {
-        Security.addProvider(new BouncyCastleJsseProvider());
-
         /*
-         * https://github.com/wildfly-security/wildfly-openssl-natives
+         * https://github.com/google/conscrypt
          */
-        System.setProperty(SSL.ORG_WILDFLY_LIBWFSSL_PATH, new File(FileUtils.getUserDirectory(),
-                "git/wildfly-openssl-natives/macosx-aarch64/target/classes/macosx-aarch64/libwfssl.dylib").getAbsolutePath());
-        System.setProperty(SSL.ORG_WILDFLY_OPENSSL_PATH, "/opt/local/lib");
-        Security.addProvider(new OpenSSLProvider());
+        Security.addProvider(new org.conscrypt.OpenSSLProvider());
     }
 
 }

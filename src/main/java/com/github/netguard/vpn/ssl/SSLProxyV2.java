@@ -32,6 +32,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -376,9 +378,7 @@ public class SSLProxyV2 implements Runnable {
                 app.connect(new InetSocketAddress(redirectAddress, redirectPort), timeout);
                 secureSocket = (SSLSocket) factory.createSocket(app, record.hostName, redirectPort, true);
                 if (!record.applicationLayerProtocols.isEmpty()) {
-                    SSLParameters parameters = secureSocket.getSSLParameters();
-                    parameters.setApplicationProtocols(record.applicationLayerProtocols.toArray(new String[0]));
-                    secureSocket.setSSLParameters(parameters);
+                    setApplicationProtocols(secureSocket, record.applicationLayerProtocols.toArray(new String[0]));
                 }
                 final CountDownLatch countDownLatch = new CountDownLatch(1);
                 secureSocket.addHandshakeCompletedListener(event -> {
@@ -397,7 +397,9 @@ public class SSLProxyV2 implements Runnable {
                 String applicationProtocol = null;
                 try {
                     applicationProtocol = secureSocket.getApplicationProtocol();
-                } catch(UnsupportedOperationException ignored) {}
+                } catch(UnsupportedOperationException e) {
+                    log.warn("secureSocket={}", secureSocket, e);
+                }
                 log.debug("secureSocket={}, applicationProtocol={}", secureSocket, applicationProtocol);
                 if (peerCertificate == null) {
                     throw new IOException("Handshake failed with: " + record.hostName + ", remote=" + remote);
@@ -418,6 +420,32 @@ public class SSLProxyV2 implements Runnable {
                 IoUtil.close(app);
                 IoUtil.close(secureSocket);
                 throw e;
+            }
+        }
+    }
+
+    private static Method isConscrypt, setApplicationProtocols;
+    static {
+        try {
+            Class<?> cConscrypt = Class.forName("org.conscrypt.Conscrypt");
+            isConscrypt = cConscrypt.getMethod("isConscrypt", SSLSocket.class);
+            setApplicationProtocols = cConscrypt.getMethod("setApplicationProtocols", SSLSocket.class, String[].class);
+        } catch(Exception ignored) {}
+    }
+
+    private void setApplicationProtocols(SSLSocket secureSocket, String[] applicationLayerProtocols) {
+        SSLParameters parameters = secureSocket.getSSLParameters();
+        parameters.setApplicationProtocols(applicationLayerProtocols);
+        secureSocket.setSSLParameters(parameters);
+
+        if(isConscrypt != null && setApplicationProtocols != null) {
+            try {
+                boolean ret = (Boolean) isConscrypt.invoke(null, secureSocket);
+                if (ret) {
+                    setApplicationProtocols.invoke(null, secureSocket, applicationLayerProtocols);
+                }
+            } catch (IllegalAccessException | InvocationTargetException e) {
+                throw new IllegalStateException("setApplicationProtocols", e);
             }
         }
     }
