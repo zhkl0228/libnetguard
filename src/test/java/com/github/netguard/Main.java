@@ -11,6 +11,7 @@ import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.ssl.ConnectRequest;
+import com.github.netguard.vpn.ssl.JA3Signature;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
 import com.github.netguard.vpn.ssl.StreamForward;
 import com.github.netguard.vpn.ssl.h2.AbstractHttp2Filter;
@@ -53,6 +54,7 @@ public class Main {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
         Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.DEBUG);
+        Logger.getLogger(JA3Signature.class).setLevel(Level.DEBUG);
         Logger.getLogger(PacketDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
@@ -154,9 +156,10 @@ public class Main {
             @Override
             public AcceptResult acceptTcp(ConnectRequest connectRequest) {
                 if (connectRequest.ja3 != null) {
-                    System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja3_text=%s, ja3n_text=%s%n", connectRequest,
+                    System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, ja3_text=%s, ja3n_text=%s%n", connectRequest,
                             DigestUtil.md5Hex(connectRequest.ja3.getJa3Text()),
                             DigestUtil.md5Hex(connectRequest.ja3.getJa3nText()),
+                            connectRequest.ja3.getJa4Text(),
                             connectRequest.ja3.getJa3Text(),
                             connectRequest.ja3.getJa3nText());
                 }
