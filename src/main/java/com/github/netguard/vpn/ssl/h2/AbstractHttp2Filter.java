@@ -89,7 +89,9 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
             if ("x-netguard-session".equalsIgnoreCase(name) ||
                     "x-netguard-fake-response".equalsIgnoreCase(name) ||
                     "x-http2-stream-id".equalsIgnoreCase(name) ||
-                    "x-http2-stream-weight".equalsIgnoreCase(name)) {
+                    "x-http2-stream-weight".equalsIgnoreCase(name) ||
+                    "x-akamai-text".equalsIgnoreCase(name) ||
+                    "x-akamai-hash".equalsIgnoreCase(name)) {
                 continue;
             }
             obj.put(name, entry.getValue());

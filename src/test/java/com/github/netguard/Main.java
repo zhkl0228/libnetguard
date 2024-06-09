@@ -11,7 +11,6 @@ import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.ssl.ConnectRequest;
-import com.github.netguard.vpn.ssl.JA3Signature;
 import com.github.netguard.vpn.ssl.SSLProxyV2;
 import com.github.netguard.vpn.ssl.StreamForward;
 import com.github.netguard.vpn.ssl.h2.AbstractHttp2Filter;
@@ -52,14 +51,13 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
-        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.DEBUG);
-        Logger.getLogger(SSLProxyV2.class).setLevel(Level.DEBUG);
-        Logger.getLogger(JA3Signature.class).setLevel(Level.DEBUG);
+        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
+        Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
+        Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
         Logger.getLogger(PacketDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
-        Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
         Logger.getLogger(StreamForward.class).setLevel(Level.INFO);
-        Logger.getLogger("edu.baylor.cs.csi5321.spdy.frames").setLevel(Level.INFO);
+        Logger.getLogger("com.twitter.http2").setLevel(Level.INFO);
         VpnServer vpnServer = new VpnServer(20260);
         vpnServer.preparePreMasterSecretsLogFile();
         vpnServer.enableBroadcast(10);
@@ -164,7 +162,7 @@ public class Main {
                             connectRequest.ja3.getJa3Text(),
                             connectRequest.ja3.getJa3nText());
                 }
-                if ("weixin.qq.com".equals(connectRequest.hostName)) {
+                if ("weixin.qq.com".equals(connectRequest.hostName) || "tls.browserleaks.com".equals(connectRequest.hostName)) {
                     return AcceptResult.builder(AllowRule.FILTER_H2)
                             .configClientSSLContext(createConscryptContext())
                             .build();

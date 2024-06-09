@@ -204,7 +204,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         log.debug("readDataFrame server={}, streamId={}, endStream={}, endSegment={}, longPolling={}, data={}", server, streamId, endStream, endSegment, (stream == null ? null : stream.longPolling), data);
         try {
             if (stream == null) {
-                log.warn("readDataFrame not exists stream: " + streamId);
+                log.warn("readDataFrame not exists stream: {}", streamId);
                 return;
             }
             data.readBytes(stream.buffer, data.readableBytes());
@@ -320,7 +320,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream, int streamId) {
-        HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey);
+        HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey, null);
         if (filter != null) {
             CancelResult result = filter.cancelRequest(request, requestData == null ? new byte[0] : requestData, true);
             if (result != null) {
@@ -362,7 +362,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private final Queue<byte[]> delayResponseQueue = new LinkedBlockingQueue<>();
 
     private void handleRequest(HttpHeadersFrame headersFrame, byte[] requestData, int streamId) {
-        HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey);
+        HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey, akamai);
         if (filter != null) {
             CancelResult result = filter.cancelRequest(request, requestData == null ? new byte[0] : requestData, false);
             if (result != null) {
@@ -425,6 +425,10 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         headerDecoder.endHeaderBlock(httpHeadersFrame);
         log.debug("readHeaderBlockEnd server={}, frame={}", server, httpHeadersFrame);
 
+        if (server) {
+            akamai.onHttpHeadersFrame(httpHeadersFrame);
+        }
+
         if (httpHeadersFrame.isLast()) {
             if (server) {
                 handleRequest(httpHeadersFrame, null, httpHeadersFrame.getStreamId());
@@ -435,7 +439,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             Stream stream = new Stream(httpHeadersFrame);
             Stream old = streamMap.put(httpHeadersFrame.getStreamId(), stream);
             if (old != null) {
-                log.warn("readHeaderBlockEnd replace exists stream old=" + old);
+                log.warn("readHeaderBlockEnd replace exists stream old={}", old);
             }
 
             Stream peerStream;
@@ -452,6 +456,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     @Override
     public void readPriorityFrame(int streamId, boolean exclusive, int dependency, int weight) {
         log.debug("readPriorityFrame server={}, streamId={}, exclusive={}, dependency={}, weight={}", server, streamId, exclusive, dependency, weight);
+
+        if (server) {
+            akamai.onPriorityFrame(streamId, exclusive, dependency, weight);
+        }
+
         ByteBuf frame = frameEncoder.encodePriorityFrame(streamId, exclusive, dependency, weight);
         try {
             forwardFrameBuf(frame, outputBuffer);
@@ -473,6 +482,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private HttpSettingsFrame httpSettingsFrame;
+    private final Akamai akamai = new Akamai();
 
     @Override
     public void readSettingsFrame(boolean ack) {
@@ -499,6 +509,10 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     @Override
     public void readSettingsEnd() {
         log.debug("readSettingsEnd server={}, frame={}", server, httpSettingsFrame);
+
+        if (server) {
+            akamai.onHttpSettingsFrame(httpSettingsFrame);
+        }
 
         peer.onPeerSettingsEnd(httpSettingsFrame);
         ByteBuf frame = frameEncoder.encodeSettingsFrame(httpSettingsFrame);
@@ -552,6 +566,13 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     @Override
     public void readWindowUpdateFrame(int streamId, int windowSizeIncrement) {
         log.debug("readWindowUpdateFrame server={}, streamId={}, windowSizeIncrement={}", server, streamId, windowSizeIncrement);
+
+        if (streamId == 0) {
+            if(server) {
+                akamai.onWindowUpdateFrame(windowSizeIncrement);
+            }
+        }
+
         ByteBuf frame = frameEncoder.encodeWindowUpdateFrame(streamId, windowSizeIncrement);
         try {
             forwardFrameBuf(frame, outputBuffer);
@@ -576,7 +597,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
-    private static HttpRequest createHttpRequest(HttpHeadersFrame headersFrame, String sessionKey) {
+    private static HttpRequest createHttpRequest(HttpHeadersFrame headersFrame, String sessionKey, Akamai akamai) {
         HttpHeaders headers = headersFrame.headers().copy();
         HttpMethod method = HttpMethod.valueOf(headers.get(":method"));
         String uri = headers.get(":path");
@@ -594,11 +615,20 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         String host = headers.get(":authority");
         headers.remove(":authority");
         headers.set(HttpHeaderNames.HOST, host);
+        addNetGuardHeaders(headers, headersFrame, sessionKey, akamai);
+        addHeaders(request, headers);
+        return request;
+    }
+
+    private static void addNetGuardHeaders(HttpHeaders headers, HttpHeadersFrame headersFrame, String sessionKey, Akamai akamai) {
         headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
         headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
         headers.set("x-netguard-session", sessionKey);
-        addHeaders(request, headers);
-        return request;
+        String akamaiText = akamai == null ? null : akamai.getText();
+        if (akamaiText != null) {
+            headers.set("x-akamai-text", akamaiText);
+            headers.set("x-akamai-hash", DigestUtil.md5Hex(akamaiText));
+        }
     }
 
     private static HttpResponse createHttpResponse(HttpHeadersFrame headersFrame, String sessionKey) {
@@ -607,9 +637,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         HttpResponseStatus status = HttpResponseStatus.valueOf(headers.getInt(":status"));
         headers.remove(":status");
         HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, false);
-        headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
-        headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
-        headers.set("x-netguard-session", sessionKey);
+        addNetGuardHeaders(headers, headersFrame, sessionKey, null);
         addHeaders(response, headers);
         return response;
     }
