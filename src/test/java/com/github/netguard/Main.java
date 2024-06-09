@@ -156,10 +156,11 @@ public class Main {
             @Override
             public AcceptResult acceptTcp(ConnectRequest connectRequest) {
                 if (connectRequest.ja3 != null) {
-                    System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, ja3_text=%s, ja3n_text=%s%n", connectRequest,
+                    System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=%s, ja3n_text=%s%n", connectRequest,
                             DigestUtil.md5Hex(connectRequest.ja3.getJa3Text()),
                             DigestUtil.md5Hex(connectRequest.ja3.getJa3nText()),
                             connectRequest.ja3.getJa4Text(),
+                            DigestUtil.md5Hex(connectRequest.ja3.getPeetPrintText()),
                             connectRequest.ja3.getJa3Text(),
                             connectRequest.ja3.getJa3nText());
                 }

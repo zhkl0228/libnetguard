@@ -331,7 +331,11 @@ public class SSLProxyV2 implements Runnable {
         IPacketCapture packetCapture = vpn.getPacketCapture();
         AcceptResult result = null;
         if (packetCapture != null) {
-            result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
+            try {
+                result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
+            } catch (Exception e) {
+                log.warn("acceptTcp failed", e);
+            }
             if (result != null) {
                 allowRule = result.getRule();
                 socketProxy = result.getSocketProxy();

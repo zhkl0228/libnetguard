@@ -210,6 +210,102 @@ public final class JA3Signature {
         return cipherSuites;
     }
 
+    private static final int SUPPORTED_VERSIONS = 0x2b;
+    private static final String GREASE_TEXT = "GREASE";
+
+    public String getPeetPrintText() {
+        StringBuilder peetPrint = new StringBuilder();
+        {
+            byte[] supportedVersions = extensionTypes.get(SUPPORTED_VERSIONS);
+            if(supportedVersions != null) {
+                List<String> list = new ArrayList<>(5);
+                ByteBuffer buffer = ByteBuffer.wrap(supportedVersions);
+                int length = buffer.get() & 0xff;
+                for (int i = 0; i < length; i += 2) {
+                    int v = buffer.getShort() & 0xffff;
+                    if (isNotGrease(v)) {
+                        list.add(String.valueOf(v));
+                    } else {
+                        list.add(GREASE_TEXT);
+                    }
+                }
+                peetPrint.append(String.join("-", list));
+            }
+            peetPrint.append("|");
+        }
+        {
+            List<String> list = createApplicationLayerProtocols();
+            peetPrint.append(String.join("-", list)).append("|");
+        }
+        appendPeerPrintIntegers(peetPrint, ec, false);
+        appendPeerPrintIntegers(peetPrint, signatureAlgorithms, false);
+        {
+            byte[] pskSharedMode = extensionTypes.get(0x2d);
+            if(pskSharedMode != null && pskSharedMode.length == 2) {
+                peetPrint.append(pskSharedMode[1] & 0x1);
+            }
+            peetPrint.append("|");
+        }
+        {
+            List<Integer> list = new ArrayList<>();
+            byte[] compressCertificate = extensionTypes.get(0x1b);
+            if (compressCertificate != null && compressCertificate.length > 2) {
+                ByteBuffer buffer = ByteBuffer.wrap(compressCertificate);
+                int length = buffer.get() & 0xff;
+                for (int i = 0; i < length; i += 2) {
+                    int v = buffer.getShort() & 0xffff;
+                    list.add(v);
+                }
+            }
+            appendPeerPrintIntegers(peetPrint, list, false);
+        }
+        appendPeerPrintIntegers(peetPrint, cipherSuites, false);
+        List<Integer> extensionTypes = new ArrayList<>(this.extensionTypes.keySet());
+        appendPeerPrintIntegers(peetPrint, extensionTypes, true);
+        peetPrint.deleteCharAt(peetPrint.length() - 1);
+        return peetPrint.toString();
+    }
+
+    private void appendPeerPrintIntegers(StringBuilder peetPrint, List<Integer> values, boolean sort) {
+        List<String> list = new ArrayList<>(values.size());
+        for(Integer v : values) {
+            if (isNotGrease(v)) {
+                list.add(String.valueOf(v));
+            } else {
+                list.add(GREASE_TEXT);
+            }
+        }
+        if (sort) {
+            Collections.sort(list);
+        }
+        peetPrint.append(String.join("-", list)).append("|");
+    }
+
+    private List<String> createApplicationLayerProtocols() {
+        List<String> list = new ArrayList<>(3);
+        for (String applicationLayerProtocol : applicationLayerProtocols) {
+            switch (applicationLayerProtocol) {
+                case "http/1.0":
+                    list.add("1.0");
+                    break;
+                case "http/1.1":
+                    list.add("1.1");
+                    break;
+                case "h2":
+                    list.add("2");
+                    break;
+                case "dot":
+                case "apns-security-v3":
+                case "apns-pack-v1":
+                    break;
+                default:
+                    log.warn("Unknown application layer protocol: {}", applicationLayerProtocol);
+                    break;
+            }
+        }
+        return list;
+    }
+
     public String getJa4Text() {
         Map<Integer, byte[]> extensionTypes = createExtensionTypesWithoutGrease();
         List<Integer> cipherSuites = createCipherSuitesWithoutGrease();
@@ -217,7 +313,6 @@ public final class JA3Signature {
         ja4.append("t");
         {
             int version;
-            final int SUPPORTED_VERSIONS = 0x2b;
             byte[] supportedVersions = extensionTypes.get(SUPPORTED_VERSIONS);
             if(supportedVersions != null && supportedVersions.length >= 3) {
                 version = 0;
@@ -244,8 +339,12 @@ public final class JA3Signature {
                 case 0x0302:
                     ja4.append("11");
                     break;
+                case 0x0301:
+                    ja4.append("10");
+                    break;
                 default:
-                    throw new IllegalStateException("version=0x" + Integer.toHexString(version));
+                    log.warn("Unsupported version=0x{}", Integer.toHexString(version));
+                    break;
             }
         }
         if (hostName == null) {
