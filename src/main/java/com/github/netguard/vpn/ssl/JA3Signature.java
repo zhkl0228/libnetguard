@@ -217,21 +217,13 @@ public final class JA3Signature {
         StringBuilder peetPrint = new StringBuilder();
         {
             byte[] supportedVersions = extensionTypes.get(SUPPORTED_VERSIONS);
+            List<Integer> list = new ArrayList<>(5);
             if(supportedVersions != null) {
-                List<String> list = new ArrayList<>(5);
                 ByteBuffer buffer = ByteBuffer.wrap(supportedVersions);
                 int length = buffer.get() & 0xff;
-                for (int i = 0; i < length; i += 2) {
-                    int v = buffer.getShort() & 0xffff;
-                    if (isNotGrease(v)) {
-                        list.add(String.valueOf(v));
-                    } else {
-                        list.add(GREASE_TEXT);
-                    }
-                }
-                peetPrint.append(String.join("-", list));
+                convertUInt16ArrayToJa3(buffer, 1, length + 1, list);
             }
-            peetPrint.append("|");
+            appendPeerPrintIntegers(peetPrint, list, false);
         }
         {
             List<String> list = createApplicationLayerProtocols();
@@ -249,13 +241,10 @@ public final class JA3Signature {
         {
             List<Integer> list = new ArrayList<>();
             byte[] compressCertificate = extensionTypes.get(0x1b);
-            if (compressCertificate != null && compressCertificate.length > 2) {
+            if (compressCertificate != null) {
                 ByteBuffer buffer = ByteBuffer.wrap(compressCertificate);
                 int length = buffer.get() & 0xff;
-                for (int i = 0; i < length; i += 2) {
-                    int v = buffer.getShort() & 0xffff;
-                    list.add(v);
-                }
+                convertUInt16ArrayToJa3(buffer, 1, length + 1, list);
             }
             appendPeerPrintIntegers(peetPrint, list, false);
         }
@@ -314,16 +303,15 @@ public final class JA3Signature {
         {
             int version;
             byte[] supportedVersions = extensionTypes.get(SUPPORTED_VERSIONS);
-            if(supportedVersions != null && supportedVersions.length >= 3) {
-                version = 0;
+            if(supportedVersions != null) {
                 ByteBuffer buffer = ByteBuffer.wrap(supportedVersions);
                 int length = buffer.get() & 0xff;
-                for (int i = 0; i < length; i += 2) {
-                    int v = buffer.getShort() & 0xffff;
-                    if (isNotGrease(v)) {
-                        if (v > version) {
-                            version = v;
-                        }
+                List<Integer> list = new ArrayList<>(length / 2);
+                convertUInt16ArrayToJa3(buffer, 1, length + 1, list);
+                version = 0;
+                for (Integer v : list) {
+                    if (isNotGrease(v) && v > version) {
+                        version = v;
                     }
                 }
             } else {
