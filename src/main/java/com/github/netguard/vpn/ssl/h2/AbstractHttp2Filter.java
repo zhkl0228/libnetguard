@@ -87,7 +87,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
             Map.Entry<String, String> entry = iterator.next();
             String name = entry.getKey();
             if ("x-netguard-session".equalsIgnoreCase(name) ||
-                    "x-netguard-fake-response".equals(name) ||
+                    "x-netguard-fake-response".equalsIgnoreCase(name) ||
                     "x-http2-stream-id".equalsIgnoreCase(name) ||
                     "x-http2-stream-weight".equalsIgnoreCase(name)) {
                 continue;

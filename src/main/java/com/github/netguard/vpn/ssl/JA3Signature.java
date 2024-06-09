@@ -194,7 +194,25 @@ public final class JA3Signature {
         this.applicationLayerProtocols = Collections.unmodifiableList(applicationLayerProtocols);
     }
 
+    private Map<Integer, byte[]> createExtensionTypesWithoutGrease() {
+        Map<Integer, byte[]> extensionTypes = new LinkedHashMap<>(this.extensionTypes);
+        for (Integer grease : GREASE) {
+            extensionTypes.remove(grease);
+        }
+        return extensionTypes;
+    }
+
+    private List<Integer> createCipherSuitesWithoutGrease() {
+        List<Integer> cipherSuites = new ArrayList<>(this.cipherSuites);
+        for (Integer grease : GREASE) {
+            cipherSuites.remove(grease);
+        }
+        return cipherSuites;
+    }
+
     public String getJa4Text() {
+        Map<Integer, byte[]> extensionTypes = createExtensionTypesWithoutGrease();
+        List<Integer> cipherSuites = createCipherSuitesWithoutGrease();
         StringBuilder ja4 = new StringBuilder();
         ja4.append("t");
         {
@@ -277,7 +295,14 @@ public final class JA3Signature {
         return ja4.toString();
     }
 
-    private void appendIntegers(List<Integer> list, StringBuilder builder) {
+    private void appendIntegers(List<Integer> list, StringBuilder builder, boolean filterGrease) {
+        if (filterGrease) {
+            List<Integer> copy = new ArrayList<>(list);
+            for(Integer grease : GREASE) {
+                copy.remove(grease);
+            }
+            list = copy;
+        }
         if (!list.isEmpty()) {
             int first = list.get(0);
             builder.append(first);
@@ -292,16 +317,16 @@ public final class JA3Signature {
         ja3.append(clientVersion);
         ja3.append(',');
 
-        appendIntegers(cipherSuites, ja3);
+        appendIntegers(cipherSuites, ja3, true);
         ja3.append(',');
 
-        appendIntegers(new ArrayList<>(extensionTypes.keySet()), ja3);
+        appendIntegers(new ArrayList<>(extensionTypes.keySet()), ja3, true);
         ja3.append(',');
 
-        appendIntegers(ec, ja3);
+        appendIntegers(ec, ja3, true);
         ja3.append(',');
 
-        appendIntegers(ecpf, ja3);
+        appendIntegers(ecpf, ja3, false);
         return ja3.toString();
     }
 
@@ -310,18 +335,18 @@ public final class JA3Signature {
         ja3.append(clientVersion);
         ja3.append(',');
 
-        appendIntegers(cipherSuites, ja3);
+        appendIntegers(cipherSuites, ja3, true);
         ja3.append(',');
 
         List<Integer> list = new ArrayList<>(extensionTypes.keySet());
         Collections.sort(list);
-        appendIntegers(list, ja3);
+        appendIntegers(list, ja3, true);
         ja3.append(',');
 
-        appendIntegers(ec, ja3);
+        appendIntegers(ec, ja3, true);
         ja3.append(',');
 
-        appendIntegers(ecpf, ja3);
+        appendIntegers(ecpf, ja3, false);
         return ja3.toString();
     }
 
@@ -357,13 +382,11 @@ public final class JA3Signature {
                 convertUInt16ArrayToJa3(packet, offset + UINT16_LENGTH, offset + UINT16_LENGTH + signatureAlgorithmsLength, signatureAlgorithms);
             }
 
-            if (isNotGrease(extensionType)) {
-                byte[] data = new byte[extensionLength];
-                for (int i = 0; i < extensionLength; i++) {
-                    data[i] = packet.get(offset + i);
-                }
-                extensionTypes.put(extensionType, data);
+            byte[] data = new byte[extensionLength];
+            for (int i = 0; i < extensionLength; i++) {
+                data[i] = packet.get(offset + i);
             }
+            extensionTypes.put(extensionType, data);
 
             offset += extensionLength;
         }
@@ -405,9 +428,7 @@ public final class JA3Signature {
         int st = start;
         for (; st < end; st += UINT16_LENGTH) {
             int value = getUInt16(source, st, end);
-            if (isNotGrease(value)) {
-                out.add(value);
-            }
+            out.add(value);
         }
     }
 
