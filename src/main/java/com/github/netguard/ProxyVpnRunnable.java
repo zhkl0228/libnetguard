@@ -1,7 +1,6 @@
 package com.github.netguard;
 
 import cn.hutool.core.io.IoUtil;
-import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.PortRedirector;
 import com.github.netguard.vpn.ssl.RootCert;
 import eu.faircode.netguard.Allowed;
@@ -52,7 +51,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
         super(clients, rootCert);
         this.socket = socket;
         this.vpnReadStream = new DataInputStream(socket.getInputStream());
-        this.clientOS = vpnReadStream.readUnsignedByte() == 0x0 ? ClientOS.Android : ClientOS.iOS;
+        this.clientOS = readOS(vpnReadStream);
 
         // Packets from upstream servers, received by this VPN
         OutputStream vpnWriteStream = socket.getOutputStream();

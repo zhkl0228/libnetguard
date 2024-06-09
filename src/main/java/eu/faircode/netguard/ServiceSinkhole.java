@@ -54,7 +54,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
         this.jni_context = jni_init(30);
         try {
-            this.clientOS = new DataInputStream(socket.getInputStream()).readUnsignedByte() == 0x0 ? ClientOS.Android : ClientOS.iOS;
+            this.clientOS = readOS(new DataInputStream(socket.getInputStream()));
 
             if (getImpl == null) {
                 getImpl = Socket.class.getDeclaredMethod("getImpl");
@@ -175,40 +175,46 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     @Override
     public void run() {
-        tunnelThread = Thread.currentThread();
-        if (!directAllowAll && clientOS == ClientOS.Android) {
-            try {
-                applicationDiscoverHandler = new ApplicationDiscoverHandler();
-                Thread thread = new Thread(applicationDiscoverHandler);
-                thread.setDaemon(true);
-                thread.start();
-            } catch (Exception e) {
-                log.debug("create udp failed.", e);
-                IoUtil.close(applicationDiscoverHandler);
-                applicationDiscoverHandler = null;
+        try {
+            tunnelThread = Thread.currentThread();
+            if (!directAllowAll && clientOS == ClientOS.Android) {
+                try {
+                    applicationDiscoverHandler = new ApplicationDiscoverHandler();
+                    Thread thread = new Thread(applicationDiscoverHandler);
+                    thread.setDaemon(true);
+                    thread.start();
+                } catch (Exception e) {
+                    log.debug("create udp failed.", e);
+                    IoUtil.close(applicationDiscoverHandler);
+                    applicationDiscoverHandler = null;
+                }
             }
-        }
 
-        log.debug("Vpn thread starting");
+            log.debug("Vpn thread starting");
 
-        log.debug("Running tunnel");
-        jni_run(jni_context, fd, true, 3);
-        log.debug("Tunnel exited");
-        IoUtil.close(applicationDiscoverHandler);
-        applicationDiscoverHandler = null;
+            log.debug("Running tunnel");
+            jni_run(jni_context, fd, true, 3);
+            log.debug("Tunnel exited");
+            IoUtil.close(applicationDiscoverHandler);
+            applicationDiscoverHandler = null;
 
-        IoUtil.close(socket);
-        log.debug("Vpn thread shutting down");
-        applications.clear();
+            IoUtil.close(socket);
+            log.debug("Vpn thread shutting down");
+            applications.clear();
 
-        clients.remove(this);
+            clients.remove(this);
 
-        tunnelThread = null;
+            tunnelThread = null;
 
-        jni_done(jni_context);
+            jni_done(jni_context);
 
-        if (packetCapture != null) {
-            packetCapture.notifyFinish();
+            if (packetCapture != null) {
+                packetCapture.notifyFinish();
+            }
+        } catch (Throwable e) {
+            log.warn("vpn run", e);
+        } finally {
+            log.info("vpn closed: {}", socket);
         }
     }
 

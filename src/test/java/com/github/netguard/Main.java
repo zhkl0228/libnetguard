@@ -52,7 +52,7 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
-        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
+        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.DEBUG);
         Logger.getLogger(SSLProxyV2.class).setLevel(Level.DEBUG);
         Logger.getLogger(JA3Signature.class).setLevel(Level.DEBUG);
         Logger.getLogger(PacketDecoder.class).setLevel(Level.INFO);
