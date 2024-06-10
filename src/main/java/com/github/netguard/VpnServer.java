@@ -7,6 +7,7 @@ import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.ssl.RootCert;
 import eu.faircode.netguard.ServiceSinkhole;
 import name.neykov.secrets.AgentAttach;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -138,13 +139,21 @@ public class VpnServer {
                     if (useNetGuardCore) {
                         try {
                             vpn = new ServiceSinkhole(socket, clients, rootCert);
-                        } catch(UnsatisfiedLinkError e) {
+                        } catch (UnsatisfiedLinkError e) {
                             log.debug("init ServiceSinkhole", e);
                             useNetGuardCore = false;
+                        } catch (IOException e) {
+                            IOUtils.closeQuietly(socket);
+                            continue;
                         }
                     }
                     if (vpn == null) {
-                        vpn = new ProxyVpnRunnable(socket, clients, rootCert);
+                        try {
+                            vpn = new ProxyVpnRunnable(socket, clients, rootCert);
+                        } catch (IOException e) {
+                            IOUtils.closeQuietly(socket);
+                            continue;
+                        }
                     }
                     if (vpnListener != null) {
                         vpnListener.onConnectClient(vpn);
@@ -159,7 +168,7 @@ public class VpnServer {
                         sendBroadcast();
                     }
                 } catch (SocketException ignored) {
-                } catch (IOException e) {
+                } catch (Exception e) {
                     log.warn("accept", e);
                 }
             }

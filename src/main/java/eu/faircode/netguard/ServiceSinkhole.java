@@ -16,6 +16,7 @@ import java.io.DataInputStream;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -48,14 +49,14 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     private final long jni_context;
     private final int fd;
 
-    public ServiceSinkhole(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
+    public ServiceSinkhole(Socket socket, List<ProxyVpn> clients, RootCert rootCert) throws IOException {
         super(clients, rootCert);
+        this.clientOS = readOS(new DataInputStream(socket.getInputStream()));
+
         int mtu = jni_get_mtu();
 
         this.jni_context = jni_init(30);
         try {
-            this.clientOS = readOS(new DataInputStream(socket.getInputStream()));
-
             if (getImpl == null) {
                 getImpl = Socket.class.getDeclaredMethod("getImpl");
                 getImpl.setAccessible(true);
@@ -74,7 +75,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
                 throw new IllegalStateException("Invalid fd: " + fileDescriptor);
             }
             this.fd = (Integer) fdField.get(fileDescriptor);
-        } catch (Exception e) {
+        } catch (NoSuchMethodException | NoSuchFieldException | IllegalAccessException |
+                 InvocationTargetException e) {
             throw new IllegalStateException("init ServiceSinkhole", e);
         }
         this.socket = socket;
