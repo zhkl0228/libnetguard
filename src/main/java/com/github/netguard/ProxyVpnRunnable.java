@@ -2,7 +2,7 @@ package com.github.netguard;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.PortRedirector;
-import com.github.netguard.vpn.ssl.RootCert;
+import com.github.netguard.vpn.tcp.RootCert;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
 import eu.faircode.netguard.ServiceSinkhole;
@@ -153,7 +153,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
         Packet packet = new Packet();
         packet.daddr = ip;
         packet.dport = port;
-        Allowed allowed = redirect(packet);
+        Allowed allowed = redirectTcp(packet);
         if (allowed.raddr != null && allowed.rport > 0) {
             return allowed;
         } else {

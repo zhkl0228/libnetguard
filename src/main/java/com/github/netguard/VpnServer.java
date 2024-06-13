@@ -4,7 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.transparent.TransparentProxying;
 import com.github.netguard.vpn.VpnListener;
-import com.github.netguard.vpn.ssl.RootCert;
+import com.github.netguard.vpn.tcp.RootCert;
 import eu.faircode.netguard.ServiceSinkhole;
 import name.neykov.secrets.AgentAttach;
 import org.apache.commons.io.IOUtils;

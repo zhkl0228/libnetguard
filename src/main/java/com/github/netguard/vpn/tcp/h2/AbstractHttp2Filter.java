@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.ssl.h2;
+package com.github.netguard.vpn.tcp.h2;
 
 import cn.hutool.core.io.IORuntimeException;
 import cn.hutool.core.io.IoUtil;

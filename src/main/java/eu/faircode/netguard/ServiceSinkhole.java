@@ -5,7 +5,7 @@ import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
-import com.github.netguard.vpn.ssl.RootCert;
+import com.github.netguard.vpn.tcp.RootCert;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -308,13 +308,13 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         packet.allowed = false;
         ApplicationDiscoverHandler handler = this.applicationDiscoverHandler;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
-            if (packet.version == IP_V4 && packet.protocol == TCP_PROTOCOL) { // ipv4
+            if (packet.version == IP_V4 && packet.protocol == TCP_PROTOCOL) { // tcp ipv4
                 if (handler != null) {
                     handler.sendAllowed(packet);
                 }
-                return redirect(packet);
+                return redirectTcp(packet);
             }
-            if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) { // udpv4
+            if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) { // udp ipv4
                 packet.allowed = isUdpAllowed(packet);
             } else if(packet.version == IP_V6) {
                 log.info("Disallow ipv6: packet={}", packet);

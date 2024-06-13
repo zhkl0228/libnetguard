@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.ssl;
+package com.github.netguard.vpn.tcp;
 
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Sequence;

@@ -10,12 +10,12 @@ import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
-import com.github.netguard.vpn.ssl.ConnectRequest;
-import com.github.netguard.vpn.ssl.SSLProxyV2;
-import com.github.netguard.vpn.ssl.StreamForward;
-import com.github.netguard.vpn.ssl.h2.AbstractHttp2Filter;
-import com.github.netguard.vpn.ssl.h2.CancelResult;
-import com.github.netguard.vpn.ssl.h2.Http2Filter;
+import com.github.netguard.vpn.tcp.ConnectRequest;
+import com.github.netguard.vpn.tcp.SSLProxyV2;
+import com.github.netguard.vpn.tcp.StreamForward;
+import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
+import com.github.netguard.vpn.tcp.h2.CancelResult;
+import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.ServiceSinkhole;
@@ -36,6 +36,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -125,6 +126,11 @@ public class Main {
                 } catch (IOException e) {
                     throw new IllegalStateException("setOutputPcapFile", e);
                 }
+            }
+
+            @Override
+            public boolean acceptUdp(InetSocketAddress client, InetSocketAddress server) {
+                return true;
             }
 
             @Override

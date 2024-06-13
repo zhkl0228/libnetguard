@@ -3,7 +3,7 @@
  *  Licensed under the terms of the Apache 2.0 license.
  *  See LICENSE file in {@link https://github.com/lafaspot/ja3_4java/blob/master/LICENSE} for terms.
  */
-package com.github.netguard.vpn.ssl;
+package com.github.netguard.vpn.tcp;
 
 import cn.hutool.crypto.digest.DigestUtil;
 import org.slf4j.Logger;

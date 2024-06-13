@@ -1,7 +1,7 @@
 package com.github.netguard.vpn;
 
-import com.github.netguard.vpn.ssl.ConnectRequest;
-import com.github.netguard.vpn.ssl.h2.Http2Filter;
+import com.github.netguard.vpn.tcp.ConnectRequest;
+import com.github.netguard.vpn.tcp.h2.Http2Filter;
 
 import java.net.InetSocketAddress;
 import java.util.Collection;

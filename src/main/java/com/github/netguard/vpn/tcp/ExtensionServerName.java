@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.ssl;
+package com.github.netguard.vpn.tcp;
 
 import cn.hutool.core.util.HexUtil;
 import com.github.netguard.Inspector;

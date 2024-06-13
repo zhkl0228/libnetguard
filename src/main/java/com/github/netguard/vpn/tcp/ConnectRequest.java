@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.ssl;
+package com.github.netguard.vpn.tcp;
 
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;

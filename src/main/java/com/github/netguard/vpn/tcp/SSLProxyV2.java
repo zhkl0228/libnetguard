@@ -1,12 +1,12 @@
-package com.github.netguard.vpn.ssl;
+package com.github.netguard.vpn.tcp;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.AcceptResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
-import com.github.netguard.vpn.ssl.h2.Http2Filter;
-import com.github.netguard.vpn.ssl.h2.Http2Session;
+import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.tcp.h2.Http2Session;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Application;

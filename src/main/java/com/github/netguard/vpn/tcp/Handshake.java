@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.ssl;
+package com.github.netguard.vpn.tcp;
 
 import java.nio.ByteBuffer;
 

@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.ssl;
+package com.github.netguard.vpn.tcp;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.IPacketCapture;

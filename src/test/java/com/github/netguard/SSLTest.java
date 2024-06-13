@@ -1,8 +1,8 @@
 package com.github.netguard;
 
 import cn.hutool.core.util.HexUtil;
-import com.github.netguard.vpn.ssl.ClientHelloRecord;
-import com.github.netguard.vpn.ssl.ExtensionServerName;
+import com.github.netguard.vpn.tcp.ClientHelloRecord;
+import com.github.netguard.vpn.tcp.ExtensionServerName;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import junit.framework.TestCase;

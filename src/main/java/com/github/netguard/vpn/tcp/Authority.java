@@ -1,9 +1,9 @@
-package com.github.netguard.vpn.ssl;
+package com.github.netguard.vpn.tcp;
 
 import java.io.File;
 
 /**
- * Parameter object holding personal informations given to a SSLEngineSource.
+ * Parameter object holding personal information given to a SSLEngineSource.
  * <br/>
  * XXX consider to inline within the interface SslEngineSource, if MITM is core
  */
@@ -27,7 +27,7 @@ class Authority {
 
     /**
      * Create a parameter object with the given certificate and certificate
-     * authority informations
+     * authority information
      */
     public Authority(File keyStoreDir, String alias, char[] password,
                      String commonName, String organization,
