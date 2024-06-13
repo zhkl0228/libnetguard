@@ -6,7 +6,6 @@ import eu.faircode.netguard.Allowed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
@@ -26,7 +25,7 @@ public class UDProxy {
 
     private static final Map<Integer, UDProxy> ENDPOINT_MAP = Collections.synchronizedMap(new HashMap<>());
 
-    public static synchronized Allowed redirect(InetSocketAddress client, InetSocketAddress server) {
+    public static synchronized Allowed redirect(SocketAddress client, SocketAddress server) {
         int hash = Objects.hash(client, server);
         UDProxy proxy = ENDPOINT_MAP.get(hash);
         log.debug("redirect endpointSize={}, client={}, server={}, proxy={}", ENDPOINT_MAP.size(), client, server, proxy);
@@ -43,17 +42,17 @@ public class UDProxy {
     }
 
     private final int hash;
-    private final InetSocketAddress client;
-    private final InetSocketAddress server;
+    private final SocketAddress client;
+    private final SocketAddress server;
     private final DatagramSocket clientSocket;
     private final DatagramSocket serverSocket;
 
-    private UDProxy(int hash, InetSocketAddress client, InetSocketAddress server) throws SocketException {
+    private UDProxy(int hash, SocketAddress client, SocketAddress server) throws SocketException {
         this.hash = hash;
         this.client = client;
         this.server = server;
         this.serverSocket = new DatagramSocket(new InetSocketAddress(0));
-        this.serverSocket.setSoTimeout(10000);
+        this.serverSocket.setSoTimeout(60000);
         this.clientSocket = new DatagramSocket(new InetSocketAddress(0));
         this.clientSocket.setSoTimeout(60000);
         log.debug("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", client, server, clientSocket.getLocalPort(), serverSocket.getLocalPort());
@@ -88,9 +87,11 @@ public class UDProxy {
                             System.arraycopy(buffer, 0, data, 0, length);
                             log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + client + " => " + server));
                         }
-                        vpnAddress = packet.getSocketAddress();
-                        DatagramPacket forward = new DatagramPacket(buffer, length, server);
-                        clientSocket.send(forward);
+                        if (vpnAddress == null) {
+                            vpnAddress = packet.getSocketAddress();
+                        }
+                        packet.setSocketAddress(server);
+                        clientSocket.send(packet);
                     } catch (SocketTimeoutException e) {
                         break;
                     } catch (Exception e) {
@@ -124,8 +125,8 @@ public class UDProxy {
                         if (vpnAddress == null) {
                             throw new IllegalStateException("vpnAddress is null");
                         }
-                        DatagramPacket forward = new DatagramPacket(buffer, length, vpnAddress);
-                        serverSocket.send(forward);
+                        packet.setSocketAddress(vpnAddress);
+                        serverSocket.send(packet);
                     } catch (SocketTimeoutException e) {
                         if (serverClosed) {
                             break;
