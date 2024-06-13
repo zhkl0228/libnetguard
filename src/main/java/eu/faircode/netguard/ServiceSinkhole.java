@@ -3,7 +3,6 @@ package eu.faircode.netguard;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
-import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.RootCert;
 import org.scijava.nativelib.NativeLoader;
@@ -315,7 +314,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
                 return redirectTcp(packet);
             }
             if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) { // udp ipv4
-                packet.allowed = isUdpAllowed(packet);
+                return redirectUdp(packet);
             } else if(packet.version == IP_V6) {
                 log.info("Disallow ipv6: packet={}", packet);
             } else {
@@ -329,19 +328,6 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
 
         return packet.allowed ? new Allowed() : null;
-    }
-
-    private boolean isUdpAllowed(Packet packet) {
-        IPacketCapture packetCapture = this.packetCapture;
-        if(packetCapture != null) {
-            InetSocketAddress client = packet.createClientAddress();
-            InetSocketAddress server = packet.createServerAddress();
-            if (packetCapture.acceptUdp(client, server)) {
-                return true;
-            }
-        }
-
-        return packet.dport == 53; // DNS
     }
 
     // Called from native code

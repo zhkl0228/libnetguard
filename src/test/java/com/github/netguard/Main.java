@@ -16,6 +16,7 @@ import com.github.netguard.vpn.tcp.StreamForward;
 import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.udp.UDProxy;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.ServiceSinkhole;
@@ -36,7 +37,6 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -59,6 +59,7 @@ public class Main {
         Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(StreamForward.class).setLevel(Level.INFO);
         Logger.getLogger("com.twitter.http2").setLevel(Level.INFO);
+        Logger.getLogger(UDProxy.class).setLevel(Level.DEBUG);
         VpnServer vpnServer = new VpnServer(20260);
         vpnServer.preparePreMasterSecretsLogFile();
         vpnServer.enableBroadcast(10);
@@ -126,11 +127,6 @@ public class Main {
                 } catch (IOException e) {
                     throw new IllegalStateException("setOutputPcapFile", e);
                 }
-            }
-
-            @Override
-            public boolean acceptUdp(InetSocketAddress client, InetSocketAddress server) {
-                return true;
             }
 
             @Override

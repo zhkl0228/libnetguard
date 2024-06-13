@@ -241,6 +241,8 @@ struct udp_session {
     __be16 dest; // network notation
 
     uint8_t state;
+
+    struct allowed redirect;
 };
 
 struct tcp_session {

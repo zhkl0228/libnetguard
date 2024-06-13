@@ -28,6 +28,4 @@ public interface IPacketCapture {
     AcceptResult acceptTcp(ConnectRequest connectRequest);
     Http2Filter getH2Filter();
 
-    boolean acceptUdp(InetSocketAddress client, InetSocketAddress server);
-
 }

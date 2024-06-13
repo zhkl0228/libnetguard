@@ -322,10 +322,14 @@ jboolean handle_udp(const struct arguments *args,
         s->udp.version = version;
 
         int rversion;
-        if (redirect == NULL)
+        if (redirect == NULL) {
             rversion = s->udp.version;
-        else
+            s->udp.redirect.rport = 0;
+        } else {
             rversion = (strstr(redirect->raddr, ":") == NULL ? 4 : 6);
+            memcpy(s->udp.redirect.raddr, redirect->raddr, INET6_ADDRSTRLEN + 1);
+            s->udp.redirect.rport = redirect->rport;
+        }
         s->udp.mss = (uint16_t) (rversion == 4 ? UDP4_MAXMSG : UDP6_MAXMSG);
 
         s->udp.sent = 0;
@@ -369,6 +373,8 @@ jboolean handle_udp(const struct arguments *args,
         args->ctx->ng_session = s;
 
         cur = s;
+    } else if(cur->udp.redirect.rport > 0) {
+        redirect = &cur->udp.redirect;
     }
 
     // Check for DHCP (tethering)

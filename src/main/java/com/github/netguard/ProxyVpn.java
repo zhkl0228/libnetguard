@@ -5,6 +5,7 @@ import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.SSLProxyV2;
+import com.github.netguard.vpn.udp.UDProxy;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
@@ -79,6 +80,10 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
     protected final Allowed redirectTcp(Packet packet) {
         int timeout = 10000; // default 10 seconds;
         return SSLProxyV2.create(this, rootCert, packet, timeout);
+    }
+
+    protected final Allowed redirectUdp(Packet packet) {
+        return UDProxy.redirect(packet.createClientAddress(), packet.createServerAddress());
     }
 
 }
