@@ -12,10 +12,6 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
 
 public class UDProxy {
 
@@ -23,32 +19,22 @@ public class UDProxy {
 
     private static final int MTU = 1500;
 
-    private static final Map<Integer, UDProxy> ENDPOINT_MAP = Collections.synchronizedMap(new HashMap<>());
-
     public static synchronized Allowed redirect(SocketAddress client, SocketAddress server) {
-        int hash = Objects.hash(client, server);
-        UDProxy proxy = ENDPOINT_MAP.get(hash);
-        log.debug("redirect endpointSize={}, client={}, server={}, proxy={}", ENDPOINT_MAP.size(), client, server, proxy);
-        if (proxy != null) {
-            return proxy.redirect();
-        }
+        log.debug("redirect client={}, server={}", client, server);
         try {
-            proxy = new UDProxy(hash, client, server);
-            ENDPOINT_MAP.put(hash, proxy);
+            UDProxy proxy = new UDProxy(client, server);
             return proxy.redirect();
         } catch (SocketException e) {
             throw new IllegalStateException("redirect", e);
         }
     }
 
-    private final int hash;
     private final SocketAddress client;
     private final SocketAddress server;
     private final DatagramSocket clientSocket;
     private final DatagramSocket serverSocket;
 
-    private UDProxy(int hash, SocketAddress client, SocketAddress server) throws SocketException {
-        this.hash = hash;
+    private UDProxy(SocketAddress client, SocketAddress server) throws SocketException {
         this.client = client;
         this.server = server;
         this.serverSocket = new DatagramSocket(new InetSocketAddress(0));
@@ -100,7 +86,6 @@ public class UDProxy {
                     }
                 }
             } finally {
-                ENDPOINT_MAP.remove(hash);
                 serverClosed = true;
                 log.debug("udp proxy server exit: client={}, server={}", client, server);
             }
