@@ -105,75 +105,18 @@ public class UDProxy {
                             log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + client + " => " + server + ", base64=" + Base64.encode(data)));
                         }
                         if (first) {
-                            try {
-                                ByteBuffer bb = ByteBuffer.wrap(buffer);
-                                bb.limit(length);
-                                bb.mark();
-                                int flags = bb.get() & 0xff;
-                                if ((flags & 0x80) == 0x80 && bb.remaining() > 5) {
-                                    int version = bb.getInt();
-                                    if (log.isDebugEnabled()) {
-                                        log.debug("detect quic flags=0x{}, version=0x{}", Integer.toHexString(flags), Integer.toHexString(version));
-                                    }
-                                    if (version == Version.QUIC_version_1.getId() && bb.remaining() > 10) {
-                                        Version quicVersion = Version.parse(version);
-                                        int dcidLength = bb.get() & 0xff;
-                                        byte[] dcid = new byte[dcidLength];
-                                        bb.get(dcid);
-                                        int type = (flags & 0x30) >> 4;
-                                        if (InitialPacket.isInitial(type, quicVersion)) {
-                                            InitialPacket initialPacket = new InitialPacket(quicVersion);
-                                            ConnectionSecrets connectionSecrets = new ConnectionSecrets(VersionHolder.with(quicVersion), Role.Server, null, new NullLogger());
-                                            connectionSecrets.computeInitialKeys(dcid);
-
-                                            bb.reset();
-                                            Aead aead = connectionSecrets.getPeerAead(initialPacket.getEncryptionLevel());
-                                            net.luminis.quic.log.Logger logger;
-                                            if (log.isDebugEnabled()) {
-                                                logger = new SysOutLogger();
-                                                logger.logDebug(true);
-                                            } else {
-                                                logger = new NullLogger();
-                                            }
-                                            initialPacket.parse(bb, aead, 0, logger, 0);
-                                            log.debug("initialPacket={}", initialPacket);
-                                            List<QuicFrame> frameList = initialPacket.getFrames();
-                                            QuicFrame firstFrame;
-                                            if (!frameList.isEmpty() && (firstFrame = frameList.get(0)) instanceof CryptoFrame) {
-                                                CryptoFrame cryptoFrame = (CryptoFrame) firstFrame;
-                                                ClientHello clientHello = new ClientHello(ByteBuffer.wrap(cryptoFrame.getStreamData()), null);
-                                                if (log.isDebugEnabled()) {
-                                                    log.debug("{}", Inspector.inspectString(cryptoFrame.getStreamData(), "initialPacket.cryptoFrame clientHello=" + clientHello));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch(Exception e) {
-                                log.warn("check quic", e);
-                            }
-                            try {
-                                ByteBuffer bb = ByteBuffer.wrap(buffer);
-                                bb.limit(length);
-                                Message message = new Message(bb);
-                                if (!message.getSection(0).isEmpty()) {
-                                    dnsQuery = message;
-                                }
-                                if (dnsQuery != null && dnsFilter != null) {
-                                    Message fake = dnsFilter.cancelDnsQuery(dnsQuery);
-                                    if (fake != null) {
-                                        log.trace("cancelDnsQuery: {}", fake);
-                                        byte[] fakeResponse = fake.toWire();
-                                        DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
-                                        fakePacket.setSocketAddress(vpnAddress);
-                                        serverSocket.send(fakePacket);
-                                        continue;
-                                    }
-                                }
-                            } catch (IOException | BufferUnderflowException e) {
-                                log.trace("decode dns request", e);
-                            } catch (Exception e) {
-                                log.warn("decode dns request", e);
+                            ClientHello clientHello = detectQuicClientHello(buffer, length);
+                            log.debug("quic client hello: {}", clientHello);
+                            dnsQuery = clientHello == null ? detectDnsQuery(buffer, length) : null;
+                            log.trace("dnsQuery={}", dnsQuery);
+                            Message fake;
+                            if (dnsQuery != null && dnsFilter != null && (fake = dnsFilter.cancelDnsQuery(dnsQuery)) != null) {
+                                log.trace("cancelDnsQuery: {}", fake);
+                                byte[] fakeResponse = fake.toWire();
+                                DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
+                                fakePacket.setSocketAddress(vpnAddress);
+                                serverSocket.send(fakePacket);
+                                continue;
                             }
                         }
                         packet.setSocketAddress(server);
@@ -191,6 +134,72 @@ public class UDProxy {
                 serverClosed = true;
                 log.debug("udp proxy server exit: client={}, server={}", client, server);
             }
+        }
+        private Message detectDnsQuery(byte[] buffer, int length) {
+            try {
+                ByteBuffer bb = ByteBuffer.wrap(buffer);
+                bb.limit(length);
+                Message message = new Message(bb);
+                if (!message.getSection(0).isEmpty()) {
+                    return message;
+                }
+            } catch (IOException | BufferUnderflowException e) {
+                log.trace("detectDnsQuery", e);
+            } catch (Exception e) {
+                log.warn("detectDnsQuery", e);
+            }
+            return null;
+        }
+        private ClientHello detectQuicClientHello(byte[] buffer, int length) {
+            try {
+                ByteBuffer bb = ByteBuffer.wrap(buffer);
+                bb.limit(length);
+                bb.mark();
+                int flags = bb.get() & 0xff;
+                if ((flags & 0x80) == 0x80 && bb.remaining() > 5) {
+                    int version = bb.getInt();
+                    if (log.isDebugEnabled()) {
+                        log.debug("detectQuicClientHello flags=0x{}, version=0x{}", Integer.toHexString(flags), Integer.toHexString(version));
+                    }
+                    if (version == Version.QUIC_version_1.getId() && bb.remaining() > 10) {
+                        Version quicVersion = Version.parse(version);
+                        int dcidLength = bb.get() & 0xff;
+                        byte[] dcid = new byte[dcidLength];
+                        bb.get(dcid);
+                        int type = (flags & 0x30) >> 4;
+                        if (InitialPacket.isInitial(type, quicVersion)) {
+                            InitialPacket initialPacket = new InitialPacket(quicVersion);
+                            ConnectionSecrets connectionSecrets = new ConnectionSecrets(VersionHolder.with(quicVersion), Role.Server, null, new NullLogger());
+                            connectionSecrets.computeInitialKeys(dcid);
+
+                            bb.reset();
+                            Aead aead = connectionSecrets.getPeerAead(initialPacket.getEncryptionLevel());
+                            net.luminis.quic.log.Logger logger;
+                            if (log.isDebugEnabled()) {
+                                logger = new SysOutLogger();
+                                logger.logDebug(true);
+                            } else {
+                                logger = new NullLogger();
+                            }
+                            initialPacket.parse(bb, aead, 0, logger, 0);
+                            log.debug("detectQuicClientHello initialPacket={}", initialPacket);
+                            List<QuicFrame> frameList = initialPacket.getFrames();
+                            QuicFrame firstFrame;
+                            if (!frameList.isEmpty() && (firstFrame = frameList.get(0)) instanceof CryptoFrame) {
+                                CryptoFrame cryptoFrame = (CryptoFrame) firstFrame;
+                                ClientHello clientHello = new ClientHello(ByteBuffer.wrap(cryptoFrame.getStreamData()), null);
+                                if (log.isDebugEnabled()) {
+                                    log.debug("{}", Inspector.inspectString(cryptoFrame.getStreamData(), "detectQuicClientHello initialPacket.cryptoFrame"));
+                                }
+                                return clientHello;
+                            }
+                        }
+                    }
+                }
+            } catch(Exception e) {
+                log.warn("detectQuicClientHello", e);
+            }
+            return null;
         }
     }
 
