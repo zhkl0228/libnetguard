@@ -2,9 +2,12 @@ package com.github.netguard.vpn.udp;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.Inspector;
+import com.github.netguard.vpn.IPacketCapture;
+import com.github.netguard.vpn.InspectorVpn;
 import eu.faircode.netguard.Allowed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.xbill.DNS.Message;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -12,6 +15,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
 
 public class UDProxy {
 
@@ -19,22 +23,24 @@ public class UDProxy {
 
     private static final int MTU = 1500;
 
-    public static synchronized Allowed redirect(SocketAddress client, SocketAddress server) {
+    public static Allowed redirect(InspectorVpn vpn, SocketAddress client, SocketAddress server) {
         log.debug("redirect client={}, server={}", client, server);
         try {
-            UDProxy proxy = new UDProxy(client, server);
+            UDProxy proxy = new UDProxy(vpn, client, server);
             return proxy.redirect();
         } catch (SocketException e) {
             throw new IllegalStateException("redirect", e);
         }
     }
 
+    private final InspectorVpn vpn;
     private final SocketAddress client;
     private final SocketAddress server;
     private final DatagramSocket clientSocket;
     private final DatagramSocket serverSocket;
 
-    private UDProxy(SocketAddress client, SocketAddress server) throws SocketException {
+    private UDProxy(InspectorVpn vpn, SocketAddress client, SocketAddress server) throws SocketException {
+        this.vpn = vpn;
         this.client = client;
         this.server = server;
         this.serverSocket = new DatagramSocket(new InetSocketAddress(0));
@@ -58,9 +64,13 @@ public class UDProxy {
     private boolean serverClosed;
     private SocketAddress vpnAddress;
 
+    private Message dnsQuery;
+
     private class Server implements Runnable {
         @Override
         public void run() {
+            IPacketCapture packetCapture = vpn.getPacketCapture();
+            DNSFilter dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
             try {
                 byte[] buffer = new byte[MTU];
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -75,6 +85,27 @@ public class UDProxy {
                         }
                         if (vpnAddress == null) {
                             vpnAddress = packet.getSocketAddress();
+                        }
+                        try {
+                            ByteBuffer buf = ByteBuffer.wrap(buffer);
+                            buf.limit(length);
+                            Message message = new Message(buf);
+                            if (!message.getSection(0).isEmpty()) {
+                                dnsQuery = message;
+                            }
+                            if (dnsQuery != null && dnsFilter != null) {
+                                Message fake = dnsFilter.cancelDnsQuery(dnsQuery);
+                                if (fake != null) {
+                                    log.debug("cancelDnsQuery: {}", fake);
+                                    byte[] fakeResponse = fake.toWire();
+                                    DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
+                                    fakePacket.setSocketAddress(vpnAddress);
+                                    serverSocket.send(fakePacket);
+                                    continue;
+                                }
+                            }
+                        } catch(Exception e) {
+                            log.trace("decode dns request", e);
                         }
                         packet.setSocketAddress(server);
                         clientSocket.send(packet);
@@ -95,6 +126,8 @@ public class UDProxy {
     private class Client implements Runnable {
         @Override
         public void run() {
+            IPacketCapture packetCapture = vpn.getPacketCapture();
+            DNSFilter dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
             try {
                 byte[] buffer = new byte[MTU];
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -109,6 +142,30 @@ public class UDProxy {
                         }
                         if (vpnAddress == null) {
                             throw new IllegalStateException("vpnAddress is null");
+                        }
+                        {
+                            if (dnsQuery != null) {
+                                try {
+                                    ByteBuffer buf = ByteBuffer.wrap(buffer);
+                                    buf.limit(length);
+                                    Message dnsResponse = new Message(buf);
+                                    log.debug("client={}, server={}, dnsQuery={}\ndnsResponse={}", client, server, dnsQuery, dnsResponse);
+
+                                    if (dnsFilter != null) {
+                                        Message fake = dnsFilter.filterDnsResponse(dnsQuery, dnsResponse);
+                                        if (fake != null) {
+                                            log.debug("filterDnsResponse: {}", fake);
+                                            byte[] fakeResponse = fake.toWire();
+                                            DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
+                                            fakePacket.setSocketAddress(vpnAddress);
+                                            serverSocket.send(fakePacket);
+                                            continue;
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    log.warn("decode dns response, query={}", dnsQuery, e);
+                                }
+                            }
                         }
                         packet.setSocketAddress(vpnAddress);
                         serverSocket.send(packet);

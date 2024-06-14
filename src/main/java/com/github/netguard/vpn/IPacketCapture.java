@@ -2,6 +2,7 @@ package com.github.netguard.vpn;
 
 import com.github.netguard.vpn.tcp.ConnectRequest;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.udp.DNSFilter;
 
 import java.net.InetSocketAddress;
 import java.util.Collection;
@@ -27,5 +28,6 @@ public interface IPacketCapture {
      */
     AcceptResult acceptTcp(ConnectRequest connectRequest);
     Http2Filter getH2Filter();
+    DNSFilter getDNSFilter();
 
 }

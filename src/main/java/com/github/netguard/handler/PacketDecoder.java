@@ -13,6 +13,7 @@ import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.tcp.ConnectRequest;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.udp.DNSFilter;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.ethernet.EthernetDecoder;
 import org.krakenapps.pcap.decoder.ethernet.EthernetFrame;
@@ -369,6 +370,11 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public Http2Filter getH2Filter() {
+        return null;
+    }
+
+    @Override
+    public DNSFilter getDNSFilter() {
         return null;
     }
 

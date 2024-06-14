@@ -83,7 +83,7 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
     }
 
     protected final Allowed redirectUdp(Packet packet) {
-        return UDProxy.redirect(packet.createClientAddress(), packet.createServerAddress());
+        return UDProxy.redirect(this, packet.createClientAddress(), packet.createServerAddress());
     }
 
 }

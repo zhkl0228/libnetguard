@@ -16,6 +16,7 @@ import com.github.netguard.vpn.tcp.StreamForward;
 import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.UDProxy;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
@@ -32,11 +33,19 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
 import org.krakenapps.pcap.decoder.http.impl.HttpSession;
+import org.xbill.DNS.ARecord;
+import org.xbill.DNS.DClass;
+import org.xbill.DNS.Flags;
+import org.xbill.DNS.Header;
+import org.xbill.DNS.Message;
+import org.xbill.DNS.Name;
+import org.xbill.DNS.Record;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -44,6 +53,7 @@ import java.security.NoSuchProviderException;
 import java.security.Security;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 
 /**
  * --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED
@@ -71,7 +81,7 @@ public class Main {
         vpnServer.waitShutdown();
     }
 
-    private static class MyVpnListener extends AbstractHttp2Filter implements VpnListener, Http2Filter {
+    private static class MyVpnListener extends AbstractHttp2Filter implements VpnListener, Http2Filter, DNSFilter {
         @Override
         public void onConnectClient(Vpn vpn) {
             System.out.println("client: " + vpn.getClientOS() + ", impl=" + vpn.getClass());
@@ -118,6 +128,44 @@ public class Main {
             return responseData;
         }
 
+        @Override
+        public Message cancelDnsQuery(Message dnsQuery) {
+            List<Record> list = dnsQuery.getSection(0);
+            if (list.size() == 1) {
+                Record record = list.get(0);
+                if (record.getName().toString().startsWith("qq.com")) {
+                    try {
+                        Message dnsResponse = new Message(dnsQuery.getHeader().getID());
+                        Header header = dnsResponse.getHeader();
+                        header.setFlag(Flags.QR);
+                        header.setFlag(Flags.RD);
+                        header.setFlag(Flags.RA);
+                        dnsResponse.addRecord(new ARecord(new Name("qq.com."), DClass.IN, 3600, InetAddress.getByName("192.168.31.88")), 1);
+                        return dnsResponse;
+                    } catch (Exception e) {
+                        e.printStackTrace(System.err);
+                    }
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Message filterDnsResponse(Message dnsQuery, Message dnsResponse) {
+            List<Record> list = dnsQuery.getSection(0);
+            if (list.size() == 1) {
+                Record record = list.get(0);
+                if (record.getName().toString().startsWith("baidu.com")) {
+                    try {
+                        dnsResponse.addRecord(new ARecord(new Name("baidu.com."), DClass.IN, 3600, InetAddress.getByName("192.168.31.88")), 1);
+                    } catch (Exception e) {
+                        e.printStackTrace(System.err);
+                    }
+                }
+            }
+            return dnsResponse;
+        }
+
         private class MyPacketDecoder extends PacketDecoder {
             MyPacketDecoder() {
                 try {
@@ -144,6 +192,12 @@ public class Main {
             public Http2Filter getH2Filter() {
                 return MyVpnListener.this;
             }
+
+            @Override
+            public DNSFilter getDNSFilter() {
+                return MyVpnListener.this;
+            }
+
             private SSLContext createConscryptContext() {
                 try {
                     SSLContext context = SSLContext.getInstance("TLSv1.3", "Conscrypt");
