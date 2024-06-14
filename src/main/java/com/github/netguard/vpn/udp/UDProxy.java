@@ -5,23 +5,27 @@ import com.github.netguard.Inspector;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import eu.faircode.netguard.Allowed;
+import net.luminis.quic.receive.Receiver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xbill.DNS.Message;
 
+import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
 public class UDProxy {
 
     private static final Logger log = LoggerFactory.getLogger(UDProxy.class);
 
-    private static final int MTU = 1500;
+    private static final int MTU = Receiver.MAX_DATAGRAM_SIZE;
+    private static final int READ_TIMEOUT = 60000;
 
     public static Allowed redirect(InspectorVpn vpn, SocketAddress client, SocketAddress server) {
         log.debug("redirect client={}, server={}", client, server);
@@ -44,9 +48,9 @@ public class UDProxy {
         this.client = client;
         this.server = server;
         this.serverSocket = new DatagramSocket(new InetSocketAddress(0));
-        this.serverSocket.setSoTimeout(60000);
+        this.serverSocket.setSoTimeout(READ_TIMEOUT);
         this.clientSocket = new DatagramSocket(new InetSocketAddress(0));
-        this.clientSocket.setSoTimeout(60000);
+        this.clientSocket.setSoTimeout(READ_TIMEOUT);
         log.debug("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", client, server, clientSocket.getLocalPort(), serverSocket.getLocalPort());
 
         Thread serverThread = new Thread(new Server(), "UDProxy server " + client + " => " + server);
@@ -74,38 +78,43 @@ public class UDProxy {
             try {
                 byte[] buffer = new byte[MTU];
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                boolean first = true;
                 while (true) {
                     try {
                         serverSocket.receive(packet);
+                        if (vpnAddress == null) {
+                            vpnAddress = packet.getSocketAddress();
+                        }
                         int length = packet.getLength();
                         if (log.isDebugEnabled()) {
                             byte[] data = new byte[length];
                             System.arraycopy(buffer, 0, data, 0, length);
                             log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + client + " => " + server));
                         }
-                        if (vpnAddress == null) {
-                            vpnAddress = packet.getSocketAddress();
-                        }
-                        try {
-                            ByteBuffer buf = ByteBuffer.wrap(buffer);
-                            buf.limit(length);
-                            Message message = new Message(buf);
-                            if (!message.getSection(0).isEmpty()) {
-                                dnsQuery = message;
-                            }
-                            if (dnsQuery != null && dnsFilter != null) {
-                                Message fake = dnsFilter.cancelDnsQuery(dnsQuery);
-                                if (fake != null) {
-                                    log.debug("cancelDnsQuery: {}", fake);
-                                    byte[] fakeResponse = fake.toWire();
-                                    DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
-                                    fakePacket.setSocketAddress(vpnAddress);
-                                    serverSocket.send(fakePacket);
-                                    continue;
+                        if (first) {
+                            try {
+                                ByteBuffer bb = ByteBuffer.wrap(buffer);
+                                bb.limit(length);
+                                Message message = new Message(bb);
+                                if (!message.getSection(0).isEmpty()) {
+                                    dnsQuery = message;
                                 }
+                                if (dnsQuery != null && dnsFilter != null) {
+                                    Message fake = dnsFilter.cancelDnsQuery(dnsQuery);
+                                    if (fake != null) {
+                                        log.trace("cancelDnsQuery: {}", fake);
+                                        byte[] fakeResponse = fake.toWire();
+                                        DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
+                                        fakePacket.setSocketAddress(vpnAddress);
+                                        serverSocket.send(fakePacket);
+                                        continue;
+                                    }
+                                }
+                            } catch (IOException | BufferUnderflowException e) {
+                                log.trace("decode dns request", e);
+                            } catch (Exception e) {
+                                log.warn("decode dns request", e);
                             }
-                        } catch(Exception e) {
-                            log.trace("decode dns request", e);
                         }
                         packet.setSocketAddress(server);
                         clientSocket.send(packet);
@@ -114,6 +123,8 @@ public class UDProxy {
                     } catch (Exception e) {
                         log.warn("server", e);
                         break;
+                    } finally {
+                        first = false;
                     }
                 }
             } finally {
@@ -143,28 +154,26 @@ public class UDProxy {
                         if (vpnAddress == null) {
                             throw new IllegalStateException("vpnAddress is null");
                         }
-                        {
-                            if (dnsQuery != null) {
-                                try {
-                                    ByteBuffer buf = ByteBuffer.wrap(buffer);
-                                    buf.limit(length);
-                                    Message dnsResponse = new Message(buf);
-                                    log.debug("client={}, server={}, dnsQuery={}\ndnsResponse={}", client, server, dnsQuery, dnsResponse);
+                        if (dnsQuery != null) {
+                            try {
+                                ByteBuffer bb = ByteBuffer.wrap(buffer);
+                                bb.limit(length);
+                                Message dnsResponse = new Message(bb);
+                                log.trace("client={}, server={}, dnsQuery={}\ndnsResponse={}", client, server, dnsQuery, dnsResponse);
 
-                                    if (dnsFilter != null) {
-                                        Message fake = dnsFilter.filterDnsResponse(dnsQuery, dnsResponse);
-                                        if (fake != null) {
-                                            log.debug("filterDnsResponse: {}", fake);
-                                            byte[] fakeResponse = fake.toWire();
-                                            DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
-                                            fakePacket.setSocketAddress(vpnAddress);
-                                            serverSocket.send(fakePacket);
-                                            continue;
-                                        }
+                                if (dnsFilter != null) {
+                                    Message fake = dnsFilter.filterDnsResponse(dnsQuery, dnsResponse);
+                                    if (fake != null) {
+                                        log.trace("filterDnsResponse: {}", fake);
+                                        byte[] fakeResponse = fake.toWire();
+                                        DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
+                                        fakePacket.setSocketAddress(vpnAddress);
+                                        serverSocket.send(fakePacket);
+                                        continue;
                                     }
-                                } catch (Exception e) {
-                                    log.warn("decode dns response, query={}", dnsQuery, e);
                                 }
+                            } catch (Exception e) {
+                                log.warn("decode dns response, query={}", dnsQuery, e);
                             }
                         }
                         packet.setSocketAddress(vpnAddress);

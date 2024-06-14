@@ -6,4 +6,4 @@
 
 [Vpn Server DEMO](https://github.com/zhkl0228/libnetguard/blob/master/src/test/java/com/github/netguard/Main.java)
 
-Depend on [kraken](https://github.com/zhkl0228/kraken)
+Depend on [kraken](https://github.com/zhkl0228/kraken) and [kwik](https://github.com/zhkl0228/kwik) and [agent15](https://github.com/zhkl0228/agent15) and [conscrypt](https://github.com/zhkl0228/conscrypt)

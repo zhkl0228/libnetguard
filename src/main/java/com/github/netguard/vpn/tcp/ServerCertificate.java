@@ -1,5 +1,6 @@
 package com.github.netguard.vpn.tcp;
 
+import net.luminis.quic.server.ServerConnector;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -49,11 +50,11 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
-class ServerCertificate {
+public class ServerCertificate {
 
     private static final Logger log = LoggerFactory.getLogger(ServerCertificate.class);
 
-    private static final Map<String, SSLContext> proxyCertMap = new ConcurrentHashMap<>();
+    private static final Map<String, ServerContext> proxyCertMap = new ConcurrentHashMap<>();
 
     private final X509Certificate peerCertificate;
 
@@ -63,15 +64,28 @@ class ServerCertificate {
 
     SSLContext createSSLContext(RootCert rootCert) throws Exception {
         String commonName = getCommonName(peerCertificate);
-        SSLContext serverContext = proxyCertMap.get(commonName);
+        ServerContext serverContext = proxyCertMap.get(commonName);
         if (serverContext == null) {
             SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
             subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
-            log.debug("Subject Alternative Names: {}", subjectAlternativeNames);
+            log.debug("createSSLContext Subject Alternative Names: {}", subjectAlternativeNames);
             serverContext = this.generateServerContext(commonName, subjectAlternativeNames, rootCert);
             proxyCertMap.put(commonName, serverContext);
         }
-        return serverContext;
+        return serverContext.newSSLContext();
+    }
+
+    public void configKeyStore(RootCert rootCert, ServerConnector.Builder builder) throws Exception {
+        String commonName = getCommonName(peerCertificate);
+        ServerContext serverContext = proxyCertMap.get(commonName);
+        if (serverContext == null) {
+            SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
+            subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
+            log.debug("configKeyStore Subject Alternative Names: {}", subjectAlternativeNames);
+            serverContext = this.generateServerContext(commonName, subjectAlternativeNames, rootCert);
+            proxyCertMap.put(commonName, serverContext);
+        }
+        builder.withKeyStore(serverContext.keyStore, serverContext.authority.alias(), serverContext.authority.password());
     }
 
     private String getCommonName(X509Certificate c) {
@@ -86,7 +100,20 @@ class ServerCertificate {
         throw new IllegalStateException("Missed CN in Subject DN: " + c.getSubjectDN());
     }
 
-    private SSLContext generateServerContext(String commonName, SubjectAlternativeNameHolder subjectAlternativeNames, RootCert rootCert) throws CertificateException, OperatorCreationException, IOException, NoSuchAlgorithmException, NoSuchProviderException, KeyManagementException, SignatureException, KeyStoreException, InvalidKeyException, UnrecoverableKeyException, InvalidAlgorithmParameterException {
+    private static class ServerContext {
+        final Authority authority;
+        final KeyStore keyStore;
+        ServerContext(Authority authority, KeyStore keyStore) {
+            this.authority = authority;
+            this.keyStore = keyStore;
+        }
+        public SSLContext newSSLContext() throws UnrecoverableKeyException, NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
+            KeyManager[] keyManagers = getKeyManagers(keyStore, authority);
+            return newServerContext(keyManagers);
+        }
+    }
+
+    private ServerContext generateServerContext(String commonName, SubjectAlternativeNameHolder subjectAlternativeNames, RootCert rootCert) throws CertificateException, OperatorCreationException, IOException, NoSuchAlgorithmException, NoSuchProviderException, SignatureException, KeyStoreException, InvalidKeyException, InvalidAlgorithmParameterException {
         String alias = "tcpcap";
         Authority authority = new Authority(null, alias, alias.toCharArray(), "TCPcap Proxy SSL Proxying", "MTX", "MTX Ltd", "MTX", "MTX Ltd");
         KeyStore keyStore = createServerCertificate(commonName,
@@ -94,8 +121,7 @@ class ServerCertificate {
         if (log.isTraceEnabled()) {
             log.trace("generateServerContext: {}", keyStore.getCertificate(alias));
         }
-        KeyManager[] keyManagers = getKeyManagers(keyStore, authority);
-        return newServerContext(keyManagers);
+        return new ServerContext(authority, keyStore);
     }
 
     private static KeyManager[] getKeyManagers(KeyStore keyStore,

@@ -143,7 +143,7 @@ public class Main {
                         dnsResponse.addRecord(new ARecord(new Name("qq.com."), DClass.IN, 3600, InetAddress.getByName("192.168.31.88")), 1);
                         return dnsResponse;
                     } catch (Exception e) {
-                        e.printStackTrace(System.err);
+                        throw new IllegalStateException("cancelDnsQuery", e);
                     }
                 }
             }
@@ -159,7 +159,7 @@ public class Main {
                     try {
                         dnsResponse.addRecord(new ARecord(new Name("baidu.com."), DClass.IN, 3600, InetAddress.getByName("192.168.31.88")), 1);
                     } catch (Exception e) {
-                        e.printStackTrace(System.err);
+                        throw new IllegalStateException("filterDnsResponse", e);
                     }
                 }
             }
