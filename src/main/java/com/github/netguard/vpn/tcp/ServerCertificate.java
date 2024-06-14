@@ -88,16 +88,16 @@ public class ServerCertificate {
         builder.withKeyStore(serverContext.keyStore, serverContext.authority.alias(), serverContext.authority.password());
     }
 
-    private String getCommonName(X509Certificate c) {
-        log.debug("Subject DN principal name: {}", c.getSubjectDN().getName());
-        for (String each : c.getSubjectDN().getName().split(",\\s*")) {
+    private String getCommonName(X509Certificate certificate) {
+        log.debug("Subject DN principal name: {}", certificate.getSubjectDN().getName());
+        for (String each : certificate.getSubjectDN().getName().split(",\\s*")) {
             if (each.startsWith("CN=")) {
                 String result = each.substring(3);
                 log.debug("Common Name: {}", result);
                 return result;
             }
         }
-        throw new IllegalStateException("Missed CN in Subject DN: " + c.getSubjectDN());
+        throw new IllegalStateException("Missed CN in Subject DN: " + certificate.getSubjectDN());
     }
 
     private static class ServerContext {
