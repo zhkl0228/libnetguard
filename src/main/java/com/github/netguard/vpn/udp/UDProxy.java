@@ -8,8 +8,6 @@ import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import eu.faircode.netguard.Allowed;
 import net.luminis.quic.QuicClientConnection;
-import net.luminis.quic.QuicConnection;
-import net.luminis.quic.QuicStream;
 import net.luminis.quic.core.Role;
 import net.luminis.quic.core.Version;
 import net.luminis.quic.core.VersionHolder;
@@ -22,8 +20,6 @@ import net.luminis.quic.log.SysOutLogger;
 import net.luminis.quic.packet.InitialPacket;
 import net.luminis.quic.packet.LongHeaderPacket;
 import net.luminis.quic.receive.Receiver;
-import net.luminis.quic.server.ApplicationProtocolConnection;
-import net.luminis.quic.server.ApplicationProtocolConnectionFactory;
 import net.luminis.quic.server.ServerConnectionConfig;
 import net.luminis.quic.server.ServerConnector;
 import net.luminis.tls.handshake.ClientHello;
@@ -31,10 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xbill.DNS.Message;
 
-import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
@@ -45,7 +38,6 @@ import java.net.URI;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
 import java.util.List;
 
 public class UDProxy {
@@ -92,84 +84,6 @@ public class UDProxy {
 
     private Allowed redirect() {
         return new Allowed("127.0.0.1", serverSocket.getLocalPort());
-    }
-
-    private static class StreamForward implements Runnable {
-        static void forward(QuicStream clientStream, QuicStream serverStream) {
-            Thread s2c = new Thread(new StreamForward(serverStream, clientStream), "forward from=" + serverStream + ", to=" + clientStream);
-            s2c.setDaemon(true);
-            s2c.start();
-            Thread c2s = new Thread(new StreamForward(clientStream, serverStream), "forward from=" + clientStream + ", to=" + serverStream);
-            c2s.setDaemon(true);
-            c2s.start();
-        }
-        private final QuicStream from, to;
-        public StreamForward(QuicStream from, QuicStream to) {
-            this.from = from;
-            this.to = to;
-        }
-        @Override
-        public void run() {
-            try (InputStream inputStream = from.getInputStream(); OutputStream outputStream = to.getOutputStream()) {
-                byte[] buf = new byte[10240];
-                while (true) {
-                    try {
-                        int read = inputStream.read(buf);
-                        log.debug("read {} bytes", read);
-                        if (read == -1) {
-                            throw new EOFException();
-                        }
-                        if (read > 0) {
-                            if (log.isDebugEnabled()) {
-                                log.debug("{}", Inspector.inspectString(Arrays.copyOf(buf, read), "forward from=" + from + ", to=" + to));
-                            }
-                            outputStream.write(buf, 0, read);
-                            outputStream.flush();
-                        }
-                    } catch (IOException e) {
-                        log.trace("forward from={}, to={}", from, to, e);
-                        break;
-                    }
-                }
-            } catch (IOException e) {
-                log.warn("open stream from={}, to={}", from, to, e);
-            }
-        }
-    }
-
-    private static class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProtocolConnection {
-        private final QuicClientConnection connection;
-        private QuicProxy(QuicClientConnection connection) {
-            this.connection = connection;
-        }
-        @Override
-        public ApplicationProtocolConnection createConnection(String protocol, QuicConnection quicConnection) {
-            log.debug("createConnection protocol={}, quicConnection={}", protocol, quicConnection);
-            return this;
-        }
-        @Override
-        public void acceptPeerInitiatedStream(QuicStream serverStream) {
-            log.debug("acceptPeerInitiatedStream serverStream={}", serverStream);
-            Thread thread = new Thread(new AcceptPeerInitiatedStream(serverStream), "acceptPeerInitiatedStream");
-            thread.setDaemon(true);
-            thread.start();
-        }
-        private class AcceptPeerInitiatedStream implements Runnable {
-            private final QuicStream serverStream;
-            AcceptPeerInitiatedStream(QuicStream serverStream) {
-                this.serverStream = serverStream;
-            }
-            @Override
-            public void run() {
-                try {
-                    QuicStream clientStream = connection.createStream(true);
-                    log.debug("createStream clientStream={}, serverStream={}", clientStream, serverStream);
-                    StreamForward.forward(clientStream, serverStream);
-                } catch (Exception e) {
-                    log.warn("run", e);
-                }
-            }
-        }
     }
 
     private boolean serverClosed;
