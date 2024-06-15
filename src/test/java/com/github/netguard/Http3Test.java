@@ -75,7 +75,7 @@ public class Http3Test extends TestCase {
                     .withConfiguration(serverConnectionConfig)
                     .withLogger(logger)
                     .build();
-            port = serverConnector.getBindPort();
+            port = serverConnector.getServerListenPort();
             System.out.println("port=" + port);
             serverConnector.registerApplicationProtocol(applicationProtocol, (protocol, quicConnection) -> {
                 System.out.println("protocol=" + protocol + ", quicConnection=" + quicConnection);

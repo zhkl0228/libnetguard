@@ -51,25 +51,26 @@ public class UDProxy {
     }
 
     private final InspectorVpn vpn;
-    private final SocketAddress client;
-    private final SocketAddress server;
+    private final SocketAddress clientAddress;
+    private final SocketAddress serverAddress;
     private final DatagramSocket clientSocket;
     private final DatagramSocket serverSocket;
 
-    private UDProxy(InspectorVpn vpn, SocketAddress client, SocketAddress server) throws SocketException {
+    private UDProxy(InspectorVpn vpn, SocketAddress clientAddress, SocketAddress serverAddress) throws SocketException {
         this.vpn = vpn;
-        this.client = client;
-        this.server = server;
+        this.clientAddress = clientAddress;
+        this.serverAddress = serverAddress;
         this.serverSocket = new DatagramSocket(new InetSocketAddress(0));
         this.serverSocket.setSoTimeout(READ_TIMEOUT);
         this.clientSocket = new DatagramSocket(new InetSocketAddress(0));
         this.clientSocket.setSoTimeout(READ_TIMEOUT);
-        log.debug("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", client, server, clientSocket.getLocalPort(), serverSocket.getLocalPort());
+        log.debug("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", clientAddress, serverAddress, clientSocket.getLocalPort(), serverSocket.getLocalPort());
 
-        Thread serverThread = new Thread(new Server(), "UDProxy server " + client + " => " + server);
+        Client client = new Client();
+        Thread serverThread = new Thread(new Server(client), "UDProxy server " + clientAddress + " => " + serverAddress);
         serverThread.setDaemon(true);
         serverThread.start();
-        Thread clientThread = new Thread(new Client(), "UDProxy client " + client + " => " + server);
+        Thread clientThread = new Thread(client, "UDProxy client " + clientAddress + " => " + serverAddress);
         clientThread.setDaemon(true);
         clientThread.start();
     }
@@ -79,11 +80,12 @@ public class UDProxy {
     }
 
     private boolean serverClosed;
-    private SocketAddress vpnAddress;
-
-    private Message dnsQuery;
 
     private class Server implements Runnable {
+        private final Client client;
+        Server(Client client) {
+            this.client = client;
+        }
         @Override
         public void run() {
             IPacketCapture packetCapture = vpn.getPacketCapture();
@@ -95,31 +97,29 @@ public class UDProxy {
                 while (true) {
                     try {
                         serverSocket.receive(packet);
-                        if (vpnAddress == null) {
-                            vpnAddress = packet.getSocketAddress();
-                        }
                         int length = packet.getLength();
                         if (log.isDebugEnabled()) {
                             byte[] data = new byte[length];
                             System.arraycopy(buffer, 0, data, 0, length);
-                            log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + client + " => " + server + ", base64=" + Base64.encode(data)));
+                            log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.encode(data)));
                         }
                         if (first) {
+                            client.forwardAddress = packet.getSocketAddress();
                             ClientHello clientHello = detectQuicClientHello(buffer, length);
                             log.debug("quic client hello: {}", clientHello);
-                            dnsQuery = clientHello == null ? detectDnsQuery(buffer, length) : null;
-                            log.trace("dnsQuery={}", dnsQuery);
+                            client.dnsQuery = clientHello == null ? detectDnsQuery(buffer, length) : null;
+                            log.trace("dnsQuery={}", client.dnsQuery);
                             Message fake;
-                            if (dnsQuery != null && dnsFilter != null && (fake = dnsFilter.cancelDnsQuery(dnsQuery)) != null) {
+                            if (client.dnsQuery != null && dnsFilter != null && (fake = dnsFilter.cancelDnsQuery(client.dnsQuery)) != null) {
                                 log.trace("cancelDnsQuery: {}", fake);
                                 byte[] fakeResponse = fake.toWire();
                                 DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
-                                fakePacket.setSocketAddress(vpnAddress);
+                                fakePacket.setSocketAddress(client.forwardAddress);
                                 serverSocket.send(fakePacket);
                                 continue;
                             }
                         }
-                        packet.setSocketAddress(server);
+                        packet.setSocketAddress(serverAddress);
                         clientSocket.send(packet);
                     } catch (SocketTimeoutException e) {
                         break;
@@ -132,7 +132,7 @@ public class UDProxy {
                 }
             } finally {
                 serverClosed = true;
-                log.debug("udp proxy server exit: client={}, server={}", client, server);
+                log.debug("udp proxy server exit: client={}, server={}", clientAddress, serverAddress);
             }
         }
         private Message detectDnsQuery(byte[] buffer, int length) {
@@ -155,13 +155,19 @@ public class UDProxy {
                 ByteBuffer bb = ByteBuffer.wrap(buffer);
                 bb.limit(length);
                 bb.mark();
+                if (bb.remaining() < 0x20) {
+                    return null;
+                }
                 int flags = bb.get() & 0xff;
-                if ((flags & 0x80) == 0x80 && bb.remaining() > 5) {
+                if ((flags & 0x40) != 0x40) {
+                    return null;
+                }
+                if ((flags & 0x80) == 0x80) {
                     int version = bb.getInt();
                     if (log.isDebugEnabled()) {
                         log.debug("detectQuicClientHello flags=0x{}, version=0x{}", Integer.toHexString(flags), Integer.toHexString(version));
                     }
-                    if (version == Version.QUIC_version_1.getId() && bb.remaining() > 10) {
+                    if (version == Version.QUIC_version_1.getId()) {
                         Version quicVersion = Version.parse(version);
                         int dcidLength = bb.get() & 0xff;
                         byte[] dcid = new byte[dcidLength];
@@ -192,9 +198,19 @@ public class UDProxy {
                                     log.debug("{}", Inspector.inspectString(cryptoFrame.getStreamData(), "detectQuicClientHello initialPacket.cryptoFrame"));
                                 }
                                 return clientHello;
+                            } else {
+                                log.warn("detectQuicClientHello frameList={}", frameList);
                             }
+                        } else {
+                            log.warn("detectQuicClientHello type={}", type);
                         }
+                    } else if (version == Version.QUIC_version_2.getId() ||
+                            version == Version.IETF_draft_27.getId() ||
+                            version == Version.IETF_draft_29.getId()) {
+                        log.warn("detectQuicClientHello version={}", version);
                     }
+                } else {
+                    log.warn("detectQuicClientHello flags=0x{}", Integer.toHexString(flags));
                 }
             } catch(Exception e) {
                 log.warn("detectQuicClientHello", e);
@@ -204,6 +220,8 @@ public class UDProxy {
     }
 
     private class Client implements Runnable {
+        private SocketAddress forwardAddress;
+        private Message dnsQuery;
         @Override
         public void run() {
             IPacketCapture packetCapture = vpn.getPacketCapture();
@@ -218,9 +236,9 @@ public class UDProxy {
                         if (log.isDebugEnabled()) {
                             byte[] data = new byte[length];
                             System.arraycopy(buffer, 0, data, 0, length);
-                            log.debug("{}", Inspector.inspectString(data, "ClientReceived: " + client + " => " + server));
+                            log.debug("{}", Inspector.inspectString(data, "ClientReceived: " + clientAddress + " => " + serverAddress));
                         }
-                        if (vpnAddress == null) {
+                        if (forwardAddress == null) {
                             throw new IllegalStateException("vpnAddress is null");
                         }
                         if (dnsQuery != null) {
@@ -228,7 +246,7 @@ public class UDProxy {
                                 ByteBuffer bb = ByteBuffer.wrap(buffer);
                                 bb.limit(length);
                                 Message dnsResponse = new Message(bb);
-                                log.trace("client={}, server={}, dnsQuery={}\ndnsResponse={}", client, server, dnsQuery, dnsResponse);
+                                log.trace("client={}, server={}, dnsQuery={}\ndnsResponse={}", clientAddress, serverAddress, dnsQuery, dnsResponse);
 
                                 if (dnsFilter != null) {
                                     Message fake = dnsFilter.filterDnsResponse(dnsQuery, dnsResponse);
@@ -236,7 +254,7 @@ public class UDProxy {
                                         log.trace("filterDnsResponse: {}", fake);
                                         byte[] fakeResponse = fake.toWire();
                                         DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
-                                        fakePacket.setSocketAddress(vpnAddress);
+                                        fakePacket.setSocketAddress(forwardAddress);
                                         serverSocket.send(fakePacket);
                                         continue;
                                     }
@@ -245,7 +263,7 @@ public class UDProxy {
                                 log.warn("decode dns response, query={}", dnsQuery, e);
                             }
                         }
-                        packet.setSocketAddress(vpnAddress);
+                        packet.setSocketAddress(forwardAddress);
                         serverSocket.send(packet);
                     } catch (SocketTimeoutException e) {
                         if (serverClosed) {
@@ -259,7 +277,7 @@ public class UDProxy {
             } finally {
                 IoUtil.close(serverSocket);
                 IoUtil.close(clientSocket);
-                log.debug("udp proxy client exit: client={}, server={}", client, server);
+                log.debug("udp proxy client exit: client={}, server={}", clientAddress, serverAddress);
             }
         }
     }
