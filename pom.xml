@@ -155,7 +155,7 @@
         <dependency>
             <groupId>tech.kwik</groupId>
             <artifactId>kwik</artifactId>
-            <version>0.8.11-3-g440650d5-SNAPSHOT</version>
+            <version>0.8.11-4-g52605e8e-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>dnsjava</groupId>
