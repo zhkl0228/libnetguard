@@ -32,11 +32,16 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
 
     protected final List<ProxyVpn> clients;
 
-    protected final RootCert rootCert;
+    private final RootCert rootCert;
 
     protected ProxyVpn(List<ProxyVpn> clients, RootCert rootCert) {
         this.clients = clients;
         this.rootCert = rootCert;
+    }
+
+    @Override
+    public RootCert getRootCert() {
+        return rootCert;
     }
 
     protected ClientOS clientOS = ClientOS.MacOS;
@@ -79,7 +84,7 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
 
     protected final Allowed redirectTcp(Packet packet) {
         int timeout = 10000; // default 10 seconds;
-        return SSLProxyV2.create(this, rootCert, packet, timeout);
+        return SSLProxyV2.create(this, packet, timeout);
     }
 
     protected final Allowed redirectUdp(Packet packet) {

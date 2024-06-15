@@ -7,16 +7,7 @@ import junit.framework.TestCase;
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.QuicConnection;
 import net.luminis.quic.QuicStream;
-import net.luminis.quic.core.Role;
-import net.luminis.quic.core.Version;
-import net.luminis.quic.core.VersionHolder;
-import net.luminis.quic.crypto.Aead;
-import net.luminis.quic.crypto.ConnectionSecrets;
-import net.luminis.quic.crypto.MissingKeysException;
-import net.luminis.quic.frame.CryptoFrame;
-import net.luminis.quic.log.NullLogger;
 import net.luminis.quic.log.SysOutLogger;
-import net.luminis.quic.packet.InitialPacket;
 import net.luminis.quic.packet.PacketParser;
 import net.luminis.quic.server.ApplicationProtocolConnection;
 import net.luminis.quic.server.ServerConnectionConfig;
@@ -29,11 +20,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
-import java.nio.ByteBuffer;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -90,9 +79,11 @@ public class Http3Test extends TestCase {
         Logger.getLogger(ServerCertificate.class).setLevel(Level.DEBUG);
         SysOutLogger logger = new SysOutLogger();
         logger.logDebug(false);
-        QuicClientConnection connection = QuicClientConnection.newBuilder()
+        QuicClientConnection.Builder builder = QuicClientConnection.newBuilder();
+        builder.applicationProtocol("h3");
+        builder.applicationProtocol(applicationProtocol);
+        QuicClientConnection connection = builder
                 .uri(URI.create("https://127.0.0.1:20170"))
-                .applicationProtocol(applicationProtocol)
                 .logger(logger)
                 .noServerCertificateCheck()
                 .build();
@@ -107,39 +98,6 @@ public class Http3Test extends TestCase {
             Inspector.inspect(input.readAllBytes(), "Response");
         }
         connection.close();
-    }
-
-    public void testQuicPacket() throws Exception {
-        byte[] tmp = Base64.decode("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");
-        tmp = Arrays.copyOf(tmp, 1200);
-        ByteBuffer data = ByteBuffer.wrap(tmp);
-        data.mark();
-
-        {
-            int flags = data.get();
-            assertTrue((flags & 0x80) == 0x80);
-            int version = data.getInt();
-            Version quicVersion = Version.parse(version);
-            int dcidLength = data.get() & 0xff;
-            byte[] dcid = new byte[dcidLength];
-            data.get(dcid);
-            int type = (flags & 0x30) >> 4;
-            assertTrue(InitialPacket.isInitial(type, quicVersion));
-            InitialPacket packet = new InitialPacket(quicVersion);
-            ConnectionSecrets connectionSecrets = new ConnectionSecrets(VersionHolder.with(quicVersion), Role.Server, null, new NullLogger());
-            connectionSecrets.computeInitialKeys(dcid);
-            try {
-                data.reset();
-                Aead aead = connectionSecrets.getPeerAead(packet.getEncryptionLevel());
-                packet.parse(data, aead, 0, new NullLogger(), 0);
-                System.out.println(packet);
-                CryptoFrame cryptoFrame = (CryptoFrame) packet.getFrames().get(0);
-                Inspector.inspect(cryptoFrame.getStreamData(), "cryptoFrame");
-            } catch (MissingKeysException e) {
-                // Impossible, as initial keys have just been computed.
-                throw new RuntimeException(e);
-            }
-        }
     }
 
     private static class MyApplicationProtocolConnection implements ApplicationProtocolConnection {

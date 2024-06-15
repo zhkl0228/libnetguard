@@ -58,10 +58,10 @@ public class SSLProxyV2 implements Runnable {
 
     private static final int SERVER_SO_TIMEOUT = (int) TimeUnit.MINUTES.toMillis(1);
 
-    public static Allowed create(final InspectorVpn vpn, RootCert rootCert, final Packet packet, final int timeout) {
+    public static Allowed create(final InspectorVpn vpn, final Packet packet, final int timeout) {
         try {
             log.debug("create tcp proxy packet={}", packet);
-            SSLProxyV2 proxy = new SSLProxyV2(vpn, rootCert, packet, timeout);
+            SSLProxyV2 proxy = new SSLProxyV2(vpn, packet, timeout);
             Allowed allowed = proxy.redirect();
             log.debug("create tcp proxy packet={}, allowed={}", packet, allowed);
             return allowed;
@@ -70,10 +70,10 @@ public class SSLProxyV2 implements Runnable {
         }
     }
 
-    public static void create(final InspectorVpn vpn, RootCert rootCert, final Packet packet, final int timeout, Socket socket) {
+    public static void create(final InspectorVpn vpn, final Packet packet, final int timeout, Socket socket) {
         try {
             log.debug("create tcp proxy packet={}, socket={}", packet, socket);
-            new SSLProxyV2(vpn, rootCert, packet, timeout, socket);
+            new SSLProxyV2(vpn, packet, timeout, socket);
             log.debug("create tcp proxy packet={}, socket={}", packet, socket);
         } catch (IOException e) {
             throw new IllegalStateException(e);
@@ -81,7 +81,6 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private final InspectorVpn vpn;
-    private final RootCert rootCert;
 
     private final Packet packet;
     private final int timeout;
@@ -89,9 +88,8 @@ public class SSLProxyV2 implements Runnable {
     private final SSLSocket secureSocket;
     private final Socket acceptedSocket;
 
-    private SSLProxyV2(InspectorVpn vpn, RootCert rootCert, Packet packet, int timeout, Socket socket) throws IOException {
+    private SSLProxyV2(InspectorVpn vpn, Packet packet, int timeout, Socket socket) throws IOException {
         this.vpn = vpn;
-        this.rootCert = rootCert;
 
         this.packet = packet;
         this.timeout = timeout;
@@ -110,9 +108,8 @@ public class SSLProxyV2 implements Runnable {
         thread.start();
     }
 
-    private SSLProxyV2(InspectorVpn vpn, RootCert rootCert, Packet packet, int timeout) throws IOException {
+    private SSLProxyV2(InspectorVpn vpn, Packet packet, int timeout) throws IOException {
         this.vpn = vpn;
-        this.rootCert = rootCert;
 
         this.packet = packet;
         this.timeout = timeout;
@@ -141,7 +138,6 @@ public class SSLProxyV2 implements Runnable {
     private SSLProxyV2(InspectorVpn vpn, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket,
                        ClientHelloRecord record, String applicationProtocol, boolean allowFilterH2) throws IOException {
         this.vpn = vpn;
-        this.rootCert = null;
 
         this.packet = packet;
         this.timeout = timeout;
@@ -207,7 +203,7 @@ public class SSLProxyV2 implements Runnable {
                 break;
             }
         }
-        String pem = rootCert.pem;
+        String pem = vpn.getRootCert().pem;
         StringBuilder builder = new StringBuilder();
         builder.append("HTTP/1.1 200 OK\r\n");
         builder.append(HttpHeaderNames.CONNECTION).append(": close\r\n");
@@ -223,11 +219,11 @@ public class SSLProxyV2 implements Runnable {
                 if (userAgentString.toUpperCase().contains("SAFARI")) {
                     str = "filename=\"" + new String(fileName.getBytes(StandardCharsets.UTF_8), "ISO8859-1") + "\"";
                 } else {
-                    str = "filename*=UTF-8''" + URLEncoder.encode(fileName, "UTF-8");
+                    str = "filename*=UTF-8''" + URLEncoder.encode(fileName, StandardCharsets.UTF_8);
                 }
             }
             if (str == null) {
-                str = "filename=\"" + URLEncoder.encode(fileName, "UTF-8") + "\"";
+                str = "filename=\"" + URLEncoder.encode(fileName, StandardCharsets.UTF_8) + "\"";
             }
             builder.append(HttpHeaderNames.CONTENT_DISPOSITION).append(": attachment; ").append(str).append("\r\n");
         }
@@ -410,7 +406,7 @@ public class SSLProxyV2 implements Runnable {
                 }
 
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
-                SSLContext serverContext = serverCertificate.createSSLContext(rootCert);
+                SSLContext serverContext = serverCertificate.createSSLContext(vpn.getRootCert());
                 SSLProxyV2 proxy = new SSLProxyV2(vpn, packet, timeout, serverContext, secureSocket,
                         record, applicationProtocol, allowRule == AllowRule.FILTER_H2);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {

@@ -16,7 +16,9 @@ import com.github.netguard.vpn.tcp.StreamForward;
 import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
+import com.github.netguard.vpn.udp.PacketRequest;
 import com.github.netguard.vpn.udp.UDProxy;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
@@ -231,6 +233,13 @@ public class Main {
                 Application[] applications = connectRequest.queryApplications();
                 System.out.printf("acceptTcp request=%s, applications=%s, httpRequest=%s%n", connectRequest, Arrays.toString(applications), connectRequest.httpRequest);
                 return super.acceptTcp(connectRequest);
+            }
+            @Override
+            public AcceptRule acceptUdp(PacketRequest packetRequest) {
+                if (packetRequest.dnsQuery != null) {
+                    return AcceptRule.Forward;
+                }
+                return AcceptRule.QUIC_MITM;
             }
         }
     }

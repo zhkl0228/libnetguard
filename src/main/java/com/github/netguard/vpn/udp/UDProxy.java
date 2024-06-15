@@ -5,7 +5,9 @@ import cn.hutool.core.io.IoUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.tcp.ServerCertificate;
 import eu.faircode.netguard.Allowed;
+import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.core.Role;
 import net.luminis.quic.core.Version;
 import net.luminis.quic.core.VersionHolder;
@@ -16,7 +18,10 @@ import net.luminis.quic.frame.QuicFrame;
 import net.luminis.quic.log.NullLogger;
 import net.luminis.quic.log.SysOutLogger;
 import net.luminis.quic.packet.InitialPacket;
+import net.luminis.quic.packet.LongHeaderPacket;
 import net.luminis.quic.receive.Receiver;
+import net.luminis.quic.server.ServerConnectionConfig;
+import net.luminis.quic.server.ServerConnector;
 import net.luminis.tls.handshake.ClientHello;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +34,10 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.security.cert.X509Certificate;
 import java.util.List;
 
 public class UDProxy {
@@ -40,7 +47,7 @@ public class UDProxy {
     private static final int MTU = Receiver.MAX_DATAGRAM_SIZE;
     private static final int READ_TIMEOUT = 60000;
 
-    public static Allowed redirect(InspectorVpn vpn, SocketAddress client, SocketAddress server) {
+    public static Allowed redirect(InspectorVpn vpn, SocketAddress client, InetSocketAddress server) {
         log.debug("redirect client={}, server={}", client, server);
         try {
             UDProxy proxy = new UDProxy(vpn, client, server);
@@ -52,11 +59,11 @@ public class UDProxy {
 
     private final InspectorVpn vpn;
     private final SocketAddress clientAddress;
-    private final SocketAddress serverAddress;
+    private final InetSocketAddress serverAddress;
     private final DatagramSocket clientSocket;
     private final DatagramSocket serverSocket;
 
-    private UDProxy(InspectorVpn vpn, SocketAddress clientAddress, SocketAddress serverAddress) throws SocketException {
+    private UDProxy(InspectorVpn vpn, SocketAddress clientAddress, InetSocketAddress serverAddress) throws SocketException {
         this.vpn = vpn;
         this.clientAddress = clientAddress;
         this.serverAddress = serverAddress;
@@ -67,7 +74,7 @@ public class UDProxy {
         log.debug("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", clientAddress, serverAddress, clientSocket.getLocalPort(), serverSocket.getLocalPort());
 
         Client client = new Client();
-        Thread serverThread = new Thread(new Server(client), "UDProxy server " + clientAddress + " => " + serverAddress);
+        Thread serverThread = new Thread(new Server(client, serverAddress), "UDProxy server " + clientAddress + " => " + serverAddress);
         serverThread.setDaemon(true);
         serverThread.start();
         Thread clientThread = new Thread(client, "UDProxy client " + clientAddress + " => " + serverAddress);
@@ -83,9 +90,11 @@ public class UDProxy {
 
     private class Server implements Runnable {
         private final Client client;
-        Server(Client client) {
+        Server(Client client, InetSocketAddress serverAddress) {
             this.client = client;
+            this.forwardAddress = serverAddress;
         }
+        private InetSocketAddress forwardAddress;
         @Override
         public void run() {
             IPacketCapture packetCapture = vpn.getPacketCapture();
@@ -105,12 +114,15 @@ public class UDProxy {
                         }
                         if (first) {
                             client.forwardAddress = packet.getSocketAddress();
-                            ClientHello clientHello = detectQuicClientHello(buffer, length);
+                            client.dnsQuery = detectDnsQuery(buffer, length);
+                            ClientHello clientHello = client.dnsQuery == null ? detectQuicClientHello(buffer, length) : null;
                             log.debug("quic client hello: {}", clientHello);
                             client.dnsQuery = clientHello == null ? detectDnsQuery(buffer, length) : null;
                             log.trace("dnsQuery={}", client.dnsQuery);
                             Message fake;
-                            if (client.dnsQuery != null && dnsFilter != null && (fake = dnsFilter.cancelDnsQuery(client.dnsQuery)) != null) {
+                            if (dnsFilter != null &&
+                                    client.dnsQuery != null &&
+                                    (fake = dnsFilter.cancelDnsQuery(client.dnsQuery)) != null) {
                                 log.trace("cancelDnsQuery: {}", fake);
                                 byte[] fakeResponse = fake.toWire();
                                 DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
@@ -118,10 +130,77 @@ public class UDProxy {
                                 serverSocket.send(fakePacket);
                                 continue;
                             }
+                            if (packetCapture != null) {
+                                PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, client.dnsQuery, serverAddress);
+                                AcceptRule rule = packetCapture.acceptUdp(packetRequest);
+                                if (rule == null) {
+                                    rule = AcceptRule.Forward;
+                                }
+                                switch (rule) {
+                                    case Discard:
+                                        throw new SocketTimeoutException("discard");
+                                    case Forward:
+                                        break;
+                                    case QUIC_MITM: {
+                                        if (packetRequest.hostName == null ||
+                                                packetRequest.hostName.isEmpty() ||
+                                                packetRequest.applicationLayerProtocols.isEmpty()) {
+                                            break; // forward traffic
+                                        }
+                                        QuicClientConnection.Builder clientBuilder = QuicClientConnection.newBuilder();
+                                        net.luminis.quic.log.Logger logger;
+                                        if (log.isDebugEnabled()) {
+                                            logger = new SysOutLogger();
+                                            logger.logDebug(true);
+                                        } else {
+                                            logger = new NullLogger();
+                                        }
+                                        clientBuilder.logger(logger);
+                                        for (String applicationLayerProtocol : packetRequest.applicationLayerProtocols) {
+                                            clientBuilder.applicationProtocol(applicationLayerProtocol);
+                                        }
+                                        QuicClientConnection connection = clientBuilder
+                                                .uri(URI.create(String.format("https://%s:%d", packetRequest.hostName, packetRequest.port)))
+                                                .proxy(packetRequest.serverIp)
+                                                .build();
+                                        try {
+                                            connection.connect();
+                                            List<X509Certificate> chain = connection.getServerCertificateChain();
+                                            X509Certificate peerCertificate = chain.get(0);
+                                            String handshakeApplicationProtocol = connection.getHandshakeApplicationProtocol();
+                                            log.debug("peerCertificate={}", peerCertificate);
+                                            if (handshakeApplicationProtocol == null || handshakeApplicationProtocol.isBlank()) {
+                                                throw new IllegalStateException("handshakeApplicationProtocol=" + handshakeApplicationProtocol);
+                                            }
+
+                                            ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
+                                            ServerConnectionConfig serverConnectionConfig = ServerConnectionConfig.builder()
+                                                    .maxOpenPeerInitiatedBidirectionalStreams(5)
+                                                    .maxOpenPeerInitiatedUnidirectionalStreams(3)
+                                                    .build();
+                                            ServerConnector.Builder builder = ServerConnector.builder();
+                                            serverCertificate.configKeyStore(vpn.getRootCert(), builder);
+                                            ServerConnector serverConnector = builder
+                                                    .withPort(0)
+                                                    .withConfiguration(serverConnectionConfig)
+                                                    .withLogger(logger)
+                                                    .build();
+                                            serverConnector.start();
+                                            log.debug("handshakeApplicationProtocol={}, listenPort={}", handshakeApplicationProtocol, serverConnector.getServerListenPort());
+                                            throw new UnsupportedOperationException(packetRequest.toString());
+                                        } catch (IOException e) {
+                                            connection.close();
+                                            log.debug("connect", e);
+                                            throw new SocketTimeoutException(e.getMessage());
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        packet.setSocketAddress(serverAddress);
+                        packet.setSocketAddress(forwardAddress);
                         clientSocket.send(packet);
                     } catch (SocketTimeoutException e) {
+                        log.trace("server", e);
                         break;
                     } catch (Exception e) {
                         log.warn("server", e);
@@ -162,7 +241,8 @@ public class UDProxy {
                 if ((flags & 0x40) != 0x40) {
                     return null;
                 }
-                if ((flags & 0x80) == 0x80) {
+                int type = (flags & 0x30) >> 4;
+                if (LongHeaderPacket.isLongHeaderPacket((byte) flags, null)) {
                     int version = bb.getInt();
                     if (log.isDebugEnabled()) {
                         log.debug("detectQuicClientHello flags=0x{}, version=0x{}", Integer.toHexString(flags), Integer.toHexString(version));
@@ -172,7 +252,6 @@ public class UDProxy {
                         int dcidLength = bb.get() & 0xff;
                         byte[] dcid = new byte[dcidLength];
                         bb.get(dcid);
-                        int type = (flags & 0x30) >> 4;
                         if (InitialPacket.isInitial(type, quicVersion)) {
                             InitialPacket initialPacket = new InitialPacket(quicVersion);
                             ConnectionSecrets connectionSecrets = new ConnectionSecrets(VersionHolder.with(quicVersion), Role.Server, null, new NullLogger());
@@ -210,7 +289,7 @@ public class UDProxy {
                         log.warn("detectQuicClientHello version={}", version);
                     }
                 } else {
-                    log.warn("detectQuicClientHello flags=0x{}", Integer.toHexString(flags));
+                    log.debug("detectQuicClientHello flags=0x{}, type={}, length={}", Integer.toHexString(flags), type, length);
                 }
             } catch(Exception e) {
                 log.warn("detectQuicClientHello", e);
@@ -266,6 +345,7 @@ public class UDProxy {
                         packet.setSocketAddress(forwardAddress);
                         serverSocket.send(packet);
                     } catch (SocketTimeoutException e) {
+                        log.trace("client", e);
                         if (serverClosed) {
                             break;
                         }
