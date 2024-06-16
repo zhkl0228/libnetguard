@@ -19,7 +19,6 @@ import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
-import com.github.netguard.vpn.udp.UDProxy;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.ServiceSinkhole;

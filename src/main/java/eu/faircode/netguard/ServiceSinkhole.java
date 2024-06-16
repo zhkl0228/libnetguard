@@ -181,9 +181,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
             if (!directAllowAll && clientOS == ClientOS.Android) {
                 try {
                     applicationDiscoverHandler = new ApplicationDiscoverHandler();
-                    Thread thread = new Thread(applicationDiscoverHandler);
-                    thread.setDaemon(true);
-                    thread.start();
+                    executorService.submit(applicationDiscoverHandler);
                 } catch (Exception e) {
                     log.debug("create udp failed.", e);
                     IoUtil.close(applicationDiscoverHandler);

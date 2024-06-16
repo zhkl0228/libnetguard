@@ -10,19 +10,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
 
 class StreamForward implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(StreamForward.class);
 
-    static void forward(QuicStream clientStream, QuicStream serverStream, boolean bidirectional) {
-        Thread s2c = new Thread(new StreamForward(true, bidirectional, serverStream, clientStream), "forward from=" + serverStream + ", to=" + clientStream);
-        s2c.setDaemon(true);
-        s2c.start();
+    static void forward(QuicStream clientStream, QuicStream serverStream, boolean bidirectional, ExecutorService executorService) {
+        executorService.submit(new StreamForward(true, bidirectional, serverStream, clientStream));
         if (bidirectional) {
-            Thread c2s = new Thread(new StreamForward(false, true, clientStream, serverStream), "forward from=" + clientStream + ", to=" + serverStream);
-            c2s.setDaemon(true);
-            c2s.start();
+            executorService.submit(new StreamForward(false, true, clientStream, serverStream));
         }
     }
 

@@ -2,18 +2,23 @@ package com.github.netguard.vpn.udp;
 
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.QuicConnection;
+import net.luminis.quic.QuicConstants;
 import net.luminis.quic.QuicStream;
 import net.luminis.quic.server.ApplicationProtocolConnection;
 import net.luminis.quic.server.ApplicationProtocolConnectionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.ExecutorService;
+
 class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProtocolConnection {
 
     private static final Logger log = LoggerFactory.getLogger(QuicProxy.class);
+    private final ExecutorService executorService;
     private final QuicClientConnection connection;
 
-    QuicProxy(QuicClientConnection connection) {
+    QuicProxy(ExecutorService executorService, QuicClientConnection connection) {
+        this.executorService = executorService;
         this.connection = connection;
     }
 
@@ -26,9 +31,7 @@ class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProt
     @Override
     public void acceptPeerInitiatedStream(QuicStream serverStream) {
         log.debug("acceptPeerInitiatedStream serverStream={}", serverStream);
-        Thread thread = new Thread(new AcceptPeerInitiatedStream(serverStream), "acceptPeerInitiatedStream");
-        thread.setDaemon(true);
-        thread.start();
+        executorService.submit(new AcceptPeerInitiatedStream(serverStream));
     }
 
     private class AcceptPeerInitiatedStream implements Runnable {
@@ -44,9 +47,10 @@ class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProt
                 boolean bidirectional = serverStream.isBidirectional();
                 QuicStream clientStream = connection.createStream(bidirectional);
                 log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
-                StreamForward.forward(clientStream, serverStream, bidirectional);
+                StreamForward.forward(clientStream, serverStream, bidirectional, executorService);
             } catch (Exception e) {
-                log.warn("run", e);
+                log.debug("createStream", e);
+                serverStream.resetStream(QuicConstants.TransportErrorCode.APPLICATION_ERROR.value);
             }
         }
     }

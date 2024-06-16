@@ -38,7 +38,9 @@ import java.net.URI;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 
 public class UDProxy {
 
@@ -73,13 +75,10 @@ public class UDProxy {
         this.clientSocket.setSoTimeout(3000);
         log.debug("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", clientAddress, serverAddress, clientSocket.getLocalPort(), serverSocket.getLocalPort());
 
+        ExecutorService executorService = vpn.getExecutorService();
         Client client = new Client();
-        Thread serverThread = new Thread(new Server(client, serverAddress), "UDProxy server " + clientAddress + " => " + serverAddress);
-        serverThread.setDaemon(true);
-        serverThread.start();
-        Thread clientThread = new Thread(client, "UDProxy client " + clientAddress + " => " + serverAddress);
-        clientThread.setDaemon(true);
-        clientThread.start();
+        executorService.submit(new Server(client, serverAddress));
+        executorService.submit(client);
     }
 
     private Allowed redirect() {
@@ -170,7 +169,7 @@ public class UDProxy {
                 }
             } finally {
                 serverClosed = true;
-                log.debug("udp proxy server exit: client={}, server={}", clientAddress, serverAddress);
+                log.trace("udp proxy server exit: client={}, server={}", clientAddress, serverAddress);
             }
         }
 
@@ -183,6 +182,7 @@ public class UDProxy {
                 client.connection = clientBuilder
                         .uri(URI.create(String.format("https://%s:%d", packetRequest.hostName, packetRequest.port)))
                         .proxy(packetRequest.serverIp)
+                        .connectTimeout(Duration.ofSeconds(30))
                         .build();
                 client.connection.connect();
                 List<X509Certificate> chain = client.connection.getServerCertificateChain();
@@ -207,13 +207,13 @@ public class UDProxy {
                         .build();
                 client.serverConnector.start();
                 log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, client.serverConnector.getListenPort(), filterHttp3);
-                client.serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new QuicProxy(client.connection));
+                client.serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new QuicProxy(vpn.getExecutorService(), client.connection));
                 forwardAddress = new InetSocketAddress("127.0.0.1", client.serverConnector.getListenPort());
             } catch (Exception e) {
                 client.connection.close();
                 client.connection = null;
                 if (e instanceof IOException) {
-                    log.debug("handleQuic", e);
+                    log.trace("handleQuic", e);
                 } else {
                     log.warn("handleQuic", e);
                 }
@@ -378,7 +378,7 @@ public class UDProxy {
                 }
                 IoUtil.close(serverSocket);
                 IoUtil.close(clientSocket);
-                log.debug("udp proxy client exit: client={}, server={}", clientAddress, serverAddress);
+                log.trace("udp proxy client exit: client={}, server={}", clientAddress, serverAddress);
             }
         }
     }

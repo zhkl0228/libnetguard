@@ -9,12 +9,17 @@ import com.github.netguard.vpn.udp.UDProxy;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
+import net.luminis.quic.concurrent.DaemonThreadFactory;
 
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public abstract class ProxyVpn implements Runnable, InspectorVpn {
+
+    protected final ExecutorService executorService = Executors.newCachedThreadPool(new DaemonThreadFactory(getClass().getSimpleName()));
 
     protected static ClientOS readOS(DataInput vpnReadStream) throws IOException {
         int os = vpnReadStream.readUnsignedByte();
@@ -42,6 +47,11 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
     @Override
     public RootCert getRootCert() {
         return rootCert;
+    }
+
+    @Override
+    public ExecutorService getExecutorService() {
+        return executorService;
     }
 
     protected ClientOS clientOS = ClientOS.MacOS;
