@@ -15,6 +15,11 @@ public enum AcceptRule {
     /**
      * quic in the middle
      */
-    QUIC_MITM
+    QUIC_MITM,
+
+    /**
+     * filter http3
+     */
+    FILTER_H3
 
 }

@@ -71,7 +71,7 @@ public class Main {
         Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(StreamForward.class).setLevel(Level.INFO);
         Logger.getLogger("com.twitter.http2").setLevel(Level.INFO);
-        Logger.getLogger(UDProxy.class).setLevel(Level.DEBUG);
+        Logger.getLogger("com.github.netguard.vpn.udp").setLevel(Level.DEBUG);
         VpnServer vpnServer = new VpnServer(20260);
         vpnServer.preparePreMasterSecretsLogFile();
         vpnServer.enableBroadcast(10);

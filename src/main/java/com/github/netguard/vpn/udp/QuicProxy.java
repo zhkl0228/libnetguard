@@ -41,9 +41,10 @@ class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProt
         @Override
         public void run() {
             try {
-                QuicStream clientStream = connection.createStream(true);
-                log.debug("createStream clientStream={}, serverStream={}", clientStream, serverStream);
-                StreamForward.forward(clientStream, serverStream);
+                boolean bidirectional = serverStream.isBidirectional();
+                QuicStream clientStream = connection.createStream(bidirectional);
+                log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
+                StreamForward.forward(clientStream, serverStream, bidirectional);
             } catch (Exception e) {
                 log.warn("run", e);
             }
