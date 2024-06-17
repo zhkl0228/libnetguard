@@ -3,9 +3,10 @@
  *  Licensed under the terms of the Apache 2.0 license.
  *  See LICENSE file in {@link https://github.com/lafaspot/ja3_4java/blob/master/LICENSE} for terms.
  */
-package com.github.netguard.vpn.tcp;
+package com.github.netguard.vpn.tls;
 
 import cn.hutool.crypto.digest.DigestUtil;
+import net.luminis.tls.TlsConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +22,7 @@ import java.util.Map;
  * Generates JA3 signature based on the implementation described at <a href="https://github.com/salesforce/ja3">ja3</a>.
  *
  */
-public final class JA3Signature {
+public final class JA3Signature implements TlsSignature {
 
     private static final Logger log = LoggerFactory.getLogger(JA3Signature.class);
 
@@ -71,14 +72,9 @@ public final class JA3Signature {
     private static final int UINT24_LENGTH = 3;
 
     /**
-     * Newline character.
-     */
-    private static final byte NEWLINE = 0x0a;
-
-    /**
      * Vertical Tab character.
      */
-    private static final byte VERTICALTAB = 0x0b;
+    static final byte TYPE_ELLIPTIC_CURVE_POINT_FORMATS = 0x0b;
 
     /**
      * Byte bit mask.
@@ -165,37 +161,21 @@ public final class JA3Signature {
             final List<Integer> ecpf = new ArrayList<>(); // elliptic curve point formats
             final List<Integer> signatureAlgorithms = new ArrayList<>();
             Map<Integer, byte[]> extensionTypes = parseExtensions(packet, off, end, ec, ecpf, signatureAlgorithms);
-            return new JA3Signature(clientVersion, cipherSuites, extensionTypes, ec, ecpf, signatureAlgorithms,
-                    hostName, applicationLayerProtocols);
+            return new JA3Signature(new LegacyClientHello(clientVersion, cipherSuites, extensionTypes, ec, ecpf, signatureAlgorithms,
+                    hostName, applicationLayerProtocols));
         } catch (BufferUnderflowException | ArrayIndexOutOfBoundsException e) {
             return null;
         }
     }
 
-    private final int clientVersion;
-    private final List<Integer> cipherSuites;
-    private final Map<Integer, byte[]> extensionTypes;
-    private final List<Integer> ec;
-    private final List<Integer> ecpf;
-    private final List<Integer> signatureAlgorithms;
-    private final String hostName;
-    private final List<String> applicationLayerProtocols;
+    private final ClientHello clientHello;
 
-    private JA3Signature(int clientVersion, List<Integer> cipherSuites, Map<Integer, byte[]> extensionTypes,
-                         List<Integer> ec, List<Integer> ecpf, List<Integer> signatureAlgorithms,
-                         String hostName, List<String> applicationLayerProtocols) {
-        this.clientVersion = clientVersion;
-        this.cipherSuites = Collections.unmodifiableList(cipherSuites);
-        this.extensionTypes = Collections.unmodifiableMap(extensionTypes);
-        this.ec = Collections.unmodifiableList(ec);
-        this.ecpf = Collections.unmodifiableList(ecpf);
-        this.signatureAlgorithms = Collections.unmodifiableList(signatureAlgorithms);
-        this.hostName = hostName;
-        this.applicationLayerProtocols = Collections.unmodifiableList(applicationLayerProtocols);
+    public JA3Signature(ClientHello clientHello) {
+        this.clientHello = clientHello;
     }
 
     private Map<Integer, byte[]> createExtensionTypesWithoutGrease() {
-        Map<Integer, byte[]> extensionTypes = new LinkedHashMap<>(this.extensionTypes);
+        Map<Integer, byte[]> extensionTypes = new LinkedHashMap<>(clientHello.getExtensionTypes());
         for (Integer grease : GREASE) {
             extensionTypes.remove(grease);
         }
@@ -203,20 +183,20 @@ public final class JA3Signature {
     }
 
     private List<Integer> createCipherSuitesWithoutGrease() {
-        List<Integer> cipherSuites = new ArrayList<>(this.cipherSuites);
+        List<Integer> cipherSuites = new ArrayList<>(clientHello.getCipherSuites());
         for (Integer grease : GREASE) {
             cipherSuites.remove(grease);
         }
         return cipherSuites;
     }
 
-    private static final int SUPPORTED_VERSIONS = 0x2b;
     private static final String GREASE_TEXT = "GREASE";
 
+    @Override
     public String getPeetPrintText() {
         StringBuilder peetPrint = new StringBuilder();
         {
-            byte[] supportedVersions = extensionTypes.get(SUPPORTED_VERSIONS);
+            byte[] supportedVersions = clientHello.getExtensionTypes().get(TlsConstants.ExtensionType.supported_versions.value & 0xffff);
             List<Integer> list = new ArrayList<>(5);
             if(supportedVersions != null) {
                 ByteBuffer buffer = ByteBuffer.wrap(supportedVersions);
@@ -229,10 +209,10 @@ public final class JA3Signature {
             List<String> list = createApplicationLayerProtocols();
             peetPrint.append(String.join("-", list)).append("|");
         }
-        appendPeerPrintIntegers(peetPrint, ec, false);
-        appendPeerPrintIntegers(peetPrint, signatureAlgorithms, false);
+        appendPeerPrintIntegers(peetPrint, clientHello.getEllipticCurves(), false);
+        appendPeerPrintIntegers(peetPrint, clientHello.getSignatureAlgorithms(), false);
         {
-            byte[] pskSharedMode = extensionTypes.get(0x2d);
+            byte[] pskSharedMode = clientHello.getExtensionTypes().get(TlsConstants.ExtensionType.psk_key_exchange_modes.value & 0xffff);
             if(pskSharedMode != null && pskSharedMode.length == 2) {
                 peetPrint.append(pskSharedMode[1] & 0x1);
             }
@@ -240,7 +220,7 @@ public final class JA3Signature {
         }
         {
             List<Integer> list = new ArrayList<>();
-            byte[] compressCertificate = extensionTypes.get(0x1b);
+            byte[] compressCertificate = clientHello.getExtensionTypes().get(0x1b);
             if (compressCertificate != null) {
                 ByteBuffer buffer = ByteBuffer.wrap(compressCertificate);
                 int length = buffer.get() & 0xff;
@@ -248,8 +228,8 @@ public final class JA3Signature {
             }
             appendPeerPrintIntegers(peetPrint, list, false);
         }
-        appendPeerPrintIntegers(peetPrint, cipherSuites, false);
-        List<Integer> extensionTypes = new ArrayList<>(this.extensionTypes.keySet());
+        appendPeerPrintIntegers(peetPrint, clientHello.getCipherSuites(), false);
+        List<Integer> extensionTypes = new ArrayList<>(clientHello.getExtensionTypes().keySet());
         appendPeerPrintIntegers(peetPrint, extensionTypes, true);
         peetPrint.deleteCharAt(peetPrint.length() - 1);
         return peetPrint.toString();
@@ -271,6 +251,7 @@ public final class JA3Signature {
     }
 
     private List<String> createApplicationLayerProtocols() {
+        List<String> applicationLayerProtocols = clientHello.getApplicationLayerProtocols();
         List<String> list = new ArrayList<>(3);
         for (String applicationLayerProtocol : applicationLayerProtocols) {
             switch (applicationLayerProtocol) {
@@ -282,6 +263,11 @@ public final class JA3Signature {
                     break;
                 case "h2":
                     list.add("2");
+                    break;
+                case "h3":
+                case "h3-27":
+                case "h3-29":
+                    list.add("3");
                     break;
                 case "dot":
                 case "apns-security-v3":
@@ -295,14 +281,15 @@ public final class JA3Signature {
         return list;
     }
 
+    @Override
     public String getJa4Text() {
         Map<Integer, byte[]> extensionTypes = createExtensionTypesWithoutGrease();
         List<Integer> cipherSuites = createCipherSuitesWithoutGrease();
         StringBuilder ja4 = new StringBuilder();
-        ja4.append("t");
+        ja4.append(clientHello.getJa4Prefix());
         {
             int version;
-            byte[] supportedVersions = extensionTypes.get(SUPPORTED_VERSIONS);
+            byte[] supportedVersions = extensionTypes.get(TlsConstants.ExtensionType.supported_versions.value & 0xffff);
             if(supportedVersions != null) {
                 ByteBuffer buffer = ByteBuffer.wrap(supportedVersions);
                 int length = buffer.get() & 0xff;
@@ -315,7 +302,7 @@ public final class JA3Signature {
                     }
                 }
             } else {
-                version = clientVersion;
+                version = clientHello.getClientVersion();
             }
             switch (version) {
                 case 0x0304:
@@ -335,6 +322,7 @@ public final class JA3Signature {
                     break;
             }
         }
+        String hostName = clientHello.getHostName();
         if (hostName == null) {
             ja4.append("i");
         } else {
@@ -342,6 +330,7 @@ public final class JA3Signature {
         }
         ja4.append(String.format("%02d", Math.min(99, cipherSuites.size())));
         ja4.append(String.format("%02d", Math.min(99, extensionTypes.size())));
+        List<String> applicationLayerProtocols = clientHello.getApplicationLayerProtocols();
         if (applicationLayerProtocols.isEmpty()) {
             ja4.append("00");
         } else {
@@ -368,6 +357,7 @@ public final class JA3Signature {
             }
             Collections.sort(list);
             StringBuilder content = new StringBuilder(String.join(",", list));
+            List<Integer> signatureAlgorithms = clientHello.getSignatureAlgorithms();
             if (!signatureAlgorithms.isEmpty()) {
                 content.append("_");
                 list.clear();
@@ -399,41 +389,43 @@ public final class JA3Signature {
         }
     }
 
+    @Override
     public String getJa3Text() {
         final StringBuilder ja3 = new StringBuilder();
-        ja3.append(clientVersion);
+        ja3.append(clientHello.getClientVersion());
         ja3.append(',');
 
-        appendIntegers(cipherSuites, ja3, true);
+        appendIntegers(clientHello.getCipherSuites(), ja3, true);
         ja3.append(',');
 
-        appendIntegers(new ArrayList<>(extensionTypes.keySet()), ja3, true);
+        appendIntegers(new ArrayList<>(clientHello.getExtensionTypes().keySet()), ja3, true);
         ja3.append(',');
 
-        appendIntegers(ec, ja3, true);
+        appendIntegers(clientHello.getEllipticCurves(), ja3, true);
         ja3.append(',');
 
-        appendIntegers(ecpf, ja3, false);
+        appendIntegers(clientHello.getEllipticCurvePointFormats(), ja3, false);
         return ja3.toString();
     }
 
+    @Override
     public String getJa3nText() {
         final StringBuilder ja3 = new StringBuilder();
-        ja3.append(clientVersion);
+        ja3.append(clientHello.getClientVersion());
         ja3.append(',');
 
-        appendIntegers(cipherSuites, ja3, true);
+        appendIntegers(clientHello.getCipherSuites(), ja3, true);
         ja3.append(',');
 
-        List<Integer> list = new ArrayList<>(extensionTypes.keySet());
+        List<Integer> list = new ArrayList<>(clientHello.getExtensionTypes().keySet());
         Collections.sort(list);
         appendIntegers(list, ja3, true);
         ja3.append(',');
 
-        appendIntegers(ec, ja3, true);
+        appendIntegers(clientHello.getEllipticCurves(), ja3, true);
         ja3.append(',');
 
-        appendIntegers(ecpf, ja3, false);
+        appendIntegers(clientHello.getEllipticCurvePointFormats(), ja3, false);
         return ja3.toString();
     }
 
@@ -456,15 +448,15 @@ public final class JA3Signature {
             int extensionLength = getUInt16(packet, offset, packetEnd);
             offset += UINT16_LENGTH;
 
-            if (extensionType == NEWLINE) {
+            if (extensionType == TlsConstants.ExtensionType.supported_groups.value) {
                 // Elliptic curve points
                 int curveListLength = getUInt16(packet, offset, packetEnd);
                 convertUInt16ArrayToJa3(packet, offset + UINT16_LENGTH, offset + UINT16_LENGTH + curveListLength, ec);
-            } else if (extensionType == VERTICALTAB) {
+            } else if (extensionType == TYPE_ELLIPTIC_CURVE_POINT_FORMATS) {
                 // Elliptic curve point formats
                 int curveFormatLength = packet.get(offset) & BITMASK;
                 convertUInt8ArrayToJa3(packet, offset + 1, offset + 1 + curveFormatLength, ecpf);
-            } else if (extensionType == 0xd) {
+            } else if (extensionType == TlsConstants.ExtensionType.signature_algorithms.value) {
                 int signatureAlgorithmsLength = getUInt16(packet, offset, packetEnd);
                 convertUInt16ArrayToJa3(packet, offset + UINT16_LENGTH, offset + UINT16_LENGTH + signatureAlgorithmsLength, signatureAlgorithms);
             }
@@ -528,7 +520,7 @@ public final class JA3Signature {
      * @param out string builder to output the generated JA3 string
      * @throws BufferUnderflowException when source packet does not have enough bytes to read
      */
-    private static void convertUInt8ArrayToJa3(final ByteBuffer source, final int start, final int end, final List<Integer> out) {
+    static void convertUInt8ArrayToJa3(final ByteBuffer source, final int start, final int end, final List<Integer> out) {
         int st = start;
         for (; st < end; st++) {
             out.add(getByte(source, st, end) & 0xff);

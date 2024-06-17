@@ -1,6 +1,7 @@
 package com.github.netguard.vpn.tcp;
 
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.tls.JA3Signature;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpHeaders;

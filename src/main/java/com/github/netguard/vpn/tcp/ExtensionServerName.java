@@ -2,6 +2,7 @@ package com.github.netguard.vpn.tcp;
 
 import cn.hutool.core.util.HexUtil;
 import com.github.netguard.Inspector;
+import com.github.netguard.vpn.tls.JA3Signature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -1,5 +1,8 @@
 package com.github.netguard.vpn.udp;
 
+import com.github.netguard.vpn.tls.JA3Signature;
+import com.github.netguard.vpn.tls.QuicClientHello;
+import com.github.netguard.vpn.tls.TlsSignature;
 import net.luminis.tls.extension.ApplicationLayerProtocolNegotiationExtension;
 import net.luminis.tls.extension.Extension;
 import net.luminis.tls.extension.ServerNameExtension;
@@ -23,6 +26,7 @@ public class PacketRequest {
     public final String hostName;
     public final List<String> applicationLayerProtocols;
     public final Message dnsQuery;
+    public final TlsSignature tlsSignature;
 
     public byte[] getPrologue() {
         return Arrays.copyOf(buffer, length);
@@ -55,9 +59,11 @@ public class PacketRequest {
             }
             this.hostName = hostName;
             this.applicationLayerProtocols = applicationLayerProtocols == null ? Collections.emptyList() : new ArrayList<>(applicationLayerProtocols);
+            this.tlsSignature = new JA3Signature(new QuicClientHello(clientHello, hostName, applicationLayerProtocols));
         } else {
             this.hostName = null;
             this.applicationLayerProtocols = Collections.emptyList();
+            this.tlsSignature = null;
         }
     }
 
@@ -68,7 +74,6 @@ public class PacketRequest {
                 ", port=" + port +
                 ", hostName='" + hostName + '\'' +
                 ", applicationLayerProtocols=" + applicationLayerProtocols +
-                ", dnsQuery=" + dnsQuery +
                 '}';
     }
 }

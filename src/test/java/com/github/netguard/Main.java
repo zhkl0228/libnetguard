@@ -16,6 +16,7 @@ import com.github.netguard.vpn.tcp.StreamForward;
 import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.tls.TlsSignature;
 import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
@@ -32,6 +33,7 @@ import io.netty.util.ResourceLeakDetector;
 import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.conscrypt.OpenSSLProvider;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
 import org.krakenapps.pcap.decoder.http.impl.HttpSession;
 import org.xbill.DNS.ARecord;
@@ -210,14 +212,15 @@ public class Main {
             }
             @Override
             public AcceptResult acceptTcp(ConnectRequest connectRequest) {
-                if (connectRequest.ja3 != null) {
+                TlsSignature tlsSignature = connectRequest.tlsSignature;
+                if (tlsSignature != null) {
                     System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=%s, ja3n_text=%s%n", connectRequest,
-                            DigestUtil.md5Hex(connectRequest.ja3.getJa3Text()),
-                            DigestUtil.md5Hex(connectRequest.ja3.getJa3nText()),
-                            connectRequest.ja3.getJa4Text(),
-                            DigestUtil.md5Hex(connectRequest.ja3.getPeetPrintText()),
-                            connectRequest.ja3.getJa3Text(),
-                            connectRequest.ja3.getJa3nText());
+                            DigestUtil.md5Hex(tlsSignature.getJa3Text()),
+                            DigestUtil.md5Hex(tlsSignature.getJa3nText()),
+                            tlsSignature.getJa4Text(),
+                            DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
+                            tlsSignature.getJa3Text(),
+                            tlsSignature.getJa3nText());
                 }
                 if ("weixin.qq.com".equals(connectRequest.hostName) || "tls.browserleaks.com".equals(connectRequest.hostName)) {
                     return AcceptResult.builder(AllowRule.FILTER_H2)
@@ -238,6 +241,16 @@ public class Main {
                 if (packetRequest.dnsQuery != null) {
                     return AcceptRule.Forward;
                 }
+                TlsSignature tlsSignature = packetRequest.tlsSignature;
+                if (tlsSignature != null) {
+                    System.out.printf("acceptUdp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=%s, ja3n_text=%s%n", packetRequest,
+                            DigestUtil.md5Hex(tlsSignature.getJa3Text()),
+                            DigestUtil.md5Hex(tlsSignature.getJa3nText()),
+                            tlsSignature.getJa4Text(),
+                            DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
+                            tlsSignature.getJa3Text(),
+                            tlsSignature.getJa3nText());
+                }
                 return AcceptRule.QUIC_MITM;
             }
         }
@@ -247,7 +260,7 @@ public class Main {
         /*
          * https://github.com/google/conscrypt
          */
-        Security.addProvider(new org.conscrypt.OpenSSLProvider());
+        Security.addProvider(new OpenSSLProvider());
     }
 
 }

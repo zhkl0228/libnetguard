@@ -6,6 +6,7 @@ import com.github.netguard.Inspector;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.ServerCertificate;
+import com.github.netguard.vpn.tls.QuicClientHello;
 import eu.faircode.netguard.Allowed;
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.core.Role;
