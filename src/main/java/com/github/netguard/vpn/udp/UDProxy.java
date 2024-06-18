@@ -15,7 +15,6 @@ import net.luminis.quic.core.Version;
 import net.luminis.quic.core.VersionHolder;
 import net.luminis.quic.crypto.Aead;
 import net.luminis.quic.crypto.ConnectionSecrets;
-import net.luminis.quic.frame.CryptoFrame;
 import net.luminis.quic.frame.QuicFrame;
 import net.luminis.quic.log.NullLogger;
 import net.luminis.quic.log.SysOutLogger;
@@ -24,6 +23,10 @@ import net.luminis.quic.packet.LongHeaderPacket;
 import net.luminis.quic.receive.Receiver;
 import net.luminis.quic.server.ServerConnectionConfig;
 import net.luminis.quic.server.ServerConnector;
+import net.luminis.quic.stream.ReceiveBuffer;
+import net.luminis.quic.stream.ReceiveBufferImpl;
+import net.luminis.quic.stream.StreamElement;
+import net.luminis.tls.TlsConstants;
 import net.luminis.tls.handshake.ClientHello;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +55,9 @@ public class UDProxy {
     private static final int READ_TIMEOUT = 60000;
 
     public static Allowed redirect(InspectorVpn vpn, InetSocketAddress client, InetSocketAddress server) {
+        if ("255.255.255.255".equals(server.getHostString())) {
+            return new Allowed();
+        }
         log.debug("redirect client={}, server={}", client, server);
         try {
             UDProxy proxy = new UDProxy(vpn, client, server);
@@ -279,17 +285,27 @@ public class UDProxy {
                             }
                             initialPacket.parse(bb, aead, 0, logger, 0);
                             log.debug("detectQuicClientHello initialPacket={}", initialPacket);
-                            List<QuicFrame> frameList = initialPacket.getFrames();
-                            QuicFrame firstFrame;
-                            if (!frameList.isEmpty() && (firstFrame = frameList.get(0)) instanceof CryptoFrame) {
-                                CryptoFrame cryptoFrame = (CryptoFrame) firstFrame;
-                                ClientHello clientHello = new ClientHello(ByteBuffer.wrap(cryptoFrame.getStreamData()), null);
+                            ReceiveBuffer receiveBuffer = new ReceiveBufferImpl();
+                            for(QuicFrame frame : initialPacket.getFrames()) {
+                                if (frame instanceof StreamElement) {
+                                    receiveBuffer.add((StreamElement) frame);
+                                }
+                            }
+                            ByteBuffer block = ByteBuffer.allocate((int) receiveBuffer.bytesAvailable());
+                            receiveBuffer.read(block);
+                            if (log.isDebugEnabled()) {
+                                log.debug("detectQuicClientHello receiveBuffer bytesAvailable={}, readOffset={}, allDataReceived={}, allRead={}, block.capacity={}", receiveBuffer.bytesAvailable(), receiveBuffer.readOffset(),
+                                        receiveBuffer.allDataReceived(), receiveBuffer.allRead(), block.capacity());
+                            }
+                            byte[] streamData = block.array();
+                            if (streamData.length < 1 || streamData[0] != TlsConstants.HandshakeType.client_hello.value) {
+                                log.warn("{}", Inspector.inspectString(streamData, "detectQuicClientHello frameList=" + initialPacket.getFrames()));
+                            } else {
+                                ClientHello clientHello = new ClientHello(ByteBuffer.wrap(streamData), null);
                                 if (log.isDebugEnabled()) {
-                                    log.debug("{}", Inspector.inspectString(cryptoFrame.getStreamData(), "detectQuicClientHello initialPacket.cryptoFrame"));
+                                    log.debug("{}", Inspector.inspectString(streamData, "detectQuicClientHello initialPacket.cryptoFrame"));
                                 }
                                 return clientHello;
-                            } else {
-                                log.warn("detectQuicClientHello frameList={}", frameList);
                             }
                         } else {
                             log.warn("detectQuicClientHello type={}", type);

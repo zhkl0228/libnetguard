@@ -17,6 +17,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +45,32 @@ class Http3StreamForward extends QuicStreamForward {
             if (forwardHttp3Frame(outputStream)) {
                 break;
             }
+        }
+    }
+
+    private byte[] headerBlock;
+    private final List<byte[]> dataBlocks = new ArrayList<>(3);
+
+    @Override
+    void onEOF(DataOutputStream outputStream) throws IOException {
+        if(headerBlock == null) {
+            log.debug("onEOF dataBlockSize={}", dataBlocks.size());
+            return;
+        }
+
+        try {
+            List<Map.Entry<String, String>> headers = decoder.decodeStream(new ByteArrayInputStream(headerBlock));
+            log.debug("forwardHttp3Frame headers={}", headers);
+            ByteBuffer bb = encoder.compressHeaders(headers);
+            writeVariableLengthInteger(outputStream, HTTP3_HEADERS_FRAME_TYPE);
+            writeVariableLengthInteger(outputStream, bb.limit());
+            outputStream.write(bb.array(), 0, bb.limit());
+            for(byte[] data : dataBlocks) {
+                writeData(outputStream, HTTP3_DATA_FRAME_TYPE, data);
+            }
+        } finally {
+            headerBlock = null;
+            dataBlocks.clear();
         }
     }
 
@@ -105,16 +132,15 @@ class Http3StreamForward extends QuicStreamForward {
         }
         switch ((int) type) {
             case HTTP3_DATA_FRAME_TYPE: {
-                writeData(outputStream, type, data);
+                dataBlocks.add(data);
                 break;
             }
             case HTTP3_HEADERS_FRAME_TYPE: {
-                List<Map.Entry<String, String>> headers = decoder.decodeStream(new ByteArrayInputStream(data));
-                log.debug("forwardHttp3Frame headers={}", headers);
-                ByteBuffer bb = encoder.compressHeaders(headers);
-                writeVariableLengthInteger(outputStream, type);
-                writeVariableLengthInteger(outputStream, bb.limit());
-                outputStream.write(bb.array(), 0, bb.limit());
+                if (headerBlock == null) {
+                    headerBlock = data;
+                } else {
+                    log.warn("Already has headerBlock");
+                }
                 break;
             }
             default: {

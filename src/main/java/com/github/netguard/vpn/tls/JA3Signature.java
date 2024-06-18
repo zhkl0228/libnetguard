@@ -272,6 +272,7 @@ public final class JA3Signature implements TlsSignature {
                 case "dot":
                 case "apns-security-v3":
                 case "apns-pack-v1":
+                case "spdy/3.1":
                     break;
                 default:
                     log.warn("Unknown application layer protocol: {}", applicationLayerProtocol);

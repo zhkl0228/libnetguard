@@ -56,6 +56,7 @@ class QuicStreamForward implements Runnable {
                     int read = inputStream.read(buf);
                     log.debug("{} read {} bytes bidirectional={} from {} to {}", server ? "Server" : "Client", read, bidirectional, from, to);
                     if (read == -1) {
+                        onEOF(outputStream);
                         throw new EOFException();
                     }
                     if (read > 0) {
@@ -73,6 +74,9 @@ class QuicStreamForward implements Runnable {
         } catch (Exception e) {
             log.warn("open stream from={}, to={}", from, to, e);
         }
+    }
+
+    void onEOF(DataOutputStream outputStream) throws IOException {
     }
 
 }

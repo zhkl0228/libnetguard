@@ -131,7 +131,7 @@ public class QuicClientHello implements ClientHello {
     public List<Integer> getEllipticCurvePointFormats() {
         byte[] ellipticCurvePointFormatsData = getEllipticCurvePointFormatsData();
         if (ellipticCurvePointFormatsData == null) {
-            throw new IllegalStateException("getEllipticCurvePointFormats: " + clientHello.getExtensions());
+            return Collections.emptyList();
         }
         ByteBuffer buffer = ByteBuffer.wrap(ellipticCurvePointFormatsData);
         int curveFormatLength = buffer.get(0) & 0xff;

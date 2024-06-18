@@ -214,7 +214,7 @@ public class Main {
             public AcceptResult acceptTcp(ConnectRequest connectRequest) {
                 TlsSignature tlsSignature = connectRequest.tlsSignature;
                 if (tlsSignature != null) {
-                    System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=%s, ja3n_text=%s%n", connectRequest,
+                    System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\"%n", connectRequest,
                             DigestUtil.md5Hex(tlsSignature.getJa3Text()),
                             DigestUtil.md5Hex(tlsSignature.getJa3nText()),
                             tlsSignature.getJa4Text(),
@@ -228,7 +228,7 @@ public class Main {
                             .build();
                 }
                 if (connectRequest.isSSL()) {
-                    return AcceptResult.builder(AllowRule.CONNECT_SSL)
+                    return AcceptResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
                             .configClientSSLContext(createConscryptContext())
                             .build();
                 }
@@ -243,7 +243,7 @@ public class Main {
                 }
                 TlsSignature tlsSignature = packetRequest.tlsSignature;
                 if (tlsSignature != null) {
-                    System.out.printf("acceptUdp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=%s, ja3n_text=%s%n", packetRequest,
+                    System.out.printf("acceptUdp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\"%n", packetRequest,
                             DigestUtil.md5Hex(tlsSignature.getJa3Text()),
                             DigestUtil.md5Hex(tlsSignature.getJa3nText()),
                             tlsSignature.getJa4Text(),
