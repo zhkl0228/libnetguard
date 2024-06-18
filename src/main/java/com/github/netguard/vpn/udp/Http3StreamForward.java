@@ -12,75 +12,30 @@ import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 
-class Http3StreamForward implements Runnable {
+class Http3StreamForward extends QuicStreamForward {
 
     private static final Logger log = LoggerFactory.getLogger(Http3StreamForward.class);
 
-    static void forward(QuicStream clientStream, QuicStream serverStream, boolean bidirectional, ExecutorService executorService, boolean filterHttp3) {
-        executorService.submit(new Http3StreamForward(true, bidirectional, serverStream, clientStream, filterHttp3));
-        if (bidirectional) {
-            executorService.submit(new Http3StreamForward(false, true, clientStream, serverStream, filterHttp3));
-        }
-    }
+    private final Buffer buffer = new ChainBuffer();
 
-    private final boolean server;
-    private final boolean bidirectional;
-    private final QuicStream from, to;
-    private final boolean filterHttp3;
-
-    private Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to, boolean filterHttp3) {
-        this.server = server;
-        this.bidirectional = bidirectional;
-        this.from = from;
-        this.to = to;
-        this.filterHttp3 = filterHttp3;
+    Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to) {
+        super(server, bidirectional, from, to);
     }
 
     @Override
-    public void run() {
-        Buffer buffer = new ChainBuffer();
-        try (InputStream inputStream = from.getInputStream(); DataOutputStream outputStream = new DataOutputStream(to.getOutputStream())) {
-            byte[] buf = new byte[2048];
-            while (true) {
-                try {
-                    int read = inputStream.read(buf);
-                    log.debug("{} read {} bytes bidirectional={} from {} to {}", server ? "Server" : "Client", read, bidirectional, from, to);
-                    if (read == -1) {
-                        throw new EOFException();
-                    }
-                    if (read > 0) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("{}", Inspector.inspectString(Arrays.copyOf(buf, read), (server ? "Server" : "Client") + " forward from=" + from + ", to=" + to));
-                        }
-                        if (filterHttp3) {
-                            buffer.addLast(Arrays.copyOfRange(buf, 0, read));
-                            while (!buffer.isEOB()) {
-                                log.debug("{} readableBytes={}, read={}, from={}, to={}", server ? "Server" : "Client", buffer.readableBytes(), read, from, to);
-                                if (forwardHttp3Frame(buffer, outputStream)) {
-                                    break;
-                                }
-                            }
-                        } else {
-                            outputStream.write(buf, 0, read);
-                        }
-                        outputStream.flush();
-                    }
-                } catch (IOException e) {
-                    log.trace("forward from={}, to={}", from, to, e);
-                    break;
-                }
+    void doForward(byte[] buf, int read, DataOutputStream outputStream) throws IOException {
+        buffer.addLast(Arrays.copyOfRange(buf, 0, read));
+        while (!buffer.isEOB()) {
+            log.debug("{} readableBytes={}, read={}, from={}, to={}", server ? "Server" : "Client", buffer.readableBytes(), read, from, to);
+            if (forwardHttp3Frame(outputStream)) {
+                break;
             }
-        } catch (Exception e) {
-            log.warn("open stream from={}, to={}", from, to, e);
         }
     }
 
@@ -89,7 +44,7 @@ class Http3StreamForward implements Runnable {
     private final Decoder decoder = new Decoder();
     private final Encoder encoder = new Encoder();
 
-    private boolean forwardHttp3Frame(Buffer buffer, DataOutputStream outputStream) throws IOException {
+    private boolean forwardHttp3Frame(DataOutputStream outputStream) throws IOException {
         buffer.mark();
         if (type == -1) {
             byte b = buffer.get();

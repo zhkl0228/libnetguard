@@ -49,7 +49,7 @@ class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProt
                 boolean bidirectional = serverStream.isBidirectional();
                 QuicStream clientStream = connection.createStream(bidirectional);
                 log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
-                Http3StreamForward.forward(clientStream, serverStream, bidirectional, executorService, filterHttp3);
+                QuicStreamForward.forward(clientStream, serverStream, bidirectional, executorService, filterHttp3);
             } catch (Exception e) {
                 log.debug("createStream", e);
                 serverStream.resetStream(QuicConstants.TransportErrorCode.APPLICATION_ERROR.value);
