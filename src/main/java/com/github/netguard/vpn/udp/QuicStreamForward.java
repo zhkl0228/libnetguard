@@ -1,6 +1,8 @@
 package com.github.netguard.vpn.udp;
 
 import com.github.netguard.Inspector;
+import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
 import net.luminis.quic.QuicStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,11 +18,11 @@ class QuicStreamForward implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(QuicStreamForward.class);
 
-    static void forward(QuicStream clientStream, QuicStream serverStream, boolean bidirectional, ExecutorService executorService, boolean filterHttp3) {
-        if (filterHttp3) {
-            executorService.submit(new Http3StreamForward(true, bidirectional, serverStream, clientStream));
+    static void forward(QuicStream clientStream, QuicStream serverStream, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
+        if (http2Filter != null && http2Filter.filterHost(sessionKey.getSession().getHostName())) {
+            executorService.submit(new Http3StreamForward(true, bidirectional, serverStream, clientStream, sessionKey, http2Filter));
             if (bidirectional) {
-                executorService.submit(new Http3StreamForward(false, true, clientStream, serverStream));
+                executorService.submit(new Http3StreamForward(false, true, clientStream, serverStream, sessionKey, http2Filter));
             }
         } else {
             executorService.submit(new QuicStreamForward(true, bidirectional, serverStream, clientStream));

@@ -1,6 +1,9 @@
 package com.github.netguard.vpn.udp;
 
+import cn.hutool.core.codec.Base64;
 import com.github.netguard.Inspector;
+import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
 import io.netty.buffer.ByteBuf;
 import net.luminis.qpack.Decoder;
 import net.luminis.qpack.Encoder;
@@ -22,10 +25,15 @@ class Http3StreamForward extends QuicStreamForward {
 
     private static final Logger log = LoggerFactory.getLogger(Http3StreamForward.class);
 
+    protected final Http2SessionKey sessionKey;
+    protected final Http2Filter http2Filter;
     private final Buffer buffer = new ChainBuffer();
 
-    Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to) {
+    Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to,
+                       Http2SessionKey sessionKey, Http2Filter http2Filter) {
         super(server, bidirectional, from, to);
+        this.sessionKey = sessionKey;
+        this.http2Filter = http2Filter;
     }
 
     @Override
@@ -45,40 +53,45 @@ class Http3StreamForward extends QuicStreamForward {
     private final Encoder encoder = new Encoder();
 
     private boolean forwardHttp3Frame(DataOutputStream outputStream) throws IOException {
-        buffer.mark();
-        if (type == -1) {
-            byte b = buffer.get();
-            int typeLen = numBytesForVariableLengthInteger(b);
-            buffer.reset();
-            if (buffer.readableBytes() < typeLen) {
-                type = -1;
+        {
+            buffer.mark();
+            if (type == -1) {
+                byte b = buffer.get();
+                int typeLen = numBytesForVariableLengthInteger(b);
+                buffer.reset();
+                if (buffer.readableBytes() < typeLen) {
+                    type = -1;
+                    return true;
+                }
+                type = readVariableLengthInteger(buffer, typeLen);
+                if (isReservedHttp2FrameType(type)) {
+                    writeVariableLengthInteger(outputStream, type);
+                    type = -1;
+                    return false;
+                }
+            }
+            if (buffer.isEOB()) {
                 return true;
             }
-            type = readVariableLengthInteger(buffer, typeLen);
         }
-        if (buffer.isEOB()) {
-            return true;
-        }
-        if (isReservedHttp2FrameType(type)) {
-            writeVariableLengthInteger(outputStream, type);
-            type = -1;
-            return false;
-        }
-        buffer.mark();
-        if (payLoadLength == -1) {
-            byte b = buffer.get();
-            int payloadLen = numBytesForVariableLengthInteger(b);
-            buffer.reset();
-            assert payloadLen <= 8;
-            if (buffer.readableBytes() < payloadLen) {
-                payLoadLength = -1;
-                return true;
+        {
+            buffer.mark();
+            if (payLoadLength == -1) {
+                byte b = buffer.get();
+                int payloadLen = numBytesForVariableLengthInteger(b);
+                buffer.reset();
+                assert payloadLen <= 8;
+                if (buffer.readableBytes() < payloadLen) {
+                    payLoadLength = -1;
+                    return true;
+                }
+                long len = readVariableLengthInteger(buffer, payloadLen);
+                payLoadLength = (int) len;
             }
-            long len = readVariableLengthInteger(buffer, payloadLen);
-            payLoadLength = (int) len;
         }
-        log.debug("{} forwardHttp3Frame type={}, reservedFrameType={}, payLoadLength={}, readableBytes={}, from={}, to={}", server ? "Server" : "Client", type, isReservedFrameType(type), payLoadLength, buffer.readableBytes(), from, to);
-        if (type > Integer.MAX_VALUE && !isReservedFrameType(type)) {
+        boolean reservedFrameType = isReservedFrameType(type);
+        log.debug("{} forwardHttp3Frame type={}, reservedFrameType={}, payLoadLength={}, readableBytes={}, from={}, to={}", server ? "Server" : "Client", type, reservedFrameType, payLoadLength, buffer.readableBytes(), from, to);
+        if (type > Integer.MAX_VALUE && !reservedFrameType) {
             buffer.skip(payLoadLength);
             return true;
         }
@@ -106,7 +119,7 @@ class Http3StreamForward extends QuicStreamForward {
             }
             default: {
                 writeData(outputStream, type, data);
-                log.warn("forwardHttp3Frame type={}", type);
+                log.warn("forwardHttp3Frame type={}, data={}", type, Base64.encode(data));
                 break;
             }
         }

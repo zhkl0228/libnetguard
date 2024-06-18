@@ -66,6 +66,8 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
         return fakeResponseData;
     }
 
+    protected abstract byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData);
+
     /**
      * 序列化请求与响应
      */
@@ -98,8 +100,6 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
         }
         return obj;
     }
-
-    protected abstract byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData);
 
     @Override
     public final byte[] filterPollingRequest(Http2SessionKey sessionKey, HttpRequest request, byte[] requestData, boolean newStream) {

@@ -6,6 +6,8 @@ import com.github.netguard.Inspector;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.ServerCertificate;
+import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.tcp.h2.Http2Session;
 import eu.faircode.netguard.Allowed;
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.core.Role;
@@ -49,7 +51,7 @@ public class UDProxy {
     private static final int MTU = Receiver.MAX_DATAGRAM_SIZE;
     private static final int READ_TIMEOUT = 60000;
 
-    public static Allowed redirect(InspectorVpn vpn, SocketAddress client, InetSocketAddress server) {
+    public static Allowed redirect(InspectorVpn vpn, InetSocketAddress client, InetSocketAddress server) {
         log.debug("redirect client={}, server={}", client, server);
         try {
             UDProxy proxy = new UDProxy(vpn, client, server);
@@ -60,12 +62,12 @@ public class UDProxy {
     }
 
     private final InspectorVpn vpn;
-    private final SocketAddress clientAddress;
+    private final InetSocketAddress clientAddress;
     private final InetSocketAddress serverAddress;
     private final DatagramSocket clientSocket;
     private final DatagramSocket serverSocket;
 
-    private UDProxy(InspectorVpn vpn, SocketAddress clientAddress, InetSocketAddress serverAddress) throws SocketException {
+    private UDProxy(InspectorVpn vpn, InetSocketAddress clientAddress, InetSocketAddress serverAddress) throws SocketException {
         this.vpn = vpn;
         this.clientAddress = clientAddress;
         this.serverAddress = serverAddress;
@@ -150,7 +152,8 @@ public class UDProxy {
                                                 packetRequest.applicationLayerProtocols.isEmpty()) {
                                             break; // forward traffic
                                         }
-                                        handleQuic(packetRequest, rule == AcceptRule.FILTER_H3);
+                                        Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? packetCapture.getH2Filter() : null;
+                                        handleQuic(packetRequest, http2Filter);
                                     }
                                 }
                             }
@@ -173,7 +176,7 @@ public class UDProxy {
             }
         }
 
-        private void handleQuic(PacketRequest packetRequest, boolean filterHttp3) throws SocketTimeoutException {
+        private void handleQuic(PacketRequest packetRequest, Http2Filter http2Filter) throws SocketTimeoutException {
             QuicClientConnection.Builder clientBuilder = QuicClientConnection.newBuilder();
             for (String applicationLayerProtocol : packetRequest.applicationLayerProtocols) {
                 clientBuilder.applicationProtocol(applicationLayerProtocol);
@@ -206,8 +209,9 @@ public class UDProxy {
                         .withLogger(new NullLogger())
                         .build();
                 client.serverConnector.start();
-                log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, client.serverConnector.getListenPort(), filterHttp3);
-                client.serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new QuicProxy(vpn.getExecutorService(), client.connection, filterHttp3));
+                log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, client.serverConnector.getListenPort(), http2Filter);
+                Http2Session session = new Http2Session(clientAddress.getHostString(), serverAddress.getHostString(), clientAddress.getPort(), serverAddress.getPort(), packetRequest.hostName);
+                client.serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new QuicProxy(vpn.getExecutorService(), client.connection, session, http2Filter));
                 forwardAddress = new InetSocketAddress("127.0.0.1", client.serverConnector.getListenPort());
             } catch (Exception e) {
                 client.connection.close();
