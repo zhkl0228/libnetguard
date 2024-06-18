@@ -93,7 +93,7 @@ public class Main {
         }
         @Override
         public boolean filterHost(String hostName) {
-            if (hostName.endsWith("weixin.qq.com")) {
+            if ("weixin.qq.com".equals(hostName) || "http3.is".equals(hostName)) {
                 return true;
             } else {
                 System.out.println("NOT filter http2 host=" + hostName);

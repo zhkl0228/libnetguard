@@ -11,6 +11,7 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 
@@ -49,21 +50,23 @@ class QuicStreamForward implements Runnable {
 
     @Override
     public void run() {
-        try (InputStream inputStream = from.getInputStream(); DataOutputStream outputStream = new DataOutputStream(to.getOutputStream())) {
+        try (InputStream inputStream = from.getInputStream();
+             OutputStream outputStream = to.getOutputStream();
+             DataOutputStream dataOutput = new DataOutputStream(outputStream)) {
             byte[] buf = new byte[2048];
             while (true) {
                 try {
                     int read = inputStream.read(buf);
                     log.debug("{} read {} bytes bidirectional={} from {} to {}", server ? "Server" : "Client", read, bidirectional, from, to);
                     if (read == -1) {
-                        onEOF(outputStream);
+                        onEOF(dataOutput);
                         throw new EOFException();
                     }
                     if (read > 0) {
                         if (log.isDebugEnabled()) {
                             log.debug("{}", Inspector.inspectString(Arrays.copyOf(buf, read), (server ? "Server" : "Client") + " forward from=" + from + ", to=" + to));
                         }
-                        doForward(buf, read, outputStream);
+                        doForward(buf, read, dataOutput);
                         outputStream.flush();
                     }
                 } catch (IOException e) {
@@ -74,6 +77,7 @@ class QuicStreamForward implements Runnable {
         } catch (Exception e) {
             log.warn("open stream from={}, to={}", from, to, e);
         }
+        log.debug("exiting QuicStreamForward");
     }
 
     void onEOF(DataOutputStream outputStream) throws IOException {

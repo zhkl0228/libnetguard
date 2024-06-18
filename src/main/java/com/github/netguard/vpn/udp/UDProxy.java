@@ -26,7 +26,10 @@ import net.luminis.quic.server.ServerConnector;
 import net.luminis.quic.stream.ReceiveBuffer;
 import net.luminis.quic.stream.ReceiveBufferImpl;
 import net.luminis.quic.stream.StreamElement;
+import net.luminis.quic.tls.QuicTransportParametersExtension;
 import net.luminis.tls.TlsConstants;
+import net.luminis.tls.alert.DecodeErrorException;
+import net.luminis.tls.extension.Extension;
 import net.luminis.tls.handshake.ClientHello;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +47,8 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
@@ -102,6 +107,7 @@ public class UDProxy {
             this.forwardAddress = serverAddress;
         }
         private InetSocketAddress forwardAddress;
+        private final List<QuicFrame> bufferFrames = new ArrayList<>(10);
         @Override
         public void run() {
             IPacketCapture packetCapture = vpn.getPacketCapture();
@@ -110,25 +116,40 @@ public class UDProxy {
                 byte[] buffer = new byte[MTU];
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 boolean first = true;
+                List<byte[]> pendingList = new ArrayList<>(10);
                 while (true) {
                     try {
                         serverSocket.receive(packet);
                         int length = packet.getLength();
                         if (log.isDebugEnabled()) {
-                            byte[] data = new byte[length];
-                            System.arraycopy(buffer, 0, data, 0, length);
+                            byte[] data = Arrays.copyOf(buffer, length);
                             if (client.connection == null) {
                                 log.trace("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.encode(data)));
                             } else {
                                 log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.encode(data)));
                             }
                         }
-                        if (first) {
-                            client.forwardAddress = packet.getSocketAddress();
-                            client.dnsQuery = detectDnsQuery(buffer, length);
-                            ClientHello clientHello = client.dnsQuery == null ? detectQuicClientHello(buffer, length) : null;
-                            client.dnsQuery = clientHello == null ? detectDnsQuery(buffer, length) : null;
-                            log.trace("dnsQuery={}", client.dnsQuery);
+                        boolean handleBufferFrame = !bufferFrames.isEmpty();
+                        if (first || handleBufferFrame) {
+                            if (first) {
+                                client.forwardAddress = packet.getSocketAddress();
+                                client.dnsQuery = detectDnsQuery(buffer, length);
+                                log.trace("dnsQuery={}", client.dnsQuery);
+                            }
+                            ClientHello clientHello = null;
+                            if (client.dnsQuery == null || handleBufferFrame) {
+                                try {
+                                    clientHello = detectQuicClientHello(buffer, length);
+                                    if (clientHello == null && handleBufferFrame) {
+                                        pendingList.add(Arrays.copyOf(buffer, length));
+                                        continue;
+                                    }
+                                } catch (ReassembleException e) {
+                                    bufferFrames.addAll(e.frameList);
+                                    pendingList.add(Arrays.copyOf(buffer, length));
+                                    continue;
+                                }
+                            }
                             Message fake;
                             if (dnsFilter != null &&
                                     client.dnsQuery != null &&
@@ -146,6 +167,7 @@ public class UDProxy {
                                 if (rule == null) {
                                     rule = AcceptRule.Forward;
                                 }
+                                log.debug("acceptUdp rule={}, packetRequest={}", rule, packetRequest);
                                 switch (rule) {
                                     case Discard:
                                         throw new SocketTimeoutException("discard");
@@ -159,11 +181,18 @@ public class UDProxy {
                                             break; // forward traffic
                                         }
                                         Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? packetCapture.getH2Filter() : null;
-                                        handleQuic(packetRequest, http2Filter);
+                                        handleQuic(packetRequest, http2Filter, clientHello);
                                     }
                                 }
                             }
                         }
+                        for (byte[] data : pendingList) {
+                            DatagramPacket pendingPacket = new DatagramPacket(data, data.length);
+                            pendingPacket.setSocketAddress(forwardAddress);
+                            clientSocket.send(pendingPacket);
+                            log.debug("pendingPacket={}, forwardAddress={}", pendingPacket, forwardAddress);
+                        }
+                        pendingList.clear();
                         packet.setSocketAddress(forwardAddress);
                         clientSocket.send(packet);
                     } catch (SocketTimeoutException e) {
@@ -182,22 +211,33 @@ public class UDProxy {
             }
         }
 
-        private void handleQuic(PacketRequest packetRequest, Http2Filter http2Filter) throws SocketTimeoutException {
+        private void handleQuic(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello) throws SocketTimeoutException {
             QuicClientConnection.Builder clientBuilder = QuicClientConnection.newBuilder();
             for (String applicationLayerProtocol : packetRequest.applicationLayerProtocols) {
                 clientBuilder.applicationProtocol(applicationLayerProtocol);
             }
             try {
+                clientBuilder.connectTimeout(Duration.ofSeconds(60));
+                for (Extension extension : clientHello.getExtensions()) {
+                    if (extension instanceof QuicTransportParametersExtension) {
+                        QuicTransportParametersExtension quicTransportParametersExtension = (QuicTransportParametersExtension) extension;
+                        long timeout = quicTransportParametersExtension.getTransportParameters().getMaxIdleTimeout();
+                        if (timeout >= 15000) {
+                            clientBuilder.connectTimeout(Duration.ofMillis(timeout));
+                        }
+                        break;
+                    }
+                }
                 client.connection = clientBuilder
                         .uri(URI.create(String.format("https://%s:%d", packetRequest.hostName, packetRequest.port)))
                         .proxy(packetRequest.serverIp)
-                        .connectTimeout(Duration.ofSeconds(30))
                         .build();
+                log.debug("handleQuic applicationLayerProtocols={}", packetRequest.applicationLayerProtocols);
                 client.connection.connect();
                 List<X509Certificate> chain = client.connection.getServerCertificateChain();
                 X509Certificate peerCertificate = chain.get(0);
                 String handshakeApplicationProtocol = client.connection.getHandshakeApplicationProtocol();
-                log.debug("peerCertificate={}", peerCertificate);
+                log.debug("handshakeApplicationProtocol={}, peerCertificate={}", handshakeApplicationProtocol, peerCertificate);
                 if (handshakeApplicationProtocol == null || handshakeApplicationProtocol.isBlank()) {
                     throw new IllegalStateException("handshakeApplicationProtocol=" + handshakeApplicationProtocol);
                 }
@@ -223,9 +263,9 @@ public class UDProxy {
                 client.connection.close();
                 client.connection = null;
                 if (e instanceof IOException) {
-                    log.trace("handleQuic", e);
+                    log.debug("handleQuic packetRequest={}", packetRequest, e);
                 } else {
-                    log.warn("handleQuic", e);
+                    log.warn("handleQuic packetRequest={}", packetRequest, e);
                 }
                 throw new SocketTimeoutException(e.getMessage());
             }
@@ -246,7 +286,7 @@ public class UDProxy {
             }
             return null;
         }
-        private ClientHello detectQuicClientHello(byte[] buffer, int length) {
+        private ClientHello detectQuicClientHello(byte[] buffer, int length) throws ReassembleException {
             try {
                 ByteBuffer bb = ByteBuffer.wrap(buffer);
                 bb.limit(length);
@@ -286,6 +326,11 @@ public class UDProxy {
                             initialPacket.parse(bb, aead, 0, logger, 0);
                             log.debug("detectQuicClientHello initialPacket={}", initialPacket);
                             ReceiveBuffer receiveBuffer = new ReceiveBufferImpl();
+                            for (QuicFrame frame : bufferFrames) {
+                                if (frame instanceof StreamElement) {
+                                    receiveBuffer.add((StreamElement) frame);
+                                }
+                            }
                             for(QuicFrame frame : initialPacket.getFrames()) {
                                 if (frame instanceof StreamElement) {
                                     receiveBuffer.add((StreamElement) frame);
@@ -296,16 +341,23 @@ public class UDProxy {
                             if (log.isDebugEnabled()) {
                                 log.debug("detectQuicClientHello receiveBuffer bytesAvailable={}, readOffset={}, allDataReceived={}, allRead={}, block.capacity={}", receiveBuffer.bytesAvailable(), receiveBuffer.readOffset(),
                                         receiveBuffer.allDataReceived(), receiveBuffer.allRead(), block.capacity());
+                                log.debug("{}", Inspector.inspectString(block.array(), "detectQuicClientHello receiveBuffer"));
                             }
                             byte[] streamData = block.array();
                             if (streamData.length < 1 || streamData[0] != TlsConstants.HandshakeType.client_hello.value) {
                                 log.warn("{}", Inspector.inspectString(streamData, "detectQuicClientHello frameList=" + initialPacket.getFrames()));
                             } else {
-                                ClientHello clientHello = new ClientHello(ByteBuffer.wrap(streamData), null);
-                                if (log.isDebugEnabled()) {
-                                    log.debug("{}", Inspector.inspectString(streamData, "detectQuicClientHello initialPacket.cryptoFrame"));
+                                try {
+                                    ClientHello clientHello = new ClientHello(ByteBuffer.wrap(streamData), null);
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("{}", Inspector.inspectString(streamData, "detectQuicClientHello initialPacket.cryptoFrame"));
+                                    }
+                                    bufferFrames.clear();
+                                    return clientHello;
+                                } catch (DecodeErrorException e) {
+                                    log.trace("detectQuicClientHello", e);
+                                    throw new ReassembleException(initialPacket.getFrames());
                                 }
-                                return clientHello;
                             }
                         } else {
                             log.warn("detectQuicClientHello type={}", type);
@@ -318,6 +370,8 @@ public class UDProxy {
                 } else {
                     log.debug("detectQuicClientHello flags=0x{}, type={}, length={}", Integer.toHexString(flags), type, length);
                 }
+            } catch(ReassembleException e) {
+                throw e;
             } catch(Exception e) {
                 log.warn("detectQuicClientHello", e);
             }
