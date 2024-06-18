@@ -16,10 +16,12 @@ class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProt
     private static final Logger log = LoggerFactory.getLogger(QuicProxy.class);
     private final ExecutorService executorService;
     private final QuicClientConnection connection;
+    private final boolean filterHttp3;
 
-    QuicProxy(ExecutorService executorService, QuicClientConnection connection) {
+    QuicProxy(ExecutorService executorService, QuicClientConnection connection, boolean filterHttp3) {
         this.executorService = executorService;
         this.connection = connection;
+        this.filterHttp3 = filterHttp3;
     }
 
     @Override
@@ -47,7 +49,7 @@ class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProt
                 boolean bidirectional = serverStream.isBidirectional();
                 QuicStream clientStream = connection.createStream(bidirectional);
                 log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
-                StreamForward.forward(clientStream, serverStream, bidirectional, executorService);
+                Http3StreamForward.forward(clientStream, serverStream, bidirectional, executorService, filterHttp3);
             } catch (Exception e) {
                 log.debug("createStream", e);
                 serverStream.resetStream(QuicConstants.TransportErrorCode.APPLICATION_ERROR.value);

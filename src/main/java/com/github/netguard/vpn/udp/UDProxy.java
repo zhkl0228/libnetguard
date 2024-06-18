@@ -6,7 +6,6 @@ import com.github.netguard.Inspector;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.ServerCertificate;
-import com.github.netguard.vpn.tls.QuicClientHello;
 import eu.faircode.netguard.Allowed;
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.core.Role;
@@ -208,7 +207,7 @@ public class UDProxy {
                         .build();
                 client.serverConnector.start();
                 log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, client.serverConnector.getListenPort(), filterHttp3);
-                client.serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new QuicProxy(vpn.getExecutorService(), client.connection));
+                client.serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new QuicProxy(vpn.getExecutorService(), client.connection, filterHttp3));
                 forwardAddress = new InetSocketAddress("127.0.0.1", client.serverConnector.getListenPort());
             } catch (Exception e) {
                 client.connection.close();

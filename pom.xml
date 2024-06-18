@@ -149,6 +149,11 @@
         </dependency>
         <dependency>
             <groupId>tech.kwik</groupId>
+            <artifactId>qpack</artifactId>
+            <version>1.0.2</version>
+        </dependency>
+        <dependency>
+            <groupId>tech.kwik</groupId>
             <artifactId>agent15</artifactId>
             <version>1.1-4-gcefb330-SNAPSHOT</version>
         </dependency>

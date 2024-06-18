@@ -251,7 +251,7 @@ public class Main {
                             tlsSignature.getJa3Text(),
                             tlsSignature.getJa3nText());
                 }
-                return AcceptRule.QUIC_MITM;
+                return AcceptRule.FILTER_H3;
             }
         }
     }
