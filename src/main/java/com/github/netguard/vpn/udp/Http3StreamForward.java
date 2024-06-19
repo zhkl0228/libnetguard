@@ -2,12 +2,24 @@ package com.github.netguard.vpn.udp;
 
 import cn.hutool.core.codec.Base64;
 import com.github.netguard.Inspector;
+import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
 import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.DefaultHttpRequest;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMessage;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.incubator.codec.http3.Http3SettingsFrame;
 import net.luminis.qpack.Decoder;
 import net.luminis.qpack.Encoder;
+import net.luminis.quic.QuicConstants;
 import net.luminis.quic.QuicStream;
 import org.krakenapps.pcap.util.Buffer;
 import org.krakenapps.pcap.util.ChainBuffer;
@@ -19,8 +31,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -78,6 +92,37 @@ class Http3StreamForward extends QuicStreamForward {
 
     private byte[] headerBlock;
     private final List<byte[]> dataBlocks = new ArrayList<>(3);
+    private Http3StreamForward peer;
+    final void setPeer(Http3StreamForward peer) {
+        if (this == peer) {
+            throw new IllegalArgumentException();
+        }
+        this.peer = peer;
+        peer.peer = this;
+    }
+
+    private void handleResponse(HttpResponse response, byte[] responseData) {
+        List<Map.Entry<String, String>> headers = response.headers().entries();
+        headers.add(0, new AbstractMap.SimpleEntry<>(":status", String.valueOf(response.status().code())));
+        ByteBuffer bb = encoder.compressHeaders(headers);
+        bb.flip();
+        headerBlock = new byte[bb.remaining()];
+        bb.get(headerBlock);
+        setDataBlocks(responseData);
+        log.debug("{} handleResponse headerBlock.length={}, dataBlockSize={}", server ? "Server" : "Client", headerBlock.length, dataBlocks.size());
+        from.abortReading(QuicConstants.TransportErrorCode.NO_ERROR.value);
+    }
+
+    private void setDataBlocks(byte[] data) {
+        if (data == null) {
+            return;
+        }
+        dataBlocks.clear();
+        for (int i = 0; i < data.length; i += 1024) {
+            byte[] block = Arrays.copyOfRange(data, i, Math.min(i + 1024, data.length));
+            dataBlocks.add(block);
+        }
+    }
 
     @Override
     void onEOF(DataOutputStream outputStream) throws IOException {
@@ -87,9 +132,47 @@ class Http3StreamForward extends QuicStreamForward {
         }
 
         try {
-            List<Map.Entry<String, String>> headers = decoder.decodeStream(new ByteArrayInputStream(headerBlock));
-            log.debug("onEOF forwardHttp3Frame dataBlocksSize={}, headers={}", dataBlocks.size(), headers);
-            ByteBuffer bb = encoder.compressHeaders(headers);
+            List<Map.Entry<String, String>> headerList = decoder.decodeStream(new ByteArrayInputStream(headerBlock));
+            Map<String, String> map = new LinkedHashMap<>();
+            for (Map.Entry<String, String> entry : headerList) {
+                map.put(entry.getKey(), entry.getValue());
+            }
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            for (byte[] data : dataBlocks) {
+                baos.write(data);
+            }
+            if (server) {
+                HttpRequest request = createHttpRequest(map, sessionKey.toString(), from.getStreamId());
+                log.debug("onEOF headers={}, request={}", headerList, request);
+                CancelResult result = http2Filter.cancelRequest(request, baos.toByteArray(), false);
+                if (result != null) {
+                    if (result.cancel) {
+                        from.resetStream(QuicConstants.TransportErrorCode.CONNECTION_REFUSED.value);
+                    } else {
+                        byte[] responseData = result.responseData;
+                        HttpResponse response = result.response;
+                        response.headers().set("x-netguard-fake-response", sessionKey.toString());
+                        http2Filter.filterRequest(sessionKey, request, request.headers(), baos.toByteArray());
+                        peer.handleResponse(response, responseData);
+                    }
+                    return;
+                }
+            } else {
+                HttpResponse response = createHttpResponse(map, sessionKey.toString(), from.getStreamId());
+                log.debug("onEOF headers={}, response={}", headerList, response);
+                byte[] data = http2Filter.filterResponse(sessionKey, response, response.headers(), baos.toByteArray());
+                if (data == null) {
+                    throw new IllegalStateException();
+                }
+                HttpHeaders headers = response.headers();
+                headers.setInt("x-http2-stream-id", from.getStreamId());
+                headers.set("x-netguard-session", sessionKey.toString());
+                headerList = headers.entries();
+                headerList.add(0, new AbstractMap.SimpleEntry<>(":status", String.valueOf(response.status().code())));
+                setDataBlocks(data);
+            }
+            log.debug("onEOF forwardHttp3Frame dataBlocksSize={}, headers={}", dataBlocks.size(), headerList);
+            ByteBuffer bb = encoder.compressHeaders(headerList);
             writeVariableLengthInteger(outputStream, HTTP3_HEADERS_FRAME_TYPE);
             writeVariableLengthInteger(outputStream, bb.limit());
             outputStream.write(bb.array(), 0, bb.limit());
@@ -99,6 +182,50 @@ class Http3StreamForward extends QuicStreamForward {
         } finally {
             headerBlock = null;
             dataBlocks.clear();
+        }
+    }
+
+    private static HttpResponse createHttpResponse(Map<String, String> headers, String sessionKey, int streamId) {
+        HttpResponseStatus status = HttpResponseStatus.valueOf(Integer.parseInt(headers.get(":status")));
+        headers.remove(":status");
+        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, false);
+        addNetGuardHeaders(headers, sessionKey, streamId);
+        addHeaders(response, headers);
+        return response;
+    }
+
+    private static HttpRequest createHttpRequest(Map<String, String> headers, String sessionKey, int streamId) {
+        HttpMethod method = HttpMethod.valueOf(headers.get(":method"));
+        headers.remove(":method");
+        String uri = headers.get(":path");
+        headers.remove(":path");
+
+        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, uri, false);
+
+        // Remove the scheme header
+        headers.remove(":scheme");
+
+        // Replace the H2 host header with the HTTP host header
+        String host = headers.get(":authority");
+        headers.remove(":authority");
+        headers.put(HttpHeaderNames.HOST.toString(), host);
+        addNetGuardHeaders(headers, sessionKey, streamId);
+        addHeaders(request, headers);
+        return request;
+    }
+
+    private static void addNetGuardHeaders(Map<String, String> headers, String sessionKey, int streamId) {
+        headers.put("x-http2-stream-id", String.valueOf(streamId));
+        headers.put("x-netguard-session", sessionKey);
+    }
+
+    private static void addHeaders(HttpMessage message, Map<String, String> headers) {
+        for (Map.Entry<String, String> e : headers.entrySet()) {
+            String name = e.getKey();
+            String value = e.getValue();
+            if (name.charAt(0) != ':') {
+                message.headers().add(name, value);
+            }
         }
     }
 

@@ -76,8 +76,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
         this.session = session;
         this.filter = packetCapture == null ? null : packetCapture.getH2Filter();
-        this.sessionKey = String.format("%s:%d => %s:%d", clientSocketAddress.getAddress().getHostAddress(), clientSocketAddress.getPort(),
-                serverSocketAddress.getAddress().getHostAddress(), serverSocketAddress.getPort());
+        this.sessionKey = session.toString();
     }
 
     private HttpFrameForward peer;

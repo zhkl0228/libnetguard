@@ -60,6 +60,7 @@ import java.util.List;
 
 /**
  * --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED
+ * --origin-to-force-quic-on=http3.is:443
  */
 public class Main {
 
@@ -71,8 +72,8 @@ public class Main {
         Logger.getLogger(PacketDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
         Logger.getLogger(StreamForward.class).setLevel(Level.INFO);
-        Logger.getLogger("com.twitter.http2").setLevel(Level.INFO);
-        Logger.getLogger("com.github.netguard.vpn.udp").setLevel(Level.DEBUG);
+        Logger.getLogger(HttpFrameForward.class.getPackageName()).setLevel(Level.INFO);
+        Logger.getLogger(DNSFilter.class.getPackageName()).setLevel(Level.DEBUG);
         VpnServer vpnServer = new VpnServer(20260);
         vpnServer.preparePreMasterSecretsLogFile();
         vpnServer.enableBroadcast(10);
@@ -104,7 +105,7 @@ public class Main {
         @Override
         public CancelResult cancelRequest(HttpRequest request, byte[] requestData, boolean polling) {
             String host = request.headers().get("host");
-            if ("weixin.qq.com".equals(host) && "/".equals(request.uri())) {
+            if (("weixin.qq.com".equals(host) || "http3.is".equals(host)) && "/".equals(request.uri())) {
                 HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
                 HttpHeaders headers = response.headers();
                 headers.set("content-type", "text/plain; charset=utf-8");

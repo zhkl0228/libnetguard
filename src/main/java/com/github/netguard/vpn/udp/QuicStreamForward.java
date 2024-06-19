@@ -21,10 +21,13 @@ class QuicStreamForward implements Runnable {
 
     static void forward(QuicStream clientStream, QuicStream serverStream, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
         if (http2Filter != null && http2Filter.filterHost(sessionKey.getSession().getHostName())) {
-            executorService.submit(new Http3StreamForward(true, bidirectional, serverStream, clientStream, sessionKey, http2Filter));
+            Http3StreamForward s2c = new Http3StreamForward(true, bidirectional, serverStream, clientStream, sessionKey, http2Filter);
             if (bidirectional) {
-                executorService.submit(new Http3StreamForward(false, true, clientStream, serverStream, sessionKey, http2Filter));
+                Http3StreamForward c2s = new Http3StreamForward(false, true, clientStream, serverStream, sessionKey, http2Filter);
+                c2s.setPeer(s2c);
+                executorService.submit(c2s);
             }
+            executorService.submit(s2c);
         } else {
             executorService.submit(new QuicStreamForward(true, bidirectional, serverStream, clientStream));
             if (bidirectional) {
@@ -59,7 +62,6 @@ class QuicStreamForward implements Runnable {
                     int read = inputStream.read(buf);
                     log.debug("{} read {} bytes bidirectional={} from {} to {}", server ? "Server" : "Client", read, bidirectional, from, to);
                     if (read == -1) {
-                        onEOF(dataOutput);
                         throw new EOFException();
                     }
                     if (read > 0) {
@@ -70,6 +72,7 @@ class QuicStreamForward implements Runnable {
                         outputStream.flush();
                     }
                 } catch (IOException e) {
+                    onEOF(dataOutput);
                     log.trace("forward from={}, to={}", from, to, e);
                     break;
                 }
@@ -79,7 +82,7 @@ class QuicStreamForward implements Runnable {
         } catch (Exception e) {
             log.warn("forward stream from={}, to={}", from, to, e);
         }
-        log.debug("exiting QuicStreamForward");
+        log.debug("{} exiting {}", server ? "Server" : "Client", getClass().getSimpleName());
     }
 
     void onEOF(DataOutputStream outputStream) throws IOException {
