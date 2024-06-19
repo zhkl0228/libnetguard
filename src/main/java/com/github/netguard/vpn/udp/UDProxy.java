@@ -228,9 +228,17 @@ public class UDProxy {
                         break;
                     }
                 }
+                net.luminis.quic.log.Logger clientLogger;
+                if (log.isDebugEnabled()) {
+                    clientLogger = new PrintStreamLogger(System.err);
+                    clientLogger.logDebug(true);
+                } else {
+                    clientLogger = new NullLogger();
+                }
                 client.connection = clientBuilder
                         .uri(URI.create(String.format("https://%s:%d", packetRequest.hostName, packetRequest.port)))
                         .proxy(packetRequest.serverIp)
+                        .logger(clientLogger)
                         .build();
                 log.debug("handleQuic applicationLayerProtocols={}", packetRequest.applicationLayerProtocols);
                 client.connection.connect();
@@ -249,10 +257,17 @@ public class UDProxy {
                         .build();
                 ServerConnector.Builder builder = ServerConnector.builder();
                 serverCertificate.configKeyStore(vpn.getRootCert(), builder);
+                net.luminis.quic.log.Logger serverLogger;
+                if (log.isDebugEnabled()) {
+                    serverLogger = new PrintStreamLogger(System.out);
+                    serverLogger.logDebug(true);
+                } else {
+                    serverLogger = new NullLogger();
+                }
                 client.serverConnector = builder
                         .withPort(0)
                         .withConfiguration(serverConnectionConfig)
-                        .withLogger(new NullLogger())
+                        .withLogger(serverLogger)
                         .build();
                 client.serverConnector.start();
                 log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, client.serverConnector.getListenPort(), http2Filter);

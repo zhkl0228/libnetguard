@@ -34,7 +34,7 @@ class QuicStreamForward implements Runnable {
     }
 
     final boolean server;
-    private final boolean bidirectional;
+    final boolean bidirectional;
     final QuicStream from, to;
 
     QuicStreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to) {
@@ -74,8 +74,10 @@ class QuicStreamForward implements Runnable {
                     break;
                 }
             }
+        } catch (IOException e) {
+            log.debug("forward stream from={}, to={}", from, to, e);
         } catch (Exception e) {
-            log.warn("open stream from={}, to={}", from, to, e);
+            log.warn("forward stream from={}, to={}", from, to, e);
         }
         log.debug("exiting QuicStreamForward");
     }

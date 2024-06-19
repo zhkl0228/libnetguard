@@ -5,6 +5,7 @@ import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
 import io.netty.buffer.ByteBuf;
+import io.netty.incubator.codec.http3.Http3SettingsFrame;
 import net.luminis.qpack.Decoder;
 import net.luminis.qpack.Encoder;
 import net.luminis.quic.QuicStream;
@@ -14,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -37,9 +39,19 @@ class Http3StreamForward extends QuicStreamForward {
         this.http2Filter = http2Filter;
     }
 
+    private boolean readControlStreamType;
+
     @Override
     void doForward(byte[] buf, int read, DataOutputStream outputStream) throws IOException {
         buffer.addLast(Arrays.copyOfRange(buf, 0, read));
+        if (!bidirectional && !readControlStreamType) {
+            readControlStreamType = true;
+            int type = buffer.get() & 0xff;
+            if (type != HTTP3_CONTROL_STREAM_TYPE) {
+                log.warn("control stream type {} is not supported", type);
+            }
+            outputStream.write(type);
+        }
         while (!buffer.isEOB()) {
             log.debug("{} readableBytes={}, read={}, from={}, to={}", server ? "Server" : "Client", buffer.readableBytes(), read, from, to);
             if (forwardHttp3Frame(outputStream)) {
@@ -60,7 +72,7 @@ class Http3StreamForward extends QuicStreamForward {
 
         try {
             List<Map.Entry<String, String>> headers = decoder.decodeStream(new ByteArrayInputStream(headerBlock));
-            log.debug("forwardHttp3Frame headers={}", headers);
+            log.debug("onEOF forwardHttp3Frame dataBlocksSize={}, headers={}", dataBlocks.size(), headers);
             ByteBuffer bb = encoder.compressHeaders(headers);
             writeVariableLengthInteger(outputStream, HTTP3_HEADERS_FRAME_TYPE);
             writeVariableLengthInteger(outputStream, bb.limit());
@@ -143,9 +155,44 @@ class Http3StreamForward extends QuicStreamForward {
                 }
                 break;
             }
+            case HTTP3_SETTINGS_FRAME_TYPE: {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(50);
+                DataOutputStream dos = new DataOutputStream(baos);
+                Buffer bb = new ChainBuffer(data);
+                while (!bb.isEOB()) {
+                    long key, value;
+                    {
+                        bb.mark();
+                        byte b = bb.get();
+                        bb.reset();
+                        int len = numBytesForVariableLengthInteger(b);
+                        key = readVariableLengthInteger(bb, len);
+                    }
+                    {
+                        bb.mark();
+                        byte b = bb.get();
+                        bb.reset();
+                        int len = numBytesForVariableLengthInteger(b);
+                        value = readVariableLengthInteger(bb, len);
+                    }
+                    log.debug("settings key={}, value={}, readableBytes={}", key, value, bb.readableBytes());
+                    if (key == Http3SettingsFrame.HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY ||
+                            key == Http3SettingsFrame.HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE ||
+                            key == Http3SettingsFrame.HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS) {
+                        writeVariableLengthInteger(dos, key);
+                        writeVariableLengthInteger(dos, value);
+                    }
+                }
+                if (baos.size() > 0) {
+                    writeData(outputStream, HTTP3_SETTINGS_FRAME_TYPE, baos.toByteArray());
+                }
+                break;
+            }
             default: {
-                writeData(outputStream, type, data);
-                log.warn("forwardHttp3Frame type={}, data={}", type, Base64.encode(data));
+                if (reservedFrameType) {
+                    break;
+                }
+                log.warn("{} forwardHttp3Frame type={}, length={}, data={}, from={}, to={}", (server ? "Server" : "Client"), type, data.length, Base64.encode(data), from, to);
                 break;
             }
         }
@@ -156,6 +203,9 @@ class Http3StreamForward extends QuicStreamForward {
 
     private static final int HTTP3_DATA_FRAME_TYPE = 0x0;
     private static final int HTTP3_HEADERS_FRAME_TYPE = 0x1;
+    private static final int HTTP3_SETTINGS_FRAME_TYPE = 0x4;
+
+    private static final int HTTP3_CONTROL_STREAM_TYPE = 0x00;
 
     private void writeData(DataOutputStream outputStream, long type, byte[] data) throws IOException {
         writeVariableLengthInteger(outputStream, type);
@@ -198,7 +248,7 @@ class Http3StreamForward extends QuicStreamForward {
     private static long readVariableLengthInteger(Buffer in, int len) {
         switch (len) {
             case 1:
-                return in.get();
+                return in.get() & 0xff;
             case 2:
                 return in.getUnsignedShort() & 0x3fff;
             case 4:

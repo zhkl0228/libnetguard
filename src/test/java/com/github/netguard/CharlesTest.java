@@ -39,6 +39,7 @@ public class CharlesTest extends TestCase {
 
         X509Certificate rootCert = (X509Certificate) keyStore.getCertificate(alias);
         assertNotNull(rootCert);
+        assertEquals("SHA256WITHRSA", rootCert.getSigAlgName());
         System.out.println(rootCert);
 
         {

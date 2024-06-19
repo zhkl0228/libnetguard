@@ -55,7 +55,7 @@ class QuicProxy implements ApplicationProtocolConnectionFactory, ApplicationProt
                 QuicStream clientStream = connection.createStream(bidirectional);
                 log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
                 QuicStreamForward.forward(clientStream, serverStream, bidirectional, executorService,
-                        new Http2SessionKey(session, serverStream.getStreamId()), bidirectional ? http2Filter : null);
+                        new Http2SessionKey(session, serverStream.getStreamId()), http2Filter);
             } catch (Exception e) {
                 log.debug("createStream", e);
                 serverStream.resetStream(QuicConstants.TransportErrorCode.APPLICATION_ERROR.value);
