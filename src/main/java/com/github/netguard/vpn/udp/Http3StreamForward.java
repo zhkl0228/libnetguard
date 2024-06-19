@@ -47,8 +47,24 @@ class Http3StreamForward extends QuicStreamForward {
         if (!bidirectional && !readControlStreamType) {
             readControlStreamType = true;
             int type = buffer.get() & 0xff;
-            if (type != HTTP3_CONTROL_STREAM_TYPE) {
-                log.warn("control stream type {} is not supported", type);
+            switch (type) {
+                case HTTP3_CONTROL_STREAM_TYPE:
+                    break;
+                case HTTP3_QPACK_DECODER_STREAM_TYPE: {
+                    while (!buffer.isEOB()) {
+                        int instruction = buffer.get() & 0xff;
+                        if ((instruction >>> 6) == 1) {
+                            int streamId = instruction & 0x3f;
+                            log.debug("cancel streamId={}", streamId);
+                        } else {
+                            log.warn("HTTP3_QPACK_DECODER_STREAM_TYPE instruction=0x{}", Integer.toHexString(instruction));
+                        }
+                    }
+                    return;
+                }
+                default:
+                    log.warn("control stream type {} is not supported", type);
+                    break;
             }
             outputStream.write(type);
         }
@@ -206,6 +222,7 @@ class Http3StreamForward extends QuicStreamForward {
     private static final int HTTP3_SETTINGS_FRAME_TYPE = 0x4;
 
     private static final int HTTP3_CONTROL_STREAM_TYPE = 0x00;
+    private static final int HTTP3_QPACK_DECODER_STREAM_TYPE = 0x03;
 
     private void writeData(DataOutputStream outputStream, long type, byte[] data) throws IOException {
         writeVariableLengthInteger(outputStream, type);
