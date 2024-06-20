@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.udp;
+package com.github.netguard.vpn.udp.quic;
 
 import cn.hutool.core.codec.Base64;
 import com.github.netguard.Inspector;
@@ -22,7 +22,6 @@ import io.netty.incubator.codec.http3.Http3SettingsFrame;
 import net.luminis.qpack.Decoder;
 import net.luminis.qpack.Encoder;
 import net.luminis.quic.QuicConstants;
-import net.luminis.quic.QuicStream;
 import org.krakenapps.pcap.util.Buffer;
 import org.krakenapps.pcap.util.ChainBuffer;
 import org.slf4j.Logger;
@@ -40,7 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-class Http3StreamForward extends QuicStreamForward {
+public class Http3StreamForward extends QuicStreamForward {
 
     private static final Logger log = LoggerFactory.getLogger(Http3StreamForward.class);
 
@@ -48,7 +47,7 @@ class Http3StreamForward extends QuicStreamForward {
     protected final Http2Filter http2Filter;
     private final Buffer buffer = new ChainBuffer();
 
-    Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to,
+    public Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to,
                        Http2SessionKey sessionKey, Http2Filter http2Filter) {
         super(server, bidirectional, from, to);
         this.sessionKey = sessionKey;
@@ -102,7 +101,7 @@ class Http3StreamForward extends QuicStreamForward {
     private byte[] headerBlock;
     private final List<byte[]> dataBlocks = new ArrayList<>(3);
     private Http3StreamForward peer;
-    final void setPeer(Http3StreamForward peer) {
+    public final void setPeer(Http3StreamForward peer) {
         if (this == peer) {
             throw new IllegalArgumentException();
         }
@@ -118,7 +117,7 @@ class Http3StreamForward extends QuicStreamForward {
         bb.get(headerBlock);
         setDataBlocks(responseData);
         log.debug("{} handleResponse headerBlock.length={}, dataBlockSize={}", server ? "Server" : "Client", headerBlock.length, dataBlocks.size());
-        from.abortReading(QuicConstants.TransportErrorCode.NO_ERROR.value);
+        from.resetStream(QuicConstants.TransportErrorCode.NO_ERROR.value);
     }
 
     private void setDataBlocks(byte[] data) {

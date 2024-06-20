@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.udp;
+package com.github.netguard.vpn.udp.quic.kwik;
 
 import net.luminis.quic.log.BaseLogger;
 

@@ -1,4 +1,4 @@
-package com.github.netguard.vpn.udp;
+package com.github.netguard.vpn.udp.quic.kwik;
 
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2Session;
@@ -14,15 +14,15 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.ExecutorService;
 
-class QuicProxy implements ApplicationProtocolConnectionFactory {
+class KwikProxy implements ApplicationProtocolConnectionFactory {
 
-    private static final Logger log = LoggerFactory.getLogger(QuicProxy.class);
+    private static final Logger log = LoggerFactory.getLogger(KwikProxy.class);
     private final ExecutorService executorService;
     private final QuicClientConnection clientConnection;
     private final Http2Session session;
     private final Http2Filter http2Filter;
 
-    QuicProxy(ExecutorService executorService, QuicClientConnection clientConnection, Http2Session session, Http2Filter http2Filter) {
+    KwikProxy(ExecutorService executorService, QuicClientConnection clientConnection, Http2Session session, Http2Filter http2Filter) {
         this.executorService = executorService;
         this.clientConnection = clientConnection;
         this.session = session;
@@ -62,7 +62,7 @@ class QuicProxy implements ApplicationProtocolConnectionFactory {
                 boolean bidirectional = serverStream.isBidirectional();
                 QuicStream clientStream = clientConnection.createStream(bidirectional);
                 log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
-                QuicStreamForward.forward(clientStream, serverStream, bidirectional, executorService,
+                KwikStream.forward(clientStream, serverStream, bidirectional, executorService,
                         new Http2SessionKey(session, serverStream.getStreamId(), true), http2Filter);
             } catch (Exception e) {
                 log.debug("createStream", e);

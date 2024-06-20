@@ -1,9 +1,6 @@
-package com.github.netguard.vpn.udp;
+package com.github.netguard.vpn.udp.quic;
 
 import com.github.netguard.Inspector;
-import com.github.netguard.vpn.tcp.h2.Http2Filter;
-import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
-import net.luminis.quic.QuicStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,34 +10,26 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
-import java.util.concurrent.ExecutorService;
 
-class QuicStreamForward implements Runnable {
+public class QuicStreamForward implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(QuicStreamForward.class);
 
-    static void forward(QuicStream clientStream, QuicStream serverStream, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
-        if (http2Filter != null && http2Filter.filterHost(sessionKey.getSession().getHostName(), true)) {
-            Http3StreamForward s2c = new Http3StreamForward(true, bidirectional, serverStream, clientStream, sessionKey, http2Filter);
-            if (bidirectional) {
-                Http3StreamForward c2s = new Http3StreamForward(false, true, clientStream, serverStream, sessionKey, http2Filter);
-                s2c.setPeer(c2s);
-                executorService.submit(c2s);
-            }
-            executorService.submit(s2c);
-        } else {
-            executorService.submit(new QuicStreamForward(true, bidirectional, serverStream, clientStream));
-            if (bidirectional) {
-                executorService.submit(new QuicStreamForward(false, true, clientStream, serverStream));
-            }
-        }
+    public interface QuicStream {
+
+        int getStreamId();
+        InputStream openInputStream() throws IOException;
+        OutputStream openOutputStream() throws IOException;
+        void resetStream(int applicationProtocolErrorCode);
+
     }
 
     final boolean server;
     final boolean bidirectional;
-    final QuicStream from, to;
+    final QuicStream from;
+    final QuicStream to;
 
-    QuicStreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to) {
+    public QuicStreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to) {
         this.server = server;
         this.bidirectional = bidirectional;
         this.from = from;
@@ -53,8 +42,8 @@ class QuicStreamForward implements Runnable {
 
     @Override
     public void run() {
-        try (InputStream inputStream = from.getInputStream();
-             OutputStream outputStream = to.getOutputStream();
+        try (InputStream inputStream = from.openInputStream();
+             OutputStream outputStream = to.openOutputStream();
              DataOutputStream dataOutput = new DataOutputStream(outputStream)) {
             byte[] buf = new byte[2048];
             while (true) {
