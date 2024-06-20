@@ -6,14 +6,20 @@ public class Http2SessionKey {
 
     private final Http2Session session;
     private final int streamId;
+    private final boolean h3;
 
-    public Http2SessionKey(Http2Session session, int streamId) {
+    public Http2SessionKey(Http2Session session, int streamId, boolean h3) {
         this.session = session;
         this.streamId = streamId;
+        this.h3 = h3;
     }
 
     public Http2Session getSession() {
         return session;
+    }
+
+    public boolean isH3() {
+        return h3;
     }
 
     @Override

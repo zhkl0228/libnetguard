@@ -10,7 +10,7 @@ public interface Http2Filter {
      * 是否过滤对应 hostName 的 http2 请求与响应
      * @return <code>true</code>才会针对特定主机名的请求与响应执行 filter_* 过滤
      */
-    boolean filterHost(String hostName);
+    boolean filterHost(String hostName, boolean h3);
 
     byte[] filterRequest(Http2SessionKey sessionKey, HttpRequest request, HttpHeaders headers, byte[] requestData);
 

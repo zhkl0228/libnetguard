@@ -241,8 +241,8 @@ public class SSLProxyV2 implements Runnable {
         if (!applicationLayerProtocols.isEmpty()) {
             if (applicationProtocol != null) {
                 SSLSocket sslSocket = (SSLSocket) local;
-                sslSocket.setHandshakeApplicationProtocolSelector((sslSocket1, clientProtocols) -> {
-                    log.debug("handshakeApplicationProtocolSelector sslSocket={}, clientProtocols={}, applicationProtocol={}", sslSocket1, clientProtocols, applicationProtocol);
+                sslSocket.setHandshakeApplicationProtocolSelector((ssl, clientProtocols) -> {
+                    log.debug("handshakeApplicationProtocolSelector sslSocket={}, clientProtocols={}, applicationProtocol={}", ssl, clientProtocols, applicationProtocol);
                     if (clientProtocols.contains(applicationProtocol)) {
                         return applicationProtocol;
                     }
@@ -258,7 +258,7 @@ public class SSLProxyV2 implements Runnable {
         try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
             IPacketCapture packetCapture = vpn.getPacketCapture();
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
-            boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.filterHost(hostName);
+            boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.filterHost(hostName, false);
             doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, hostName, filterHttp2, applicationLayerProtocols, applicationProtocol, true, packet);
         }
     }

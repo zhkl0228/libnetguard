@@ -128,7 +128,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     }
 
     @Override
-    public boolean filterHost(String hostName) {
+    public boolean filterHost(String hostName, boolean h3) {
         return true;
     }
 

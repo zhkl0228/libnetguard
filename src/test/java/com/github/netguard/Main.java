@@ -3,6 +3,7 @@ package com.github.netguard;
 import cn.hutool.core.net.DefaultTrustManager;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.vpn.AcceptResult;
@@ -24,6 +25,7 @@ import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.ServiceSinkhole;
 import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
@@ -54,6 +56,7 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Security;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -93,12 +96,12 @@ public class Main {
             vpn.setPacketCapture(packetCapture);
         }
         @Override
-        public boolean filterHost(String hostName) {
+        public boolean filterHost(String hostName, boolean h3) {
             if ("weixin.qq.com".equals(hostName) || "http3.is".equals(hostName)) {
                 return true;
             } else {
-                System.out.println("NOT filter http2 host=" + hostName);
-                return false;
+                System.out.printf("NOT filter http%d host=%s%n", h3 ? 3 : 2, hostName);
+                return h3;
             }
         }
 
@@ -124,6 +127,18 @@ public class Main {
         @Override
         protected byte[] filterResponseInternal(HttpRequest request, byte[] requestData, HttpResponse response, byte[] responseData) {
             Inspector.inspect(responseData, "filterResponse=" + response);
+            if (response.headers().get(HttpHeaderNames.CONTENT_TYPE).contains("application/json")) {
+                try {
+                    JSONObject obj = JSONObject.parseObject(new String(responseData, StandardCharsets.UTF_8), Feature.OrderedField);
+                    if (obj != null) {
+                        obj.put("netguardFilter", getClass().getName());
+                        obj.put("filterDate", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+                        return obj.toString(SerializerFeature.PrettyFormat).getBytes(StandardCharsets.UTF_8);
+                    }
+                } catch(Exception e) {
+                    e.printStackTrace(System.out);
+                }
+            }
             return responseData;
         }
 

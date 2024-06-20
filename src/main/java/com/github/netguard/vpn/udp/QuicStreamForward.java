@@ -20,11 +20,11 @@ class QuicStreamForward implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(QuicStreamForward.class);
 
     static void forward(QuicStream clientStream, QuicStream serverStream, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
-        if (http2Filter != null && http2Filter.filterHost(sessionKey.getSession().getHostName())) {
+        if (http2Filter != null && http2Filter.filterHost(sessionKey.getSession().getHostName(), true)) {
             Http3StreamForward s2c = new Http3StreamForward(true, bidirectional, serverStream, clientStream, sessionKey, http2Filter);
             if (bidirectional) {
                 Http3StreamForward c2s = new Http3StreamForward(false, true, clientStream, serverStream, sessionKey, http2Filter);
-                c2s.setPeer(s2c);
+                s2c.setPeer(c2s);
                 executorService.submit(c2s);
             }
             executorService.submit(s2c);

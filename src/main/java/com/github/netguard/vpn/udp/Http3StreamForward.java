@@ -5,7 +5,9 @@ import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
+import com.twitter.http2.NetGuardHttp2Headers;
 import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.DefaultHttpHeadersFactory;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -64,6 +66,13 @@ class Http3StreamForward extends QuicStreamForward {
             switch (type) {
                 case HTTP3_CONTROL_STREAM_TYPE:
                     break;
+                case HTTP3_QPACK_ENCODER_STREAM_TYPE: {
+                    while (!buffer.isEOB()) {
+                        int instruction = buffer.get() & 0xff;
+                        log.warn("HTTP3_QPACK_ENCODER_STREAM_TYPE instruction=0x{}", Integer.toHexString(instruction));
+                    }
+                    return;
+                }
                 case HTTP3_QPACK_DECODER_STREAM_TYPE: {
                     while (!buffer.isEOB()) {
                         int instruction = buffer.get() & 0xff;
@@ -98,7 +107,6 @@ class Http3StreamForward extends QuicStreamForward {
             throw new IllegalArgumentException();
         }
         this.peer = peer;
-        peer.peer = this;
     }
 
     private void handleResponse(HttpResponse response, byte[] responseData) {
@@ -142,9 +150,10 @@ class Http3StreamForward extends QuicStreamForward {
                 baos.write(data);
             }
             if (server) {
+                byte[] requestData = baos.toByteArray();
                 HttpRequest request = createHttpRequest(map, sessionKey.toString(), from.getStreamId());
                 log.debug("onEOF headers={}, request={}", headerList, request);
-                CancelResult result = http2Filter.cancelRequest(request, baos.toByteArray(), false);
+                CancelResult result = http2Filter.cancelRequest(request, requestData, false);
                 if (result != null) {
                     if (result.cancel) {
                         from.resetStream(QuicConstants.TransportErrorCode.CONNECTION_REFUSED.value);
@@ -152,25 +161,41 @@ class Http3StreamForward extends QuicStreamForward {
                         byte[] responseData = result.responseData;
                         HttpResponse response = result.response;
                         response.headers().set("x-netguard-fake-response", sessionKey.toString());
-                        http2Filter.filterRequest(sessionKey, request, request.headers(), baos.toByteArray());
+                        http2Filter.filterRequest(sessionKey, request, request.headers(), requestData);
                         peer.handleResponse(response, responseData);
                     }
                     return;
                 }
-            } else {
-                HttpResponse response = createHttpResponse(map, sessionKey.toString(), from.getStreamId());
-                log.debug("onEOF headers={}, response={}", headerList, response);
-                byte[] data = http2Filter.filterResponse(sessionKey, response, response.headers(), baos.toByteArray());
+                HttpHeaders headers = new NetGuardHttp2Headers();
+                for(Map.Entry<String, String> entry : headerList) {
+                    headers.add(entry.getKey(), entry.getValue());
+                }
+                byte[] data = http2Filter.filterRequest(sessionKey, request, headers, requestData);
                 if (data == null) {
                     throw new IllegalStateException();
                 }
-                HttpHeaders headers = response.headers();
+                log.debug("onEOF filter request headers={}", headers);
+                headerList = headers.entries();
+                setDataBlocks(data);
+            } else {
+                HttpResponse response = createHttpResponse(map, sessionKey.toString(), from.getStreamId());
+                log.debug("onEOF headers={}, response={}", headerList, response);
+                HttpHeaders headers = new NetGuardHttp2Headers();
+                for(Map.Entry<String, String> entry : headerList) {
+                    headers.add(entry.getKey(), entry.getValue());
+                }
+                byte[] responseData = baos.toByteArray();
+                byte[] data = http2Filter.filterResponse(sessionKey, response, headers, responseData);
+                if (data == null) {
+                    throw new IllegalStateException();
+                }
+                log.debug("onEOF filter response headers={}", headers);
                 headers.setInt("x-http2-stream-id", from.getStreamId());
                 headers.set("x-netguard-session", sessionKey.toString());
                 headerList = headers.entries();
-                headerList.add(0, new AbstractMap.SimpleEntry<>(":status", String.valueOf(response.status().code())));
                 setDataBlocks(data);
             }
+            headerList.sort((o1, o2) -> o1.getKey().compareToIgnoreCase(o2.getKey()));
             log.debug("onEOF forwardHttp3Frame dataBlocksSize={}, headers={}", dataBlocks.size(), headerList);
             ByteBuffer bb = encoder.compressHeaders(headerList);
             writeVariableLengthInteger(outputStream, HTTP3_HEADERS_FRAME_TYPE);
@@ -187,8 +212,7 @@ class Http3StreamForward extends QuicStreamForward {
 
     private static HttpResponse createHttpResponse(Map<String, String> headers, String sessionKey, int streamId) {
         HttpResponseStatus status = HttpResponseStatus.valueOf(Integer.parseInt(headers.get(":status")));
-        headers.remove(":status");
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, false);
+        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
         addNetGuardHeaders(headers, sessionKey, streamId);
         addHeaders(response, headers);
         return response;
@@ -196,18 +220,12 @@ class Http3StreamForward extends QuicStreamForward {
 
     private static HttpRequest createHttpRequest(Map<String, String> headers, String sessionKey, int streamId) {
         HttpMethod method = HttpMethod.valueOf(headers.get(":method"));
-        headers.remove(":method");
         String uri = headers.get(":path");
-        headers.remove(":path");
 
-        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, uri, false);
-
-        // Remove the scheme header
-        headers.remove(":scheme");
+        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, uri, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
 
         // Replace the H2 host header with the HTTP host header
         String host = headers.get(":authority");
-        headers.remove(":authority");
         headers.put(HttpHeaderNames.HOST.toString(), host);
         addNetGuardHeaders(headers, sessionKey, streamId);
         addHeaders(request, headers);
@@ -349,6 +367,7 @@ class Http3StreamForward extends QuicStreamForward {
     private static final int HTTP3_SETTINGS_FRAME_TYPE = 0x4;
 
     private static final int HTTP3_CONTROL_STREAM_TYPE = 0x00;
+    private static final int HTTP3_QPACK_ENCODER_STREAM_TYPE = 0x02;
     private static final int HTTP3_QPACK_DECODER_STREAM_TYPE = 0x03;
 
     private void writeData(DataOutputStream outputStream, long type, byte[] data) throws IOException {

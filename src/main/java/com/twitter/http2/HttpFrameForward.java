@@ -17,6 +17,7 @@ import edu.baylor.cs.csi5321.spdy.frames.H2Util;
 import eu.faircode.netguard.Packet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultHttpHeadersFactory;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -331,7 +332,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 return;
             }
         }
-        byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId()), request, requestData, newStream);
+        byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request, requestData, newStream);
         if (newStream) {
             writeMessage(headersFrame, data, endStreamOnFlush, outputBuffer);
         } else {
@@ -346,7 +347,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private void handlePollingResponse(HttpHeadersFrame headersFrame, byte[] responseData, boolean endStreamOnFlush) {
-        byte[] data = filter == null ? responseData : filter.filterPollingResponse(new Http2SessionKey(session, headersFrame.getStreamId()),
+        byte[] data = filter == null ? responseData : filter.filterPollingResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
                 createHttpResponse(headersFrame, sessionKey),
                 responseData, endStreamOnFlush);
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
@@ -380,7 +381,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                         headers.add(entry.getKey(), entry.getValue());
                     }
                     headers.set("x-netguard-fake-response", sessionKey);
-                    filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId()), request,
+                    filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request,
                             headersFrame.headers(), requestData == null ? new byte[0] : requestData);
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     peer.handleResponse(fakeHeadersFrame, responseData, baos);
@@ -393,7 +394,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 return;
             }
         }
-        byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId()), request,
+        byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request,
                 headersFrame.headers(), requestData == null ? new byte[0] : requestData);
         if (data == null) {
             throw new IllegalStateException();
@@ -402,7 +403,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData, ByteArrayOutputStream outputBuffer) {
-        byte[] data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId()),
+        byte[] data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
                 createHttpResponse(headersFrame, sessionKey),
                 headersFrame.headers(), responseData == null ? new byte[0] : responseData);
         if (data == null) {
@@ -605,7 +606,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         headers.remove(":path");
 
 
-        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, uri, false);
+        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, uri, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
 
         // Remove the scheme header
         headers.remove(":scheme");
@@ -635,7 +636,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         // Create the first line of the request from the name/value pairs
         HttpResponseStatus status = HttpResponseStatus.valueOf(headers.getInt(":status"));
         headers.remove(":status");
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, false);
+        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
         addNetGuardHeaders(headers, headersFrame, sessionKey, null);
         addHeaders(response, headers);
         return response;

@@ -63,7 +63,7 @@ public class UDProxy {
         if ("255.255.255.255".equals(server.getHostString())) {
             return new Allowed();
         }
-        log.debug("redirect client={}, server={}", client, server);
+        log.trace("redirect client={}, server={}", client, server);
         try {
             UDProxy proxy = new UDProxy(vpn, client, server);
             return proxy.redirect();
@@ -86,7 +86,7 @@ public class UDProxy {
         this.serverSocket.setSoTimeout(READ_TIMEOUT);
         this.clientSocket = new DatagramSocket(new InetSocketAddress(0));
         this.clientSocket.setSoTimeout(3000);
-        log.debug("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", clientAddress, serverAddress, clientSocket.getLocalPort(), serverSocket.getLocalPort());
+        log.trace("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", clientAddress, serverAddress, clientSocket.getLocalPort(), serverSocket.getLocalPort());
 
         ExecutorService executorService = vpn.getExecutorService();
         Client client = new Client();
@@ -167,7 +167,7 @@ public class UDProxy {
                                 if (rule == null) {
                                     rule = AcceptRule.Forward;
                                 }
-                                log.debug("acceptUdp rule={}, packetRequest={}", rule, packetRequest);
+                                log.trace("acceptUdp rule={}, packetRequest={}", rule, packetRequest);
                                 switch (rule) {
                                     case Discard:
                                         throw new SocketTimeoutException("discard");
@@ -222,7 +222,7 @@ public class UDProxy {
                     if (extension instanceof QuicTransportParametersExtension) {
                         QuicTransportParametersExtension quicTransportParametersExtension = (QuicTransportParametersExtension) extension;
                         long timeout = quicTransportParametersExtension.getTransportParameters().getMaxIdleTimeout();
-                        if (timeout >= 15000) {
+                        if (timeout >= 1000) {
                             clientBuilder.connectTimeout(Duration.ofMillis(timeout));
                         }
                         break;
