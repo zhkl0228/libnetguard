@@ -179,7 +179,7 @@ public class UDProxy {
                                             break; // forward traffic
                                         }
                                         Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? packetCapture.getH2Filter() : null;
-                                        handleQuic(packetRequest, http2Filter, clientHello);
+                                        handleQuicProxy(packetRequest, http2Filter, clientHello);
                                     }
                                 }
                             }
@@ -209,7 +209,7 @@ public class UDProxy {
             }
         }
 
-        private void handleQuic(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello) throws SocketTimeoutException {
+        private void handleQuicProxy(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello) throws SocketTimeoutException {
             QuicProxyProvider quicProxyProvider = QuicProxyProvider.kwik();
             try {
                 Duration connectTimeout = Duration.ofSeconds(60);

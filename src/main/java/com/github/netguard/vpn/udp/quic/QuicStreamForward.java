@@ -1,6 +1,8 @@
 package com.github.netguard.vpn.udp.quic;
 
 import com.github.netguard.Inspector;
+import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
 
 public class QuicStreamForward implements Runnable {
 
@@ -22,6 +25,23 @@ public class QuicStreamForward implements Runnable {
         OutputStream openOutputStream() throws IOException;
         void resetStream(int applicationProtocolErrorCode);
 
+    }
+
+    public static void startForward(QuicStreamForward.QuicStream server, QuicStreamForward.QuicStream client, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
+        if (http2Filter != null && http2Filter.filterHost(sessionKey.getSession().getHostName(), true)) {
+            Http3StreamForward s2c = new Http3StreamForward(true, bidirectional, server, client, sessionKey, http2Filter);
+            if (bidirectional) {
+                Http3StreamForward c2s = new Http3StreamForward(false, true, client, server, sessionKey, http2Filter);
+                s2c.setPeer(c2s);
+                executorService.submit(c2s);
+            }
+            executorService.submit(s2c);
+        } else {
+            executorService.submit(new QuicStreamForward(true, bidirectional, server, client));
+            if (bidirectional) {
+                executorService.submit(new QuicStreamForward(false, true, client, server));
+            }
+        }
     }
 
     final boolean server;

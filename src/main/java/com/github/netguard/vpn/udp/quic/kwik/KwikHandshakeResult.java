@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory;
 import java.net.InetSocketAddress;
 import java.security.cert.X509Certificate;
 
-public class KwikHandshakeResult implements HandshakeResult {
+class KwikHandshakeResult implements HandshakeResult {
 
     private static final Logger log = LoggerFactory.getLogger(KwikHandshakeResult.class);
 

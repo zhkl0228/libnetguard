@@ -39,7 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class Http3StreamForward extends QuicStreamForward {
+class Http3StreamForward extends QuicStreamForward {
 
     private static final Logger log = LoggerFactory.getLogger(Http3StreamForward.class);
 
@@ -47,7 +47,7 @@ public class Http3StreamForward extends QuicStreamForward {
     protected final Http2Filter http2Filter;
     private final Buffer buffer = new ChainBuffer();
 
-    public Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to,
+    Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to,
                        Http2SessionKey sessionKey, Http2Filter http2Filter) {
         super(server, bidirectional, from, to);
         this.sessionKey = sessionKey;

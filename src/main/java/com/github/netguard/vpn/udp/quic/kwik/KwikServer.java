@@ -6,7 +6,7 @@ import net.luminis.quic.server.ServerConnector;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
-public class KwikServer implements QuicServer {
+class KwikServer implements QuicServer {
 
     private final ServerConnector serverConnector;
     private final InetSocketAddress forwardAddress;
