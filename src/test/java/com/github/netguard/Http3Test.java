@@ -5,6 +5,7 @@ import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import junit.framework.TestCase;
 import net.luminis.http3.Http3Client;
+import net.luminis.http3.server.Http3ApplicationProtocolFactory;
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.QuicConnection;
 import net.luminis.quic.QuicStream;
@@ -17,6 +18,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -32,7 +34,31 @@ import java.util.concurrent.TimeUnit;
 
 public class Http3Test extends TestCase {
 
-    public void testFlupke() throws Exception {
+    public void testFlupkeServer() throws Exception {
+        SysOutLogger logger = new SysOutLogger();
+        logger.logDebug(true);
+        CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+        X509Certificate peerCertificate = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(Base64.decode(CERT)));
+        RootCert rootCert = RootCert.load();
+        ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
+        ServerConnectionConfig serverConnectionConfig = ServerConnectionConfig.builder()
+                .maxOpenPeerInitiatedBidirectionalStreams(50)
+                .maxOpenPeerInitiatedUnidirectionalStreams(50)
+                .build();
+        ServerConnector.Builder builder = ServerConnector.builder();
+        serverCertificate.configKeyStore(rootCert, builder);
+        ServerConnector serverConnector = builder
+                .withPort(20170)
+                .withConfiguration(serverConnectionConfig)
+                .withLogger(logger)
+                .withPort(8443)
+                .build();
+        serverConnector.registerApplicationProtocol("h3", new Http3ApplicationProtocolFactory(new File("target/")));
+        serverConnector.start();
+        TimeUnit.HOURS.sleep(1);
+    }
+
+    public void testFlupkeClient() throws Exception {
         URI serverUrl = URI.create("https://http3.is");
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(serverUrl)

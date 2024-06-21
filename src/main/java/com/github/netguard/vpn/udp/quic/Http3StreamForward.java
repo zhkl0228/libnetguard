@@ -290,74 +290,77 @@ class Http3StreamForward extends QuicStreamForward {
         }
         boolean reservedFrameType = isReservedFrameType(type);
         log.debug("{} forwardHttp3Frame type={}, reservedFrameType={}, payLoadLength={}, readableBytes={}, from={}, to={}", server ? "Server" : "Client", type, reservedFrameType, payLoadLength, buffer.readableBytes(), from, to);
-        if (type > Integer.MAX_VALUE && !reservedFrameType) {
-            buffer.skip(payLoadLength);
-            return true;
-        }
         if (payLoadLength > buffer.readableBytes()) {
             return true;
         }
-        byte[] data = new byte[payLoadLength];
-        buffer.gets(data);
-        if (log.isDebugEnabled()) {
-            log.debug("{}", Inspector.inspectString(data, (server ? "Server" : "Client") + " forwardHttp3Frame type=" + type + ", from=" + from + ", to=" + to));
-        }
-        switch ((int) type) {
-            case HTTP3_DATA_FRAME_TYPE: {
-                dataBlocks.add(data);
-                break;
+        try {
+            if (type > Integer.MAX_VALUE && !reservedFrameType) {
+                buffer.skip(payLoadLength);
+                return false;
             }
-            case HTTP3_HEADERS_FRAME_TYPE: {
-                if (headerBlock == null) {
-                    headerBlock = data;
-                } else {
-                    log.warn("Already has headerBlock");
-                }
-                break;
+            byte[] data = new byte[payLoadLength];
+            buffer.gets(data);
+            if (log.isDebugEnabled()) {
+                log.debug("{}", Inspector.inspectString(data, (server ? "Server" : "Client") + " forwardHttp3Frame type=" + type + ", from=" + from + ", to=" + to));
             }
-            case HTTP3_SETTINGS_FRAME_TYPE: {
-                ByteArrayOutputStream baos = new ByteArrayOutputStream(50);
-                DataOutputStream dos = new DataOutputStream(baos);
-                Buffer bb = new ChainBuffer(data);
-                while (!bb.isEOB()) {
-                    long key, value;
-                    {
-                        bb.mark();
-                        byte b = bb.get();
-                        bb.reset();
-                        int len = numBytesForVariableLengthInteger(b);
-                        key = readVariableLengthInteger(bb, len);
-                    }
-                    {
-                        bb.mark();
-                        byte b = bb.get();
-                        bb.reset();
-                        int len = numBytesForVariableLengthInteger(b);
-                        value = readVariableLengthInteger(bb, len);
-                    }
-                    log.debug("settings key={}, value={}, readableBytes={}", key, value, bb.readableBytes());
-                    if (key == Http3SettingsFrame.HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY ||
-                            key == Http3SettingsFrame.HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE ||
-                            key == Http3SettingsFrame.HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS) {
-                        writeVariableLengthInteger(dos, key);
-                        writeVariableLengthInteger(dos, value);
-                    }
-                }
-                if (baos.size() > 0) {
-                    writeData(outputStream, HTTP3_SETTINGS_FRAME_TYPE, baos.toByteArray());
-                }
-                break;
-            }
-            default: {
-                if (reservedFrameType) {
+            switch ((int) type) {
+                case HTTP3_DATA_FRAME_TYPE: {
+                    dataBlocks.add(data);
                     break;
                 }
-                log.warn("{} forwardHttp3Frame type={}, length={}, data={}, from={}, to={}", (server ? "Server" : "Client"), type, data.length, Base64.encode(data), from, to);
-                break;
+                case HTTP3_HEADERS_FRAME_TYPE: {
+                    if (headerBlock == null) {
+                        headerBlock = data;
+                    } else {
+                        log.warn("Already has headerBlock");
+                    }
+                    break;
+                }
+                case HTTP3_SETTINGS_FRAME_TYPE: {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream(50);
+                    DataOutputStream dos = new DataOutputStream(baos);
+                    Buffer bb = new ChainBuffer(data);
+                    while (!bb.isEOB()) {
+                        long key, value;
+                        {
+                            bb.mark();
+                            byte b = bb.get();
+                            bb.reset();
+                            int len = numBytesForVariableLengthInteger(b);
+                            key = readVariableLengthInteger(bb, len);
+                        }
+                        {
+                            bb.mark();
+                            byte b = bb.get();
+                            bb.reset();
+                            int len = numBytesForVariableLengthInteger(b);
+                            value = readVariableLengthInteger(bb, len);
+                        }
+                        log.debug("settings key={}, value={}, readableBytes={}", key, value, bb.readableBytes());
+                        if (key == Http3SettingsFrame.HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY ||
+                                key == Http3SettingsFrame.HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE ||
+                                key == Http3SettingsFrame.HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS) {
+                            writeVariableLengthInteger(dos, key);
+                            writeVariableLengthInteger(dos, value);
+                        }
+                    }
+                    if (baos.size() > 0) {
+                        writeData(outputStream, HTTP3_SETTINGS_FRAME_TYPE, baos.toByteArray());
+                    }
+                    break;
+                }
+                default: {
+                    if (reservedFrameType) {
+                        break;
+                    }
+                    log.warn("{} forwardHttp3Frame type={}, length={}, data={}, from={}, to={}", (server ? "Server" : "Client"), type, data.length, Base64.encode(data), from, to);
+                    break;
+                }
             }
+        } finally {
+            type = -1;
+            payLoadLength = -1;
         }
-        type = -1;
-        payLoadLength = -1;
         return false;
     }
 
