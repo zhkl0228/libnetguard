@@ -2,6 +2,8 @@ package com.github.netguard.vpn.udp;
 
 import cn.hutool.core.codec.Base64;
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.util.HexUtil;
+import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
@@ -22,6 +24,7 @@ import net.luminis.quic.log.NullLogger;
 import net.luminis.quic.log.SysOutLogger;
 import net.luminis.quic.packet.InitialPacket;
 import net.luminis.quic.packet.LongHeaderPacket;
+import net.luminis.quic.packet.VersionNegotiationPacket;
 import net.luminis.quic.receive.Receiver;
 import net.luminis.quic.stream.ReceiveBuffer;
 import net.luminis.quic.stream.ReceiveBufferImpl;
@@ -39,7 +42,6 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.BufferUnderflowException;
@@ -106,6 +108,7 @@ public class UDProxy {
         }
         private InetSocketAddress forwardAddress;
         private final List<QuicFrame> bufferFrames = new ArrayList<>(10);
+        private boolean continueQuic;
         @Override
         public void run() {
             IPacketCapture packetCapture = vpn.getPacketCapture();
@@ -127,26 +130,30 @@ public class UDProxy {
                                 log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.encode(data)));
                             }
                         }
-                        boolean handleBufferFrame = !bufferFrames.isEmpty();
-                        if (first || handleBufferFrame) {
+                        if (first || continueQuic) {
                             if (first) {
-                                client.forwardAddress = packet.getSocketAddress();
-                                client.dnsQuery = detectDnsQuery(buffer, length);
-                                log.trace("dnsQuery={}", client.dnsQuery);
+                                client.forwardAddress = (InetSocketAddress) packet.getSocketAddress();
                             }
                             ClientHello clientHello = null;
-                            if (client.dnsQuery == null || handleBufferFrame) {
+                            if (client.dnsQuery == null || continueQuic) {
                                 try {
                                     clientHello = detectQuicClientHello(buffer, length);
-                                    if (clientHello == null && handleBufferFrame) {
-                                        pendingList.add(Arrays.copyOf(buffer, length));
+                                    if (clientHello == null && continueQuic) {
+                                        if (!bufferFrames.isEmpty()) {
+                                            pendingList.add(Arrays.copyOf(buffer, length));
+                                        }
                                         continue;
                                     }
                                 } catch (ReassembleException e) {
+                                    continueQuic = true;
                                     bufferFrames.addAll(e.frameList);
                                     pendingList.add(Arrays.copyOf(buffer, length));
                                     continue;
                                 }
+                            }
+                            if (first) {
+                                client.dnsQuery = detectDnsQuery(buffer, length);
+                                log.trace("dnsQuery={}", client.dnsQuery);
                             }
                             Message fake;
                             if (dnsFilter != null &&
@@ -188,7 +195,9 @@ public class UDProxy {
                             DatagramPacket pendingPacket = new DatagramPacket(data, data.length);
                             pendingPacket.setSocketAddress(forwardAddress);
                             clientSocket.send(pendingPacket);
-                            log.debug("pendingPacket={}, forwardAddress={}", pendingPacket, forwardAddress);
+                            if (log.isDebugEnabled()) {
+                                log.debug("pendingPacket={}, length={}, hash={}, forwardAddress={}", pendingPacket, data.length, DigestUtil.md5Hex(data), forwardAddress);
+                            }
                         }
                         pendingList.clear();
                         packet.setSocketAddress(forwardAddress);
@@ -261,7 +270,7 @@ public class UDProxy {
                 ByteBuffer bb = ByteBuffer.wrap(buffer);
                 bb.limit(length);
                 bb.mark();
-                if (bb.remaining() < 0x20) {
+                if (bb.remaining() < 1200) {
                     return null;
                 }
                 int flags = bb.get() & 0xff;
@@ -274,9 +283,9 @@ public class UDProxy {
                     if (log.isDebugEnabled()) {
                         log.debug("detectQuicClientHello flags=0x{}, type={}, version=0x{}", Integer.toHexString(flags), type, Integer.toHexString(version));
                     }
+                    int dcidLength = bb.get() & 0xff;
                     if (version == Version.QUIC_version_1.getId()) {
                         Version quicVersion = Version.parse(version);
-                        int dcidLength = bb.get() & 0xff;
                         byte[] dcid = new byte[dcidLength];
                         bb.get(dcid);
                         if (InitialPacket.isInitial(type, quicVersion)) {
@@ -322,7 +331,7 @@ public class UDProxy {
                                     if (log.isDebugEnabled()) {
                                         log.debug("{}", Inspector.inspectString(streamData, "detectQuicClientHello initialPacket.cryptoFrame"));
                                     }
-                                    bufferFrames.clear();
+                                    continueQuic = false;
                                     return clientHello;
                                 } catch (DecodeErrorException e) {
                                     log.trace("detectQuicClientHello", e);
@@ -332,10 +341,45 @@ public class UDProxy {
                         } else {
                             log.warn("detectQuicClientHello type={}", type);
                         }
-                    } else if (version == Version.QUIC_version_2.getId() ||
-                            version == Version.IETF_draft_27.getId() ||
-                            version == Version.IETF_draft_29.getId()) {
-                        log.warn("detectQuicClientHello version={}", version);
+                    } else  {
+                        if (dcidLength > 20) {
+                            if (initialWithUnspportedVersion(type, version, length)) {
+                                log.debug("initialWithUnspportedVersion dcidLength={}", dcidLength);
+                                // https://tools.ietf.org/html/draft-ietf-quic-transport-32#section-6
+                                // "A server sends a Version Negotiation packet in response to each packet that might initiate a new connection;"
+                                sendVersionNegotiationPacket(client.forwardAddress, bb, dcidLength);
+                                continueQuic = true;
+                                return null;
+                            }
+                        }
+                        if (bb.remaining() >= dcidLength + 1) {  // after dcid at least one byte scid length
+                            byte[] dcid = new byte[dcidLength];
+                            bb.get(dcid);
+                            int scidLength = bb.get() & 0xff;
+                            if (bb.remaining() >= scidLength) {
+                                byte[] scid = new byte[scidLength];
+                                bb.get(scid);
+                                bb.rewind();
+
+                                if (initialWithUnspportedVersion(type, version, length)) {
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("initialWithUnspportedVersion dcid={}, scid={}", HexUtil.encodeHexStr(dcid), HexUtil.encodeHexStr(scid));
+                                    }
+                                    // https://tools.ietf.org/html/draft-ietf-quic-transport-32#section-6
+                                    // "A server sends a Version Negotiation packet in response to each packet that might initiate a new connection;"
+                                    sendVersionNegotiationPacket(client.forwardAddress, bb, dcidLength);
+                                    continueQuic = true;
+                                    return null;
+                                }
+                            }
+                        }
+                        if (version == Version.QUIC_version_2.getId() ||
+                                version == Version.IETF_draft_27.getId() ||
+                                version == Version.IETF_draft_29.getId()) {
+                            log.debug("detectQuicClientHello version=0x{}, length={}", Integer.toHexString(version), length);
+                        } else {
+                            log.warn("detectQuicClientHello version=0x{}, length={}, buffer={}", Integer.toHexString(version), length, HexUtil.encodeHexStr(Arrays.copyOf(buffer, length)));
+                        }
                     }
                 } else {
                     log.debug("detectQuicClientHello flags=0x{}, type={}, length={}", Integer.toHexString(flags), type, length);
@@ -347,10 +391,50 @@ public class UDProxy {
             }
             return null;
         }
+
+        private void sendVersionNegotiationPacket(InetSocketAddress clientAddress, ByteBuffer data, int dcidLength) {
+            data.rewind();
+            if (data.remaining() >= 1 + 4 + 1 + dcidLength + 1) {
+                byte[] dcid = new byte[dcidLength];
+                data.position(1 + 4 + 1);
+                data.get(dcid);
+                int scidLength = data.get() & 0xff;
+                byte[] scid = new byte[scidLength];
+                if (scidLength > 0) {
+                    data.get(scid);
+                }
+                // https://tools.ietf.org/html/draft-ietf-quic-transport-32#section-17.2.1
+                // "The server MUST include the value from the Source Connection ID field of the packet it receives in the
+                //  Destination Connection ID field. The value for Source Connection ID MUST be copied from the Destination
+                //  Connection ID of the received packet, ..."
+                VersionNegotiationPacket versionNegotiationPacket = new VersionNegotiationPacket(Version.QUIC_version_1, dcid, scid);
+                byte[] packetBytes = versionNegotiationPacket.generatePacketBytes(null);
+                if (log.isDebugEnabled()) {
+                    log.debug("sendVersionNegotiationPacket hash={}", DigestUtil.md5Hex(packetBytes));
+                }
+                DatagramPacket datagram = new DatagramPacket(packetBytes, packetBytes.length, clientAddress.getAddress(), clientAddress.getPort());
+                try {
+                    serverSocket.send(datagram);
+                } catch (IOException e) {
+                    log.error("Sending version negotiation packet failed", e);
+                }
+            }
+        }
+
+        private boolean initialWithUnspportedVersion(int type, int version, int length) {
+            if (InitialPacket.isInitial(type, Version.parse(version))) {
+                // https://tools.ietf.org/html/draft-ietf-quic-transport-32#section-14.1
+                // "A server MUST discard an Initial packet that is carried in a UDP
+                //   datagram with a payload that is smaller than the smallest allowed
+                //   maximum datagram size of 1200 bytes. "
+                return length >= 1200;
+            }
+            return false;
+        }
     }
 
     private class Client implements Runnable {
-        private SocketAddress forwardAddress;
+        private InetSocketAddress forwardAddress;
         private Message dnsQuery;
         private ClientConnection connection;
         private QuicServer quicServer;

@@ -33,4 +33,9 @@ class KwikStream implements QuicStreamForward.QuicStream {
     public OutputStream openOutputStream() {
         return stream.getOutputStream();
     }
+
+    @Override
+    public String toString() {
+        return String.valueOf(stream);
+    }
 }

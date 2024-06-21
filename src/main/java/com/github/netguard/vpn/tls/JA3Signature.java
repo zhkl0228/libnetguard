@@ -255,6 +255,9 @@ public final class JA3Signature implements TlsSignature {
         List<String> list = new ArrayList<>(3);
         for (String applicationLayerProtocol : applicationLayerProtocols) {
             switch (applicationLayerProtocol) {
+                case "http/0.9":
+                    list.add("0.9");
+                    break;
                 case "http/1.0":
                     list.add("1.0");
                     break;
@@ -273,6 +276,7 @@ public final class JA3Signature implements TlsSignature {
                 case "apns-security-v3":
                 case "apns-pack-v1":
                 case "spdy/3.1":
+                case "hq-interop":
                     break;
                 default:
                     log.warn("Unknown application layer protocol: {}", applicationLayerProtocol);
