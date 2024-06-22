@@ -4,11 +4,10 @@ import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2Session;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
 import com.github.netguard.vpn.udp.quic.QuicStreamForward;
-import com.github.netguard.vpn.udp.quic.QuicStreamPair;
+import com.github.netguard.vpn.udp.quic.QuicStream;
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.QuicConnection;
 import net.luminis.quic.QuicConstants;
-import net.luminis.quic.QuicStream;
 import net.luminis.quic.server.ApplicationProtocolConnection;
 import net.luminis.quic.server.ApplicationProtocolConnectionFactory;
 import org.slf4j.Logger;
@@ -36,7 +35,7 @@ class KwikProxy implements ApplicationProtocolConnectionFactory {
         log.debug("createConnection protocol={}, serverConnection={}", protocol, serverConnection);
         return new ApplicationProtocolConnection() {
             @Override
-            public void acceptPeerInitiatedStream(QuicStream serverStream) {
+            public void acceptPeerInitiatedStream(net.luminis.quic.QuicStream serverStream) {
                 log.debug("acceptPeerInitiatedStream serverStream={}", serverStream);
                 executorService.submit(new AcceptPeerInitiatedStream(serverConnection, serverStream));
             }
@@ -45,9 +44,9 @@ class KwikProxy implements ApplicationProtocolConnectionFactory {
 
     private class AcceptPeerInitiatedStream implements Runnable {
         private final QuicConnection serverConnection;
-        private final QuicStream serverStream;
+        private final net.luminis.quic.QuicStream serverStream;
 
-        AcceptPeerInitiatedStream(QuicConnection serverConnection, QuicStream serverStream) {
+        AcceptPeerInitiatedStream(QuicConnection serverConnection, net.luminis.quic.QuicStream serverStream) {
             this.serverConnection = serverConnection;
             this.serverStream = serverStream;
         }
@@ -62,10 +61,10 @@ class KwikProxy implements ApplicationProtocolConnectionFactory {
 
             try {
                 boolean bidirectional = serverStream.isBidirectional();
-                QuicStream clientStream = clientConnection.createStream(bidirectional);
+                net.luminis.quic.QuicStream clientStream = clientConnection.createStream(bidirectional);
                 log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
-                QuicStreamPair server = new KwikStreamPair(serverStream);
-                QuicStreamPair client = new KwikStreamPair(clientStream);
+                QuicStream server = new KwikStream(serverStream);
+                QuicStream client = new KwikStream(clientStream);
                 QuicStreamForward.startForward(server, client, bidirectional, executorService, new Http2SessionKey(session, serverStream.getStreamId(), true), http2Filter);
             } catch (Exception e) {
                 log.debug("createStream", e);

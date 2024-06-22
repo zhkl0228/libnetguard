@@ -46,7 +46,7 @@ class Http3StreamForward extends QuicStreamForward {
     protected final Http2Filter http2Filter;
     private final Buffer buffer = new ChainBuffer();
 
-    Http3StreamForward(boolean server, boolean bidirectional, QuicStreamPair from, QuicStreamPair to,
+    Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to,
                        Http2SessionKey sessionKey, Http2Filter http2Filter) {
         super(server, bidirectional, from, to);
         this.sessionKey = sessionKey;

@@ -17,7 +17,7 @@ public class QuicStreamForward implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(QuicStreamForward.class);
 
-    public static void startForward(QuicStreamPair server, QuicStreamPair client, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
+    public static void startForward(QuicStream server, QuicStream client, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
         if (http2Filter != null && http2Filter.filterHost(sessionKey.getSession().getHostName(), true)) {
             Http3StreamForward s2c = new Http3StreamForward(true, bidirectional, server, client, sessionKey, http2Filter);
             if (bidirectional) {
@@ -36,10 +36,10 @@ public class QuicStreamForward implements Runnable {
 
     final boolean server;
     final boolean bidirectional;
-    final QuicStreamPair from;
-    final QuicStreamPair to;
+    final QuicStream from;
+    final QuicStream to;
 
-    public QuicStreamForward(boolean server, boolean bidirectional, QuicStreamPair from, QuicStreamPair to) {
+    public QuicStreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to) {
         this.server = server;
         this.bidirectional = bidirectional;
         this.from = from;
