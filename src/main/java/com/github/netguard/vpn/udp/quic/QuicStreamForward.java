@@ -10,7 +10,6 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 
@@ -18,16 +17,7 @@ public class QuicStreamForward implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(QuicStreamForward.class);
 
-    public interface QuicStream {
-
-        int getStreamId();
-        InputStream openInputStream() throws IOException;
-        OutputStream openOutputStream() throws IOException;
-        void resetStream(int applicationProtocolErrorCode);
-
-    }
-
-    public static void startForward(QuicStreamForward.QuicStream server, QuicStreamForward.QuicStream client, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
+    public static void startForward(QuicStreamPair server, QuicStreamPair client, boolean bidirectional, ExecutorService executorService, Http2SessionKey sessionKey, Http2Filter http2Filter) {
         if (http2Filter != null && http2Filter.filterHost(sessionKey.getSession().getHostName(), true)) {
             Http3StreamForward s2c = new Http3StreamForward(true, bidirectional, server, client, sessionKey, http2Filter);
             if (bidirectional) {
@@ -46,10 +36,10 @@ public class QuicStreamForward implements Runnable {
 
     final boolean server;
     final boolean bidirectional;
-    final QuicStream from;
-    final QuicStream to;
+    final QuicStreamPair from;
+    final QuicStreamPair to;
 
-    public QuicStreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to) {
+    public QuicStreamForward(boolean server, boolean bidirectional, QuicStreamPair from, QuicStreamPair to) {
         this.server = server;
         this.bidirectional = bidirectional;
         this.from = from;
@@ -63,8 +53,7 @@ public class QuicStreamForward implements Runnable {
     @Override
     public void run() {
         try (InputStream inputStream = from.openInputStream();
-             OutputStream outputStream = to.openOutputStream();
-             DataOutputStream dataOutput = new DataOutputStream(outputStream)) {
+             DataOutputStream outputStream = new DataOutputStream(to.openOutputStream())) {
             byte[] buf = new byte[2048];
             while (true) {
                 try {
@@ -77,11 +66,11 @@ public class QuicStreamForward implements Runnable {
                         if (log.isDebugEnabled()) {
                             log.debug("{}", Inspector.inspectString(Arrays.copyOf(buf, read), (server ? "Server" : "Client") + " forward from=" + from + ", to=" + to));
                         }
-                        doForward(buf, read, dataOutput);
+                        doForward(buf, read, outputStream);
                         outputStream.flush();
                     }
                 } catch (IOException e) {
-                    onEOF(dataOutput);
+                    onEOF(outputStream);
                     log.trace("forward from={}, to={}", from, to, e);
                     break;
                 }

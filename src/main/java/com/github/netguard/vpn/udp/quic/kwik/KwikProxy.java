@@ -4,6 +4,7 @@ import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2Session;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
 import com.github.netguard.vpn.udp.quic.QuicStreamForward;
+import com.github.netguard.vpn.udp.quic.QuicStreamPair;
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.QuicConnection;
 import net.luminis.quic.QuicConstants;
@@ -63,8 +64,8 @@ class KwikProxy implements ApplicationProtocolConnectionFactory {
                 boolean bidirectional = serverStream.isBidirectional();
                 QuicStream clientStream = clientConnection.createStream(bidirectional);
                 log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
-                QuicStreamForward.QuicStream server = new KwikStream(serverStream);
-                QuicStreamForward.QuicStream client = new KwikStream(clientStream);
+                QuicStreamPair server = new KwikStreamPair(serverStream);
+                QuicStreamPair client = new KwikStreamPair(clientStream);
                 QuicStreamForward.startForward(server, client, bidirectional, executorService, new Http2SessionKey(session, serverStream.getStreamId(), true), http2Filter);
             } catch (Exception e) {
                 log.debug("createStream", e);

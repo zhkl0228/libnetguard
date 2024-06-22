@@ -1,16 +1,16 @@
 package com.github.netguard.vpn.udp.quic.kwik;
 
-import com.github.netguard.vpn.udp.quic.QuicStreamForward;
+import com.github.netguard.vpn.udp.quic.QuicStreamPair;
 import net.luminis.quic.QuicStream;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 
-class KwikStream implements QuicStreamForward.QuicStream {
+class KwikStreamPair implements QuicStreamPair {
 
     private final QuicStream stream;
 
-    KwikStream(QuicStream stream) {
+    KwikStreamPair(QuicStream stream) {
         this.stream = stream;
     }
 

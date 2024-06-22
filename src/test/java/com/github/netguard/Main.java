@@ -100,7 +100,7 @@ public class Main {
             if ("weixin.qq.com".equals(hostName) || "http3.is".equals(hostName)) {
                 return true;
             } else {
-                System.out.printf("NOT filter http%d host=%s%n", h3 ? 3 : 2, hostName);
+                System.out.printf("Check filter http%d host=%s%n", h3 ? 3 : 2, hostName);
                 return h3;
             }
         }

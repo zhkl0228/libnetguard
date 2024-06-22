@@ -18,7 +18,6 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
-import io.netty.incubator.codec.http3.Http3SettingsFrame;
 import net.luminis.qpack.Decoder;
 import net.luminis.qpack.Encoder;
 import net.luminis.quic.QuicConstants;
@@ -47,7 +46,7 @@ class Http3StreamForward extends QuicStreamForward {
     protected final Http2Filter http2Filter;
     private final Buffer buffer = new ChainBuffer();
 
-    Http3StreamForward(boolean server, boolean bidirectional, QuicStream from, QuicStream to,
+    Http3StreamForward(boolean server, boolean bidirectional, QuicStreamPair from, QuicStreamPair to,
                        Http2SessionKey sessionKey, Http2Filter http2Filter) {
         super(server, bidirectional, from, to);
         this.sessionKey = sessionKey;
@@ -337,9 +336,9 @@ class Http3StreamForward extends QuicStreamForward {
                             value = readVariableLengthInteger(bb, len);
                         }
                         log.debug("settings key={}, value={}, readableBytes={}", key, value, bb.readableBytes());
-                        if (key == Http3SettingsFrame.HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY ||
-                                key == Http3SettingsFrame.HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE ||
-                                key == Http3SettingsFrame.HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS) {
+                        if (key == HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY ||
+                                key == HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE ||
+                                key == HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS) {
                             writeVariableLengthInteger(dos, key);
                             writeVariableLengthInteger(dos, value);
                         }
@@ -363,6 +362,22 @@ class Http3StreamForward extends QuicStreamForward {
         }
         return false;
     }
+
+    /**
+     * See <a href="https://tools.ietf.org/html/draft-ietf-quic-qpack-19#section-5">
+     *     SETTINGS_QPACK_MAX_TABLE_CAPACITY</a>.
+     */
+    private static final int HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY = 0x1;
+    /**
+     * See <a href="https://tools.ietf.org/html/draft-ietf-quic-qpack-19#section-5">
+     *     SETTINGS_QPACK_BLOCKED_STREAMS</a>.
+     */
+    private static final int HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS = 0x7;
+    /**
+     * See <a href="https://tools.ietf.org/html/draft-ietf-quic-http-32#section-7.2.4.1">
+     *     SETTINGS_MAX_FIELD_SECTION_SIZE</a>.
+     */
+    private static final int HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE = 0x6;
 
     private static final int HTTP3_DATA_FRAME_TYPE = 0x0;
     private static final int HTTP3_HEADERS_FRAME_TYPE = 0x1;
