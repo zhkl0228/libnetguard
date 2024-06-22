@@ -18,13 +18,13 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class TransparentProxying extends ProxyVpn implements InspectorVpn {
+public class TransparentSocketProxying extends ProxyVpn implements InspectorVpn {
 
-    private static final Logger log = LoggerFactory.getLogger(TransparentProxying.class);
+    private static final Logger log = LoggerFactory.getLogger(TransparentSocketProxying.class);
 
     private final Socket socket;
 
-    public TransparentProxying(List<ProxyVpn> clients, RootCert rootCert, Socket socket) {
+    public TransparentSocketProxying(List<ProxyVpn> clients, RootCert rootCert, Socket socket) {
         super(clients, rootCert);
         this.socket = socket;
     }

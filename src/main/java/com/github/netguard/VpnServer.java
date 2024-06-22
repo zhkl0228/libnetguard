@@ -2,7 +2,7 @@ package com.github.netguard;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
-import com.github.netguard.transparent.TransparentProxying;
+import com.github.netguard.transparent.TransparentSocketProxying;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.tcp.RootCert;
 import eu.faircode.netguard.ServiceSinkhole;
@@ -90,7 +90,7 @@ public class VpnServer {
 
     private int transparentProxyingPort;
     private Thread transparentProxyingThread;
-    private ServerSocket transparentProxyingServer;
+    private ServerSocket transparentProxyingSocketServer;
 
     public void enableTransparentProxying(int port) {
         this.transparentProxyingPort = port;
@@ -105,12 +105,12 @@ public class VpnServer {
         }
         if (transparentProxyingPort > 0) {
             try {
-                transparentProxyingServer = new ServerSocket(transparentProxyingPort);
+                transparentProxyingSocketServer = new ServerSocket(transparentProxyingPort);
                 transparentProxyingThread = new Thread(() -> {
                     while (!shutdown) {
                         try {
-                            Socket socket = transparentProxyingServer.accept();
-                            ProxyVpn vpn = new TransparentProxying(clients, rootCert, socket);
+                            Socket socket = transparentProxyingSocketServer.accept();
+                            ProxyVpn vpn = new TransparentSocketProxying(clients, rootCert, socket);
                             if (vpnListener != null) {
                                 vpnListener.onConnectClient(vpn);
                             }
@@ -197,7 +197,7 @@ public class VpnServer {
         }
         shutdown = true;
         IoUtil.close(serverSocket);
-        IoUtil.close(transparentProxyingServer);
+        IoUtil.close(transparentProxyingSocketServer);
         for (ProxyVpn vpn : clients.toArray(new ProxyVpn[0])) {
             vpn.stop();
         }

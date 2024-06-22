@@ -276,7 +276,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private int getUidQ(int version, int protocol, String saddr, int sport, String daddr, int dport) {
-        if (protocol != TCP_PROTOCOL && protocol != UDP_PROTOCOL) {
+        if (protocol != Packet.TCP_PROTOCOL && protocol != Packet.UDP_PROTOCOL) {
             return -1;
         } else {
             return SYSTEM_UID;
@@ -286,15 +286,11 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     private boolean isSupported(int protocol) {
         return (protocol == 1 /* ICMPv4 */ ||
                 protocol == 59 /* ICMPv6 */ ||
-                protocol == TCP_PROTOCOL ||
-                protocol == UDP_PROTOCOL);
+                protocol == Packet.TCP_PROTOCOL ||
+                protocol == Packet.UDP_PROTOCOL);
     }
 
-    private static final int IP_V4 = 4;
-    private static final int IP_V6 = 6;
     private static final int SYSTEM_UID = 2000;
-    private static final int TCP_PROTOCOL = 6;
-    private static final int UDP_PROTOCOL = 17;
 
     // Called from native code
     @SuppressWarnings("unused")
@@ -305,15 +301,15 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         packet.allowed = false;
         ApplicationDiscoverHandler handler = this.applicationDiscoverHandler;
         if (packet.uid <= SYSTEM_UID && isSupported(packet.protocol)) {
-            if (packet.version == IP_V4 && packet.protocol == TCP_PROTOCOL) { // tcp ipv4
+            if (packet.version == Packet.IP_V4 && packet.protocol == Packet.TCP_PROTOCOL) { // tcp ipv4
                 if (handler != null) {
                     handler.sendAllowed(packet);
                 }
                 return redirectTcp(packet);
             }
-            if (packet.version == IP_V4 && packet.protocol == UDP_PROTOCOL) { // udp ipv4
+            if (packet.version == Packet.IP_V4 && packet.protocol == Packet.UDP_PROTOCOL) { // udp ipv4
                 return redirectUdp(packet);
-            } else if(packet.version == IP_V6) {
+            } else if(packet.version == Packet.IP_V6) {
                 log.info("Disallow ipv6: packet={}", packet);
             } else {
                 log.debug("Disallow packet={}", packet);

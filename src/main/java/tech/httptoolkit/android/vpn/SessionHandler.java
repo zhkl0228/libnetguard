@@ -256,7 +256,7 @@ public class SessionHandler {
 		try {
 			vpnip = IPPacketFactory.createIPv4Header(stream);
 		} catch (PacketHeaderException e) {
-			e.printStackTrace();
+			e.printStackTrace(System.err);
 		}
 
 		TCPHeader vpntcp = null;
@@ -264,7 +264,7 @@ public class SessionHandler {
 			if (vpnip != null)
 				vpntcp = TCPPacketFactory.createTCPHeader(stream);
 		} catch (PacketHeaderException e) {
-			e.printStackTrace();
+			e.printStackTrace(System.err);
 		}
 
 		if(vpnip != null && vpntcp != null){

@@ -27,7 +27,6 @@ import tech.httptoolkit.android.vpn.util.PacketUtil;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.SocketChannel;
@@ -135,7 +134,13 @@ public class SessionManager implements ICloseSession {
 		// Initiate connection early to reduce latency
 		String ips = PacketUtil.intToIPAddress(ip);
 		String sourceIpAddress = PacketUtil.intToIPAddress(srcIp);
-		SocketAddress socketAddress = new InetSocketAddress(ips, port);
+		Allowed redirect = portRedirector.redirectUdp(sourceIpAddress, srcPort, ips, port);
+		final InetSocketAddress socketAddress;
+		if (redirect == null) {
+			socketAddress = new InetSocketAddress(ips, port);
+		} else {
+			socketAddress = new InetSocketAddress(redirect.raddr, redirect.rport);
+		}
 		log.debug("initialized connection to remote UDP server: {}:{} from {}:{}", ips, port, sourceIpAddress, srcPort);
 
 		channel.connect(socketAddress);
@@ -168,6 +173,7 @@ public class SessionManager implements ICloseSession {
 		channel.configureBlocking(false);
 
 		String ips = PacketUtil.intToIPAddress(ip);
+		String srcIps = PacketUtil.intToIPAddress(srcIp);
 		log.debug("created new SocketChannel for {}", key);
 
 		log.debug("Protected new SocketChannel");
@@ -177,7 +183,7 @@ public class SessionManager implements ICloseSession {
 		// Initiate connection straight away, to reduce latency
 		// We use the real address, unless tcpPortRedirection redirects us to a different
 		// target address for traffic on this port.
-		Allowed redirect = portRedirector.redirect(ips, port);
+		Allowed redirect = portRedirector.redirectTcp(srcIps, srcPort, ips, port);
 		final InetSocketAddress socketAddress;
 		if (redirect == null) {
 			socketAddress = new InetSocketAddress(ips, port);

@@ -146,14 +146,38 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
     }
 
     @Override
-    public Allowed redirect(String ip, int port) {
+    public Allowed redirectTcp(String saddr, int sport, String daddr, int dport) {
         if (directAllowAll) {
             return null;
         }
         Packet packet = new Packet();
-        packet.daddr = ip;
-        packet.dport = port;
+        packet.version = Packet.IP_V4;
+        packet.protocol = Packet.TCP_PROTOCOL;
+        packet.saddr = saddr;
+        packet.sport = sport;
+        packet.daddr = daddr;
+        packet.dport = dport;
         Allowed allowed = redirectTcp(packet);
+        if (allowed.raddr != null && allowed.rport > 0) {
+            return allowed;
+        } else {
+            return null;
+        }
+    }
+
+    @Override
+    public Allowed redirectUdp(String saddr, int sport, String daddr, int dport) {
+        if (directAllowAll) {
+            return null;
+        }
+        Packet packet = new Packet();
+        packet.version = Packet.IP_V4;
+        packet.protocol = Packet.UDP_PROTOCOL;
+        packet.saddr = saddr;
+        packet.sport = sport;
+        packet.daddr = daddr;
+        packet.dport = dport;
+        Allowed allowed = redirectUdp(packet);
         if (allowed.raddr != null && allowed.rport > 0) {
             return allowed;
         } else {

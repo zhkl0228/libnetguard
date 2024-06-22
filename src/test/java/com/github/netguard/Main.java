@@ -133,7 +133,7 @@ public class Main {
                     if (obj != null) {
                         obj.put("netguardFilter", getClass().getName());
                         obj.put("filterDate", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-                        return obj.toString(SerializerFeature.PrettyFormat).getBytes(StandardCharsets.UTF_8);
+                        return JSONObject.toJSONBytes(obj, SerializerFeature.PrettyFormat);
                     }
                 } catch(Exception e) {
                     e.printStackTrace(System.out);

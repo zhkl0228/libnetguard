@@ -38,6 +38,11 @@ public class Packet {
 
     private static final Logger log = LoggerFactory.getLogger(Packet.class);
 
+    public static final int IP_V4 = 4;
+    public static final int IP_V6 = 6;
+    public static final int TCP_PROTOCOL = 6;
+    public static final int UDP_PROTOCOL = 17;
+
     public long time;
     public int version;
     public int protocol;

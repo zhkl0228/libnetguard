@@ -4,6 +4,7 @@ import eu.faircode.netguard.Allowed;
 
 public interface PortRedirector {
 
-    Allowed redirect(String ip, int port);
+    Allowed redirectTcp(String saddr, int sport, String daddr, int dport);
+    Allowed redirectUdp(String saddr, int sport, String daddr, int dport);
 
 }
