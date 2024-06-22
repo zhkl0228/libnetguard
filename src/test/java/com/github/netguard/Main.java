@@ -62,8 +62,8 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED
- * --origin-to-force-quic-on=http3.is:443
+ * java9: --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED
+ * Chrome: --origin-to-force-quic-on=http3.is:443
  */
 public class Main {
 

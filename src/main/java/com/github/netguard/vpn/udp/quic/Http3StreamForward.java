@@ -53,48 +53,20 @@ class Http3StreamForward extends QuicStreamForward {
         this.http2Filter = http2Filter;
     }
 
-    private boolean readControlStreamType;
-
     @Override
     void doForward(byte[] buf, int read, DataOutputStream outputStream) throws IOException {
-        buffer.addLast(Arrays.copyOfRange(buf, 0, read));
-        if (!bidirectional && !readControlStreamType) {
-            readControlStreamType = true;
-            int type = buffer.get() & 0xff;
-            switch (type) {
-                case HTTP3_CONTROL_STREAM_TYPE:
+        if (bidirectional) {
+            buffer.addLast(Arrays.copyOfRange(buf, 0, read));
+            while (!buffer.isEOB()) {
+                log.debug("{} doForward readableBytes={}, read={}, from={}, to={}", server ? "Server" : "Client", buffer.readableBytes(), read, from, to);
+                if (forwardHttp3Frame(outputStream)) {
                     break;
-                case HTTP3_QPACK_ENCODER_STREAM_TYPE: {
-                    while (!buffer.isEOB()) {
-                        int instruction = buffer.get() & 0xff;
-                        log.warn("HTTP3_QPACK_ENCODER_STREAM_TYPE instruction=0x{}", Integer.toHexString(instruction));
-                    }
-                    return;
                 }
-                case HTTP3_QPACK_DECODER_STREAM_TYPE: {
-                    while (!buffer.isEOB()) {
-                        int instruction = buffer.get() & 0xff;
-                        if ((instruction >>> 6) == 1) {
-                            int streamId = instruction & 0x3f;
-                            log.debug("cancel streamId={}", streamId);
-                        } else {
-                            log.warn("HTTP3_QPACK_DECODER_STREAM_TYPE instruction=0x{}", Integer.toHexString(instruction));
-                        }
-                    }
-                    return;
-                }
-                default:
-                    log.warn("control stream type {} is not supported", type);
-                    break;
             }
-            outputStream.write(type);
+        } else {
+            super.doForward(buf, read, outputStream);
         }
-        while (!buffer.isEOB()) {
-            log.debug("{} readableBytes={}, read={}, from={}, to={}", server ? "Server" : "Client", buffer.readableBytes(), read, from, to);
-            if (forwardHttp3Frame(outputStream)) {
-                break;
-            }
-        }
+        log.debug("{} doForward readableBytes={}, from={}, to={}", server ? "Server" : "Client", buffer.readableBytes(), from, to);
     }
 
     private byte[] headerBlock;
@@ -133,7 +105,7 @@ class Http3StreamForward extends QuicStreamForward {
     @Override
     void onEOF(DataOutputStream outputStream) throws IOException {
         if(headerBlock == null) {
-            log.debug("onEOF dataBlockSize={}", dataBlocks.size());
+            log.debug("onEOF dataBlockSize={} bidirectional={}, from={}, to={}", dataBlocks.size(), bidirectional, from, to);
             return;
         }
 
@@ -335,7 +307,7 @@ class Http3StreamForward extends QuicStreamForward {
                             int len = numBytesForVariableLengthInteger(b);
                             value = readVariableLengthInteger(bb, len);
                         }
-                        log.debug("settings key={}, value={}, readableBytes={}", key, value, bb.readableBytes());
+                        log.debug("settings key={}, value={}, readableBytes={}, from={}, to={}", key, value, bb.readableBytes(), from, to);
                         if (key == HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY ||
                                 key == HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE ||
                                 key == HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS) {
@@ -382,10 +354,6 @@ class Http3StreamForward extends QuicStreamForward {
     private static final int HTTP3_DATA_FRAME_TYPE = 0x0;
     private static final int HTTP3_HEADERS_FRAME_TYPE = 0x1;
     private static final int HTTP3_SETTINGS_FRAME_TYPE = 0x4;
-
-    private static final int HTTP3_CONTROL_STREAM_TYPE = 0x00;
-    private static final int HTTP3_QPACK_ENCODER_STREAM_TYPE = 0x02;
-    private static final int HTTP3_QPACK_DECODER_STREAM_TYPE = 0x03;
 
     private void writeData(DataOutputStream outputStream, long type, byte[] data) throws IOException {
         writeVariableLengthInteger(outputStream, type);

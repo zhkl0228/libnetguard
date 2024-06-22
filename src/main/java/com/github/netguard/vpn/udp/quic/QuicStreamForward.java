@@ -48,6 +48,7 @@ public class QuicStreamForward implements Runnable {
 
     void doForward(byte[] buf, int read, DataOutputStream outputStream) throws IOException {
         outputStream.write(buf, 0, read);
+        outputStream.flush();
     }
 
     @Override
@@ -67,7 +68,6 @@ public class QuicStreamForward implements Runnable {
                             log.debug("{}", Inspector.inspectString(Arrays.copyOf(buf, read), (server ? "Server" : "Client") + " forward from=" + from + ", to=" + to));
                         }
                         doForward(buf, read, outputStream);
-                        outputStream.flush();
                     }
                 } catch (IOException e) {
                     onEOF(outputStream);
