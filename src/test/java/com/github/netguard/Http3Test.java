@@ -46,7 +46,7 @@ public class Http3Test extends TestCase {
                 .maxOpenPeerInitiatedUnidirectionalStreams(50)
                 .build();
         ServerConnector.Builder builder = ServerConnector.builder();
-        serverCertificate.configKeyStore(rootCert, builder);
+        builder.withTlsServerEngineFactory(serverCertificate.getServerContext(rootCert).newTlsServerEngineFactory());
         ServerConnector serverConnector = builder
                 .withPort(20170)
                 .withConfiguration(serverConnectionConfig)
@@ -94,7 +94,6 @@ public class Http3Test extends TestCase {
             peerCertificate = chain.get(0);
             System.out.println(Base64.encode(peerCertificate.getEncoded()));
         }
-        int port;
         {
             RootCert rootCert = RootCert.load();
             ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
@@ -103,14 +102,12 @@ public class Http3Test extends TestCase {
                     .maxOpenPeerInitiatedUnidirectionalStreams(50)
                     .build();
             ServerConnector.Builder builder = ServerConnector.builder();
-            serverCertificate.configKeyStore(rootCert, builder);
+            builder.withTlsServerEngineFactory(serverCertificate.getServerContext(rootCert).newTlsServerEngineFactory());
             ServerConnector serverConnector = builder
                     .withPort(20170)
                     .withConfiguration(serverConnectionConfig)
                     .withLogger(logger)
                     .build();
-            port = serverConnector.getListenPort();
-            System.out.println("port=" + port);
             serverConnector.registerApplicationProtocol(applicationProtocol, (protocol, quicConnection) -> {
                 System.out.println("protocol=" + protocol + ", quicConnection=" + quicConnection);
                 return new MyApplicationProtocolConnection(quicConnection);

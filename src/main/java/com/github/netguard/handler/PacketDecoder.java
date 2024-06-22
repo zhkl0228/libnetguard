@@ -16,6 +16,7 @@ import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
+import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.ethernet.EthernetDecoder;
 import org.krakenapps.pcap.decoder.ethernet.EthernetFrame;
@@ -383,6 +384,11 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     @Override
     public DNSFilter getDNSFilter() {
         return null;
+    }
+
+    @Override
+    public QuicProxyProvider getQuicProxyProvider() {
+        return QuicProxyProvider.kwik();
     }
 
     public static Map<String, String> parseParameters(String parameters) {

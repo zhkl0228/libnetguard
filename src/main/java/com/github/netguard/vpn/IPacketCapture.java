@@ -5,6 +5,7 @@ import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
+import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
 
 import java.net.InetSocketAddress;
 import java.util.Collection;
@@ -33,5 +34,6 @@ public interface IPacketCapture {
 
     Http2Filter getH2Filter();
     DNSFilter getDNSFilter();
+    QuicProxyProvider getQuicProxyProvider();
 
 }

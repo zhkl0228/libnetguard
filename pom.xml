@@ -155,12 +155,12 @@
         <dependency>
             <groupId>tech.kwik</groupId>
             <artifactId>agent15</artifactId>
-            <version>1.1-4-gcefb330-SNAPSHOT</version>
+            <version>1.1-5-gac7112a-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>tech.kwik</groupId>
             <artifactId>kwik</artifactId>
-            <version>0.8.11-4-g52605e8e-SNAPSHOT</version>
+            <version>0.8.11-6-gbb1ce35e-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>tech.kwik</groupId>

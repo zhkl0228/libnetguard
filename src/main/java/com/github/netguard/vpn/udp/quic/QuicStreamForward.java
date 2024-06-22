@@ -3,6 +3,7 @@ package com.github.netguard.vpn.udp.quic;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
+import net.luminis.quic.receive.Receiver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +56,7 @@ public class QuicStreamForward implements Runnable {
     public void run() {
         try (InputStream inputStream = from.openInputStream();
              DataOutputStream outputStream = new DataOutputStream(to.openOutputStream())) {
-            byte[] buf = new byte[2048];
+            byte[] buf = new byte[Receiver.MAX_DATAGRAM_SIZE];
             while (true) {
                 try {
                     int read = inputStream.read(buf);

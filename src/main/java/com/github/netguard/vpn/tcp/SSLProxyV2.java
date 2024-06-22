@@ -406,7 +406,7 @@ public class SSLProxyV2 implements Runnable {
                 }
 
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
-                SSLContext serverContext = serverCertificate.createSSLContext(vpn.getRootCert());
+                SSLContext serverContext = serverCertificate.getServerContext(vpn.getRootCert()).newSSLContext();
                 SSLProxyV2 proxy = new SSLProxyV2(vpn, packet, timeout, serverContext, secureSocket,
                         record, applicationProtocol, allowRule == AllowRule.FILTER_H2);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {

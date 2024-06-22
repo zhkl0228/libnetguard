@@ -56,7 +56,6 @@ public class UDProxy {
 
     private static final Logger log = LoggerFactory.getLogger(UDProxy.class);
 
-    private static final int MTU = Receiver.MAX_DATAGRAM_SIZE;
     private static final int READ_TIMEOUT = 60000;
 
     public static Allowed redirect(InspectorVpn vpn, InetSocketAddress client, InetSocketAddress server) {
@@ -114,7 +113,7 @@ public class UDProxy {
             IPacketCapture packetCapture = vpn.getPacketCapture();
             DNSFilter dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
             try {
-                byte[] buffer = new byte[MTU];
+                byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 boolean first = true;
                 List<byte[]> pendingList = new ArrayList<>(10);
@@ -186,7 +185,7 @@ public class UDProxy {
                                             break; // forward traffic
                                         }
                                         Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? packetCapture.getH2Filter() : null;
-                                        handleQuicProxy(packetRequest, http2Filter, clientHello);
+                                        handleQuicProxy(packetRequest, http2Filter, clientHello, packetCapture.getQuicProxyProvider());
                                     }
                                 }
                             }
@@ -218,8 +217,7 @@ public class UDProxy {
             }
         }
 
-        private void handleQuicProxy(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello) throws SocketTimeoutException {
-            QuicProxyProvider quicProxyProvider = QuicProxyProvider.kwik();
+        private void handleQuicProxy(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello, QuicProxyProvider quicProxyProvider) throws SocketTimeoutException {
             try {
                 Duration connectTimeout = Duration.ofSeconds(60);
                 for (Extension extension : clientHello.getExtensions()) {
@@ -443,7 +441,7 @@ public class UDProxy {
             IPacketCapture packetCapture = vpn.getPacketCapture();
             DNSFilter dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
             try {
-                byte[] buffer = new byte[MTU];
+                byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 while (true) {
                     try {

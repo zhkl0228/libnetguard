@@ -1,6 +1,6 @@
 package com.github.netguard.vpn.tcp;
 
-import net.luminis.quic.server.ServerConnector;
+import net.luminis.tls.handshake.TlsServerEngineFactory;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -45,6 +45,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
+import java.security.spec.InvalidKeySpecException;
 import java.util.Date;
 import java.util.Map;
 import java.util.Random;
@@ -62,7 +63,7 @@ public class ServerCertificate {
         this.peerCertificate = peerCertificate;
     }
 
-    SSLContext createSSLContext(RootCert rootCert) throws Exception {
+    public ServerContext getServerContext(RootCert rootCert) throws Exception {
         String commonName = getCommonName(peerCertificate);
         ServerContext serverContext = proxyCertMap.get(commonName);
         if (serverContext == null) {
@@ -72,20 +73,7 @@ public class ServerCertificate {
             serverContext = this.generateServerContext(commonName, subjectAlternativeNames, rootCert);
             proxyCertMap.put(commonName, serverContext);
         }
-        return serverContext.newSSLContext();
-    }
-
-    public void configKeyStore(RootCert rootCert, ServerConnector.Builder builder) throws Exception {
-        String commonName = getCommonName(peerCertificate);
-        ServerContext serverContext = proxyCertMap.get(commonName);
-        if (serverContext == null) {
-            SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
-            subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
-            log.debug("configKeyStore Subject Alternative Names: {}", subjectAlternativeNames);
-            serverContext = this.generateServerContext(commonName, subjectAlternativeNames, rootCert);
-            proxyCertMap.put(commonName, serverContext);
-        }
-        builder.withKeyStore(serverContext.keyStore, serverContext.authority.alias(), serverContext.authority.password());
+        return serverContext;
     }
 
     private String getCommonName(X509Certificate certificate) {
@@ -100,7 +88,7 @@ public class ServerCertificate {
         throw new IllegalStateException("Missed CN in Subject DN: " + certificate.getSubjectDN());
     }
 
-    private static class ServerContext {
+    public static class ServerContext {
         final Authority authority;
         final KeyStore keyStore;
         ServerContext(Authority authority, KeyStore keyStore) {
@@ -110,6 +98,9 @@ public class ServerCertificate {
         public SSLContext newSSLContext() throws UnrecoverableKeyException, NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
             KeyManager[] keyManagers = getKeyManagers(keyStore, authority);
             return newServerContext(keyManagers);
+        }
+        public TlsServerEngineFactory newTlsServerEngineFactory() throws CertificateException, IOException, InvalidKeySpecException {
+            return new TlsServerEngineFactory(keyStore, authority.alias(), authority.password());
         }
     }
 

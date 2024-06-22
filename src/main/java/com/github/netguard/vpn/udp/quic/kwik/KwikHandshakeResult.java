@@ -10,9 +10,11 @@ import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.log.NullLogger;
 import net.luminis.quic.server.ServerConnectionConfig;
 import net.luminis.quic.server.ServerConnector;
+import net.luminis.tls.handshake.TlsServerEngineFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.security.cert.X509Certificate;
 
@@ -44,7 +46,9 @@ class KwikHandshakeResult implements HandshakeResult {
                 .maxOpenPeerInitiatedUnidirectionalStreams(Short.MAX_VALUE)
                 .build();
         ServerConnector.Builder builder = ServerConnector.builder();
-        serverCertificate.configKeyStore(vpn.getRootCert(), builder);
+        ServerCertificate.ServerContext serverContext = serverCertificate.getServerContext(vpn.getRootCert());
+        TlsServerEngineFactory tlsServerEngineFactory = serverContext.newTlsServerEngineFactory();
+        builder.withTlsServerEngineFactory(tlsServerEngineFactory);
         net.luminis.quic.log.Logger serverLogger;
         if (log.isDebugEnabled()) {
             serverLogger = new PrintStreamLogger(System.out);
@@ -52,16 +56,19 @@ class KwikHandshakeResult implements HandshakeResult {
         } else {
             serverLogger = new NullLogger();
         }
+        DatagramSocket socket = new DatagramSocket(0);
         ServerConnector serverConnector = builder
-                .withPort(0)
+                .withPort(443)
+                .withSocket(socket)
                 .withConfiguration(serverConnectionConfig)
                 .withLogger(serverLogger)
                 .build();
         serverConnector.start();
-        log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, serverConnector.getListenPort(), http2Filter);
+        int listenPort = socket.getLocalPort();
+        log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, listenPort, http2Filter);
         serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new KwikProxy(vpn.getExecutorService(), connection, session, http2Filter));
-        InetSocketAddress forwardAddress = new InetSocketAddress("127.0.0.1", serverConnector.getListenPort());
-        return new KwikServer(serverConnector, forwardAddress);
+        InetSocketAddress forwardAddress = new InetSocketAddress("127.0.0.1", listenPort);
+        return new KwikServer(serverConnector, forwardAddress, tlsServerEngineFactory);
     }
 
     @Override
