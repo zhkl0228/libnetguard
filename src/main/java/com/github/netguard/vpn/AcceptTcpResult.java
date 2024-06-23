@@ -10,7 +10,7 @@ import java.net.Proxy;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 
-public class AcceptResult {
+public class AcceptTcpResult {
 
     public static class AcceptResultBuilder {
         private final AllowRule rule;
@@ -34,16 +34,16 @@ public class AcceptResult {
             this.sslContext = context;
             return this;
         }
-        public AcceptResult build() {
+        public AcceptTcpResult build() {
             return build(null);
         }
-        public AcceptResult build(String redirectHost) {
-            return new AcceptResult(rule, proxy, redirectAddress, redirectPort, redirectHost, sslContext);
+        public AcceptTcpResult build(String redirectHost) {
+            return new AcceptTcpResult(rule, proxy, redirectAddress, redirectPort, redirectHost, sslContext);
         }
     }
 
-    public static AcceptResult disableConnect() {
-        return AcceptResult.builder(AllowRule.DISCONNECT).build();
+    public static AcceptTcpResult disableConnect() {
+        return AcceptTcpResult.builder(AllowRule.DISCONNECT).build();
     }
 
     public static AcceptResultBuilder builder(AllowRule rule) {
@@ -57,8 +57,8 @@ public class AcceptResult {
     private final String redirectHost;
     private final SSLContext context;
 
-    private AcceptResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost,
-                         SSLContext context) {
+    private AcceptTcpResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost,
+                            SSLContext context) {
         this.rule = rule;
         this.socketProxy = socketProxy;
         this.redirectAddress = redirectAddress;
@@ -87,7 +87,7 @@ public class AcceptResult {
         return redirectHost;
     }
 
-    public static SSLContext newSSLContext(AcceptResult result) {
+    public static SSLContext newSSLContext(AcceptTcpResult result) {
         if (result != null && result.context != null) {
             return result.context;
         } else {

@@ -5,6 +5,7 @@ import cn.hutool.core.io.IoUtil;
 import com.github.netguard.transparent.TransparentSocketProxying;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.tcp.RootCert;
+import com.github.netguard.vpn.udp.UDPRelay;
 import eu.faircode.netguard.ServiceSinkhole;
 import name.neykov.secrets.AgentAttach;
 import org.apache.commons.io.IOUtils;
@@ -96,12 +97,26 @@ public class VpnServer {
         this.transparentProxyingPort = port;
     }
 
+    private boolean enableUdpRelay;
+    private UDPRelay udpRelay;
+
+    public void enableUdpRelay() {
+        this.enableUdpRelay = true;
+    }
+
     public void start() {
         if (thread != null) {
             throw new IllegalStateException("Already started.");
         }
         if (broadcast) {
             sendBroadcast();
+        }
+        try {
+            if (enableUdpRelay) {
+                udpRelay = new UDPRelay(getPort());
+            }
+        } catch(IOException e) {
+            log.warn("start udp relay failed.", e);
         }
         if (transparentProxyingPort > 0) {
             try {
@@ -198,6 +213,7 @@ public class VpnServer {
         shutdown = true;
         IoUtil.close(serverSocket);
         IoUtil.close(transparentProxyingSocketServer);
+        IoUtil.close(udpRelay);
         for (ProxyVpn vpn : clients.toArray(new ProxyVpn[0])) {
             vpn.stop();
         }

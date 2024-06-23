@@ -1,7 +1,7 @@
 package com.github.netguard.vpn.tcp;
 
 import cn.hutool.core.io.IoUtil;
-import com.github.netguard.vpn.AcceptResult;
+import com.github.netguard.vpn.AcceptTcpResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
@@ -325,7 +325,7 @@ public class SSLProxyV2 implements Runnable {
         int redirectPort = 0;
         String redirectHost = null;
         IPacketCapture packetCapture = vpn.getPacketCapture();
-        AcceptResult result = null;
+        AcceptTcpResult result = null;
         if (packetCapture != null) {
             try {
                 result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
@@ -369,7 +369,7 @@ public class SSLProxyV2 implements Runnable {
                 }
             }
         } else {
-            SSLContext context = AcceptResult.newSSLContext(result);
+            SSLContext context = AcceptTcpResult.newSSLContext(result);
             SSLSocketFactory factory = context.getSocketFactory();
             Socket app = null;
             SSLSocket secureSocket = null;

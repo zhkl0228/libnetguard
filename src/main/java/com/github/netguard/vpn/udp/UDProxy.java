@@ -5,6 +5,7 @@ import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.HexUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.Inspector;
+import com.github.netguard.vpn.AcceptUdpResult;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
@@ -113,8 +114,8 @@ public class UDProxy {
             IPacketCapture packetCapture = vpn.getPacketCapture();
             DNSFilter dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
             try {
-                byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                final byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
+                final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 boolean first = true;
                 List<byte[]> pendingList = new ArrayList<>(10);
                 while (true) {
@@ -167,7 +168,9 @@ public class UDProxy {
                             }
                             if (packetCapture != null) {
                                 PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, client.dnsQuery, serverAddress);
-                                AcceptRule rule = packetCapture.acceptUdp(packetRequest);
+                                AcceptUdpResult acceptUdpResult = packetCapture.acceptUdp(packetRequest);
+                                AcceptRule rule = acceptUdpResult == null ? null : acceptUdpResult.acceptRule;
+                                InetSocketAddress udpProxy = acceptUdpResult == null ? null : acceptUdpResult.udpProxy;
                                 if (rule == null) {
                                     rule = AcceptRule.Forward;
                                 }
@@ -175,17 +178,20 @@ public class UDProxy {
                                 switch (rule) {
                                     case Discard:
                                         throw new SocketTimeoutException("discard");
-                                    case Forward:
+                                    case Forward: {
+                                        setUdpProxy(packetRequest, udpProxy);
                                         break;
+                                    }
                                     case FILTER_H3:
                                     case QUIC_MITM: {
                                         if (packetRequest.hostName == null ||
                                                 packetRequest.hostName.isEmpty() ||
                                                 packetRequest.applicationLayerProtocols.isEmpty()) {
+                                            setUdpProxy(packetRequest, udpProxy);
                                             break; // forward traffic
                                         }
                                         Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? packetCapture.getH2Filter() : null;
-                                        handleQuicProxy(packetRequest, http2Filter, clientHello, packetCapture.getQuicProxyProvider());
+                                        handleQuicProxy(packetRequest, http2Filter, clientHello, packetCapture.getQuicProxyProvider(), udpProxy);
                                     }
                                 }
                             }
@@ -217,7 +223,17 @@ public class UDProxy {
             }
         }
 
-        private void handleQuicProxy(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello, QuicProxyProvider quicProxyProvider) throws SocketTimeoutException {
+        private void setUdpProxy(PacketRequest packetRequest, InetSocketAddress udpProxy) throws IOException {
+            if (udpProxy != null) {
+                byte[] connect = UDPRelay.createConnectUdpRelayRequest(new InetSocketAddress(packetRequest.serverIp, packetRequest.port), 60);
+                forwardAddress = udpProxy;
+                DatagramPacket packet = new DatagramPacket(connect, connect.length);
+                packet.setSocketAddress(forwardAddress);
+                clientSocket.send(packet);
+            }
+        }
+
+        private void handleQuicProxy(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello, QuicProxyProvider quicProxyProvider, InetSocketAddress udpProxy) throws SocketTimeoutException {
             try {
                 Duration connectTimeout = Duration.ofSeconds(60);
                 for (Extension extension : clientHello.getExtensions()) {
@@ -230,7 +246,7 @@ public class UDProxy {
                         break;
                     }
                 }
-                client.connection = quicProxyProvider.newClientConnection(packetRequest, connectTimeout);
+                client.connection = quicProxyProvider.newClientConnection(packetRequest, connectTimeout, udpProxy);
                 log.debug("handleQuic applicationLayerProtocols={}", packetRequest.applicationLayerProtocols);
                 Http2Session session = new Http2Session(clientAddress.getHostString(), serverAddress.getHostString(), clientAddress.getPort(), serverAddress.getPort(), packetRequest.hostName);
                 HandshakeResult handshakeResult = client.connection.handshake(session);
@@ -441,8 +457,8 @@ public class UDProxy {
             IPacketCapture packetCapture = vpn.getPacketCapture();
             DNSFilter dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
             try {
-                byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                final byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
+                final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 while (true) {
                     try {
                         clientSocket.receive(packet);

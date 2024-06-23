@@ -1,6 +1,6 @@
 package com.github.netguard.vpn.tcp;
 
-import com.github.netguard.vpn.AcceptResult;
+import com.github.netguard.vpn.AcceptTcpResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tls.TlsSignature;
@@ -42,12 +42,12 @@ public class ConnectRequest {
         this.tlsSignature = tlsSignature;
     }
 
-    public AcceptResult.AcceptResultBuilder connectTcpDirect() {
-        return AcceptResult.builder(AllowRule.CONNECT_TCP);
+    public AcceptTcpResult.AcceptResultBuilder connectTcpDirect() {
+        return AcceptTcpResult.builder(AllowRule.CONNECT_TCP);
     }
 
-    public AcceptResult disconnect() {
-        return AcceptResult.builder(AllowRule.DISCONNECT).build();
+    public AcceptTcpResult disconnect() {
+        return AcceptTcpResult.builder(AllowRule.DISCONNECT).build();
     }
 
     public boolean isAppleHost() {

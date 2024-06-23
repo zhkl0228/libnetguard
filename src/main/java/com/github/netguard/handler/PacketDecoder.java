@@ -8,12 +8,12 @@ import com.github.netguard.handler.session.SSLSessionKey;
 import com.github.netguard.handler.session.Session;
 import com.github.netguard.handler.session.SessionCreator;
 import com.github.netguard.handler.session.SessionFactory;
-import com.github.netguard.vpn.AcceptResult;
+import com.github.netguard.vpn.AcceptTcpResult;
+import com.github.netguard.vpn.AcceptUdpResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.tcp.ConnectRequest;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
-import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
 import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
@@ -51,7 +51,11 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Enumeration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
@@ -351,7 +355,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public AcceptResult acceptTcp(ConnectRequest connectRequest) {
+    public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
         log.debug("acceptTcp connectRequest={}", connectRequest);
         if (connectRequest.isAppleHost()) {
             return configAcceptResultBuilder(connectRequest.hostName, connectRequest.port, connectRequest.connectTcpDirect()).build(); // Enable iOS traffic.
@@ -362,17 +366,17 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         if (connectRequest.isSSL()) {
             return null;
         } else {
-            return configAcceptResultBuilder(null, connectRequest.port, AcceptResult.builder(AllowRule.CONNECT_TCP)).build();
+            return configAcceptResultBuilder(null, connectRequest.port, AcceptTcpResult.builder(AllowRule.CONNECT_TCP)).build();
         }
     }
 
     @Override
-    public AcceptRule acceptUdp(PacketRequest packetRequest) {
+    public AcceptUdpResult acceptUdp(PacketRequest packetRequest) {
         return null;
     }
 
     @SuppressWarnings("unused")
-    protected AcceptResult.AcceptResultBuilder configAcceptResultBuilder(String hostName, int port, AcceptResult.AcceptResultBuilder builder) {
+    protected AcceptTcpResult.AcceptResultBuilder configAcceptResultBuilder(String hostName, int port, AcceptTcpResult.AcceptResultBuilder builder) {
         return builder;
     }
 

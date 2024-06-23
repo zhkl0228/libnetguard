@@ -39,6 +39,7 @@ import io.netty.incubator.codec.quic.QuicChannel;
 import io.netty.incubator.codec.quic.QuicSslContext;
 import io.netty.incubator.codec.quic.QuicSslContextBuilder;
 import io.netty.incubator.codec.quic.QuicStreamChannel;
+import net.luminis.quic.concurrent.DaemonThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,7 +65,7 @@ class NettyHandshakeResult implements HandshakeResult {
 
     @Override
     public QuicServer startServer(InspectorVpn vpn, Http2Filter http2Filter) throws Exception {
-        NioEventLoopGroup group = new NioEventLoopGroup(1);
+        NioEventLoopGroup group = new NioEventLoopGroup(1, new DaemonThreadFactory("netty-server-nio-event-loop"));
         ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
         ServerCertificate.ServerContext serverContext = serverCertificate.getServerContext(vpn.getRootCert());
         KeyManagerFactory keyManagerFactory = serverContext.newKeyManagerFactory();

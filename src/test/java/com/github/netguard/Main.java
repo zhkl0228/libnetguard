@@ -6,7 +6,8 @@ import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.handler.PacketDecoder;
-import com.github.netguard.vpn.AcceptResult;
+import com.github.netguard.vpn.AcceptTcpResult;
+import com.github.netguard.vpn.AcceptUdpResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
@@ -52,6 +53,7 @@ import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -83,6 +85,7 @@ public class Main {
         vpnServer.enableBroadcast(10);
         vpnServer.enableTransparentProxying();
         vpnServer.setVpnListener(new MyVpnListener());
+        vpnServer.enableUdpRelay();
         vpnServer.start();
 
         System.out.println("vpn server listen on: " + vpnServer.getPort());
@@ -233,7 +236,7 @@ public class Main {
                 }
             }
             @Override
-            public AcceptResult acceptTcp(ConnectRequest connectRequest) {
+            public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
                 TlsSignature tlsSignature = connectRequest.tlsSignature;
                 if (tlsSignature != null) {
                     System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\"%n", connectRequest,
@@ -245,12 +248,12 @@ public class Main {
                             tlsSignature.getJa3nText());
                 }
                 if ("weixin.qq.com".equals(connectRequest.hostName) || "tls.browserleaks.com".equals(connectRequest.hostName)) {
-                    return AcceptResult.builder(AllowRule.FILTER_H2)
+                    return AcceptTcpResult.builder(AllowRule.FILTER_H2)
                             .configClientSSLContext(createConscryptContext())
                             .build();
                 }
                 if (connectRequest.isSSL()) {
-                    return AcceptResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
+                    return AcceptTcpResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
                             .configClientSSLContext(createConscryptContext())
                             .build();
                 }
@@ -259,9 +262,9 @@ public class Main {
                 return super.acceptTcp(connectRequest);
             }
             @Override
-            public AcceptRule acceptUdp(PacketRequest packetRequest) {
+            public AcceptUdpResult acceptUdp(PacketRequest packetRequest) {
                 if (packetRequest.dnsQuery != null) {
-                    return AcceptRule.Forward;
+                    return AcceptUdpResult.rule(AcceptRule.Forward);
                 }
                 TlsSignature tlsSignature = packetRequest.tlsSignature;
                 if (tlsSignature != null) {
@@ -273,7 +276,11 @@ public class Main {
                             tlsSignature.getJa3Text(),
                             tlsSignature.getJa3nText());
                 }
-                return AcceptRule.FILTER_H3;
+                AcceptUdpResult result = AcceptUdpResult.rule(AcceptRule.FILTER_H3);
+                if ("http3.is".equals(packetRequest.hostName)) {
+                    result.setUdpProxy(new InetSocketAddress("8.216.131.32", 20240));
+                }
+                return result;
             }
         }
     }
