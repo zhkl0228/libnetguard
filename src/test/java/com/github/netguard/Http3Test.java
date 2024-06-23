@@ -3,8 +3,37 @@ package com.github.netguard;
 import cn.hutool.core.codec.Base64;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
+import com.github.netguard.vpn.udp.quic.netty.QuicSslContextWrapper;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
+import io.netty.incubator.codec.http3.DefaultHttp3DataFrame;
+import io.netty.incubator.codec.http3.DefaultHttp3HeadersFrame;
+import io.netty.incubator.codec.http3.Http3;
+import io.netty.incubator.codec.http3.Http3ClientConnectionHandler;
+import io.netty.incubator.codec.http3.Http3DataFrame;
+import io.netty.incubator.codec.http3.Http3Exception;
+import io.netty.incubator.codec.http3.Http3HeadersFrame;
+import io.netty.incubator.codec.http3.Http3RequestStreamInboundHandler;
+import io.netty.incubator.codec.http3.Http3ServerConnectionHandler;
+import io.netty.incubator.codec.quic.InsecureQuicTokenHandler;
+import io.netty.incubator.codec.quic.QuicChannel;
+import io.netty.incubator.codec.quic.QuicException;
+import io.netty.incubator.codec.quic.QuicSslContext;
+import io.netty.incubator.codec.quic.QuicSslContextBuilder;
+import io.netty.incubator.codec.quic.QuicStreamChannel;
+import io.netty.util.CharsetUtil;
+import io.netty.util.ReferenceCountUtil;
 import junit.framework.TestCase;
 import net.luminis.http3.Http3Client;
+import net.luminis.http3.impl.Http3ClientConnectionImpl;
 import net.luminis.http3.server.Http3ApplicationProtocolFactory;
 import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.QuicConnection;
@@ -17,11 +46,13 @@ import net.luminis.quic.server.ServerConnector;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
+import javax.net.ssl.SSLEngine;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -33,6 +64,167 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class Http3Test extends TestCase {
+
+    private static final byte[] CONTENT = "Hello World!\r\n".getBytes(CharsetUtil.US_ASCII);
+
+    public void testNettyServer() throws Exception {
+        NioEventLoopGroup group = new NioEventLoopGroup(1);
+        SelfSignedCertificate cert = new SelfSignedCertificate();
+        QuicSslContext sslContext = QuicSslContextBuilder.forServer(cert.key(), "", cert.cert())
+                .applicationProtocols(Http3.supportedApplicationProtocols()).build();
+        ChannelHandler codec = Http3.newQuicServerCodecBuilder()
+                .sslContext(sslContext)
+                .maxIdleTimeout(5000, TimeUnit.MILLISECONDS)
+                .initialMaxData(10000000)
+                .initialMaxStreamDataBidirectionalLocal(1000000)
+                .initialMaxStreamDataBidirectionalRemote(1000000)
+                .initialMaxStreamsBidirectional(100)
+                .tokenHandler(InsecureQuicTokenHandler.INSTANCE)
+                .handler(new ChannelInitializer<QuicChannel>() {
+                    @Override
+                    protected void initChannel(QuicChannel ch) {
+                        // Called for each connection
+                        ch.pipeline().addLast(new Http3ServerConnectionHandler(
+                                new ChannelInitializer<QuicStreamChannel>() {
+                                    // Called for each request-stream,
+                                    @Override
+                                    protected void initChannel(QuicStreamChannel ch) {
+                                        ch.pipeline().addLast(new Http3RequestStreamInboundHandler() {
+
+                                            @Override
+                                            protected void channelRead(
+                                                    ChannelHandlerContext ctx, Http3HeadersFrame frame) {
+                                                ReferenceCountUtil.release(frame);
+                                            }
+
+                                            @Override
+                                            protected void channelRead(
+                                                    ChannelHandlerContext ctx, Http3DataFrame frame) {
+                                                ReferenceCountUtil.release(frame);
+                                            }
+
+                                            @Override
+                                            protected void channelInputClosed(ChannelHandlerContext ctx) {
+                                                Http3HeadersFrame headersFrame = new DefaultHttp3HeadersFrame();
+                                                headersFrame.headers().status("404");
+                                                headersFrame.headers().add("server", "netty");
+                                                headersFrame.headers().addInt("content-length", CONTENT.length);
+                                                ctx.write(headersFrame);
+                                                ctx.writeAndFlush(new DefaultHttp3DataFrame(
+                                                                Unpooled.wrappedBuffer(CONTENT)))
+                                                        .addListener(QuicStreamChannel.SHUTDOWN_OUTPUT);
+                                            }
+                                        });
+                                    }
+                                }));
+                    }
+                }).build();
+        try {
+            Bootstrap bs = new Bootstrap();
+            Channel channel = bs.group(group)
+                    .channel(NioDatagramChannel.class)
+                    .handler(codec)
+                    .bind(new InetSocketAddress(8443)).sync().channel();
+            channel.closeFuture().sync();
+        } finally {
+            group.shutdownGracefully();
+        }
+    }
+
+    public void testNettyClient() throws Exception {
+        URI uri = URI.create("https://http3.is/");
+        int port = uri.getPort();
+        if (port <= 0) {
+            port = Http3ClientConnectionImpl.DEFAULT_HTTP3_PORT;
+        }
+        NioEventLoopGroup group = new NioEventLoopGroup(1);
+
+        try {
+            QuicSslContext context = QuicSslContextBuilder.forClient()
+                    .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                    .applicationProtocols(Http3.supportedApplicationProtocols()).build();
+            ChannelHandler codec = Http3.newQuicClientCodecBuilder()
+                    .sslContext(new QuicSslContextWrapper(context, uri.getHost(), port))
+                    .maxIdleTimeout(5000, TimeUnit.MILLISECONDS)
+                    .initialMaxData(10000000)
+                    .initialMaxStreamDataBidirectionalLocal(1000000)
+                    .build();
+
+            Bootstrap bs = new Bootstrap();
+            Channel channel = bs.group(group)
+                    .channel(NioDatagramChannel.class)
+                    .handler(codec)
+                    .bind(0).sync().channel();
+
+            QuicChannel quicChannel = QuicChannel.newBootstrap(channel)
+                    .handler(new Http3ClientConnectionHandler())
+                    .remoteAddress(new InetSocketAddress(uri.getHost(), port))
+                    .connect()
+                    .get();
+            SSLEngine sslEngine = quicChannel.sslEngine();
+            assertNotNull(sslEngine);
+            System.out.println("applicationProtocol=" + sslEngine.getApplicationProtocol());
+            System.out.println(sslEngine.getSession().getPeerCertificates()[0]);
+
+            QuicStreamChannel streamChannel = Http3.newRequestStream(quicChannel,
+                    new Http3RequestStreamInboundHandler() {
+                        @Override
+                        protected void channelRead(ChannelHandlerContext ctx, Http3HeadersFrame frame) {
+                            System.err.println(frame.headers());
+                            ReferenceCountUtil.release(frame);
+                        }
+
+                        @Override
+                        protected void channelRead(ChannelHandlerContext ctx, Http3DataFrame frame) {
+                            System.err.print(frame.content().toString(CharsetUtil.US_ASCII));
+                            ReferenceCountUtil.release(frame);
+                        }
+
+                        @Override
+                        protected void channelInputClosed(ChannelHandlerContext ctx) {
+                            ctx.close();
+                            System.out.println("channelInputClosed");
+                        }
+
+                        @Override
+                        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+                            super.exceptionCaught(ctx, cause);
+                            cause.printStackTrace(System.out);
+                        }
+
+                        @Override
+                        protected void handleHttp3Exception(ChannelHandlerContext ctx, Http3Exception exception) {
+                            super.handleHttp3Exception(ctx, exception);
+                            exception.printStackTrace(System.out);
+                        }
+
+                        @Override
+                        protected void handleQuicException(ChannelHandlerContext ctx, QuicException exception) {
+                            super.handleQuicException(ctx, exception);
+                            exception.printStackTrace(System.out);
+                        }
+                    }).sync().getNow();
+
+            // Write the Header frame and send the FIN to mark the end of the request.
+            // After this its not possible anymore to write any more data.
+            Http3HeadersFrame frame = new DefaultHttp3HeadersFrame();
+            frame.headers().method("GET").path(uri.getPath())
+                    .authority(uri.getHost() + ":" + port)
+                    .scheme("https");
+            streamChannel.writeAndFlush(frame)
+                    .addListener(QuicStreamChannel.SHUTDOWN_OUTPUT).sync();
+
+            // Wait for the stream channel and quic channel to be closed (this will happen after we received the FIN).
+            // After this is done we will close the underlying datagram channel.
+            streamChannel.closeFuture().sync();
+
+            // After we received the response lets also close the underlying QUIC channel and datagram channel.
+            quicChannel.close().sync();
+            channel.close().sync();
+        } finally {
+            group.shutdownGracefully();
+        }
+    }
 
     public void testFlupkeServer() throws Exception {
         SysOutLogger logger = new SysOutLogger();
@@ -59,7 +251,7 @@ public class Http3Test extends TestCase {
     }
 
     public void testFlupkeClient() throws Exception {
-        URI serverUrl = URI.create("https://http3.is");
+        URI serverUrl = URI.create("https://http3.is/");
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(serverUrl)
                 .timeout(Duration.ofSeconds(30))
@@ -84,7 +276,7 @@ public class Http3Test extends TestCase {
         X509Certificate peerCertificate = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(Base64.decode(CERT)));
         if (peerCertificate == null) {
             QuicClientConnection connection = QuicClientConnection.newBuilder()
-                    .uri(URI.create("https://cloudflare-quic.com:443"))
+                    .uri(URI.create("https://cloudflare-quic.com"))
                     .applicationProtocol("h3")
                     .logger(logger)
                     .connectTimeout(Duration.ofSeconds(30))

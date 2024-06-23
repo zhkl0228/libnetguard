@@ -96,11 +96,20 @@ public class ServerCertificate {
             this.keyStore = keyStore;
         }
         public SSLContext newSSLContext() throws UnrecoverableKeyException, NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
-            KeyManager[] keyManagers = getKeyManagers(keyStore, authority);
+            KeyManager[] keyManagers = newKeyManagerFactory().getKeyManagers();
             return newServerContext(keyManagers);
         }
         public TlsServerEngineFactory newTlsServerEngineFactory() throws CertificateException, IOException, InvalidKeySpecException {
             return new TlsServerEngineFactory(keyStore, authority.alias(), authority.password());
+        }
+        public KeyManagerFactory newKeyManagerFactory() throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException {
+            String keyManAlg = KeyManagerFactory.getDefaultAlgorithm();
+            KeyManagerFactory kmf = KeyManagerFactory.getInstance(keyManAlg);
+            kmf.init(keyStore, authority.password());
+            return kmf;
+        }
+        public char[] getKeyPassword() {
+            return authority.password();
         }
     }
 
@@ -113,16 +122,6 @@ public class ServerCertificate {
             log.trace("generateServerContext: {}", keyStore.getCertificate(alias));
         }
         return new ServerContext(authority, keyStore);
-    }
-
-    private static KeyManager[] getKeyManagers(KeyStore keyStore,
-                                              Authority authority) throws NoSuchAlgorithmException,
-            UnrecoverableKeyException,
-            KeyStoreException {
-        String keyManAlg = KeyManagerFactory.getDefaultAlgorithm();
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(keyManAlg);
-        kmf.init(keyStore, authority.password());
-        return kmf.getKeyManagers();
     }
 
     private static SSLContext newServerContext(KeyManager[] keyManagers)

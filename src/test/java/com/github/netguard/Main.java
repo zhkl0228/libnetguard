@@ -21,6 +21,8 @@ import com.github.netguard.vpn.tls.TlsSignature;
 import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
+import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
+import com.github.netguard.vpn.udp.quic.netty.NettyProvider;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.ServiceSinkhole;
@@ -215,6 +217,11 @@ public class Main {
             @Override
             public DNSFilter getDNSFilter() {
                 return MyVpnListener.this;
+            }
+
+            @Override
+            public QuicProxyProvider getQuicProxyProvider() {
+                return new NettyProvider();
             }
 
             private SSLContext createConscryptContext() {
