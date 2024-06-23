@@ -132,7 +132,7 @@ public class Http3Test extends TestCase {
     }
 
     public void testNettyClient() throws Exception {
-        URI uri = URI.create("https://http3.is/");
+        URI uri = URI.create("https://http3.is");
         int port = uri.getPort();
         if (port <= 0) {
             port = Http3ClientConnectionImpl.DEFAULT_HTTP3_PORT;
@@ -164,7 +164,6 @@ public class Http3Test extends TestCase {
             SSLEngine sslEngine = quicChannel.sslEngine();
             assertNotNull(sslEngine);
             System.out.println("applicationProtocol=" + sslEngine.getApplicationProtocol());
-            System.out.println(sslEngine.getSession().getPeerCertificates()[0]);
 
             QuicStreamChannel streamChannel = Http3.newRequestStream(quicChannel,
                     new Http3RequestStreamInboundHandler() {
@@ -208,7 +207,11 @@ public class Http3Test extends TestCase {
             // Write the Header frame and send the FIN to mark the end of the request.
             // After this its not possible anymore to write any more data.
             Http3HeadersFrame frame = new DefaultHttp3HeadersFrame();
-            frame.headers().method("GET").path(uri.getPath())
+            String path = uri.getPath();
+            if (path == null || path.isEmpty()) {
+                path = "/";
+            }
+            frame.headers().method("GET").path(path)
                     .authority(uri.getHost() + ":" + port)
                     .scheme("https");
             streamChannel.writeAndFlush(frame)

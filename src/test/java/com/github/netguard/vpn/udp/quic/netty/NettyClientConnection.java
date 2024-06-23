@@ -46,7 +46,7 @@ class NettyClientConnection implements ClientConnection {
             String applicationProtocol = sslEngine.getApplicationProtocol();
             X509Certificate peerCertificate = (X509Certificate) sslEngine.getSession().getPeerCertificates()[0];
             log.debug("newClientConnection applicationProtocol={}, peerCertificate={}", applicationProtocol, peerCertificate);
-            return new NettyHandshakeResult(peerCertificate, applicationProtocol, quicChannel);
+            return new NettyHandshakeResult(peerCertificate, quicChannel, session);
         } catch (InterruptedException | ExecutionException e) {
             throw new IOException("handshake", e);
         }
