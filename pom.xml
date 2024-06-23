@@ -148,6 +148,11 @@
             <version>0.17.11</version>
         </dependency>
         <dependency>
+            <groupId>io.netty.incubator</groupId>
+            <artifactId>netty-incubator-codec-http3</artifactId>
+            <version>0.0.28.Final</version>
+        </dependency>
+        <dependency>
             <groupId>tech.kwik</groupId>
             <artifactId>qpack</artifactId>
             <version>1.0.2</version>
@@ -166,12 +171,6 @@
             <groupId>tech.kwik</groupId>
             <artifactId>flupke</artifactId>
             <version>0.5.3</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.netty.incubator</groupId>
-            <artifactId>netty-incubator-codec-http3</artifactId>
-            <version>0.0.28.Final</version>
             <scope>test</scope>
         </dependency>
         <dependency>
