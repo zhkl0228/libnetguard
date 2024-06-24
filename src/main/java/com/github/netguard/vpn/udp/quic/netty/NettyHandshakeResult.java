@@ -132,7 +132,7 @@ class NettyHandshakeResult implements HandshakeResult {
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
-            log.debug("Server channelRead0: last={}, content={}, {}", msg == LastHttpContent.EMPTY_LAST_CONTENT, content, msg);
+            log.debug("Server channelRead0: last={}, content={}, msg={}", msg == LastHttpContent.EMPTY_LAST_CONTENT, content, msg);
             if (msg instanceof HttpRequest) {
                 request = (HttpRequest) msg;
             } else if (msg instanceof HttpContent) {
@@ -144,6 +144,7 @@ class NettyHandshakeResult implements HandshakeResult {
         }
         @Override
         public void channelReadComplete(ChannelHandlerContext ctx) {
+            log.debug("channelReadComplete: request={}", request);
             byte[] requestData = new byte[content.readableBytes()];
             content.readBytes(requestData);
             if (http2Filter != null &&

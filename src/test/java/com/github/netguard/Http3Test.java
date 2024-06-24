@@ -132,7 +132,7 @@ public class Http3Test extends TestCase {
     }
 
     public void testNettyClient() throws Exception {
-        URI uri = URI.create("https://http3.is");
+        URI uri = URI.create("https://quic.nginx.org/test");
         int port = uri.getPort();
         if (port <= 0) {
             port = Http3ClientConnectionImpl.DEFAULT_HTTP3_PORT;

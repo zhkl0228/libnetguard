@@ -137,6 +137,10 @@ public class Main {
                     if (obj != null) {
                         obj.put("netguardFilter", getClass().getName());
                         obj.put("filterDate", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+                        String ipAddress = response.headers().get("X-Forwarded-For");
+                        if (ipAddress != null) {
+                            obj.put("ipAddress", ipAddress);
+                        }
                         return JSONObject.toJSONBytes(obj, SerializerFeature.PrettyFormat);
                     }
                 } catch(Exception e) {
@@ -277,7 +281,7 @@ public class Main {
                             tlsSignature.getJa3nText());
                 }
                 AcceptUdpResult result = AcceptUdpResult.rule(AcceptRule.FILTER_H3);
-                if ("http3.is".equals(packetRequest.hostName)) {
+                if (tlsSignature != null) {
                     result.setUdpProxy(new InetSocketAddress("8.216.131.32", 20240));
                 }
                 return result;
