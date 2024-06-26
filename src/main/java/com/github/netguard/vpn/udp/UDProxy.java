@@ -167,7 +167,7 @@ public class UDProxy {
                                 continue;
                             }
                             if (packetCapture != null) {
-                                PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, client.dnsQuery, serverAddress);
+                                PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, client.dnsQuery, serverAddress, vpn);
                                 AcceptUdpResult acceptUdpResult = packetCapture.acceptUdp(packetRequest);
                                 AcceptRule rule = acceptUdpResult == null ? null : acceptUdpResult.acceptRule;
                                 InetSocketAddress udpProxy = acceptUdpResult == null ? null : acceptUdpResult.udpProxy;

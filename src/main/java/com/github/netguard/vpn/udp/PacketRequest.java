@@ -1,5 +1,7 @@
 package com.github.netguard.vpn.udp;
 
+import com.github.netguard.vpn.ClientOS;
+import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tls.JA3Signature;
 import com.github.netguard.vpn.tls.QuicClientHello;
 import com.github.netguard.vpn.tls.TlsSignature;
@@ -32,15 +34,21 @@ public class PacketRequest {
         return Arrays.copyOf(buffer, length);
     }
 
+    public ClientOS getClientOS() {
+        return vpn.getClientOS();
+    }
+
     private final byte[] buffer;
     private final int length;
+    private final InspectorVpn vpn;
 
-    public PacketRequest(byte[] buffer, int length, ClientHello clientHello, Message dnsQuery, InetSocketAddress serverAddress) {
+    public PacketRequest(byte[] buffer, int length, ClientHello clientHello, Message dnsQuery, InetSocketAddress serverAddress, InspectorVpn vpn) {
         this.serverIp = serverAddress.getAddress().getHostAddress();
         this.port = serverAddress.getPort();
         this.dnsQuery = dnsQuery;
         this.buffer = buffer;
         this.length = length;
+        this.vpn = vpn;
 
         if (clientHello != null) {
             String hostName = null;

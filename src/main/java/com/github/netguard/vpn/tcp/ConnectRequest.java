@@ -2,6 +2,7 @@ package com.github.netguard.vpn.tcp;
 
 import com.github.netguard.vpn.AcceptTcpResult;
 import com.github.netguard.vpn.AllowRule;
+import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tls.TlsSignature;
 import eu.faircode.netguard.Application;
@@ -40,6 +41,10 @@ public class ConnectRequest {
         this.prologue = prologue;
         this.httpRequest = httpRequest;
         this.tlsSignature = tlsSignature;
+    }
+
+    public ClientOS getClientOS() {
+        return vpn.getClientOS();
     }
 
     public AcceptTcpResult.AcceptResultBuilder connectTcpDirect() {
