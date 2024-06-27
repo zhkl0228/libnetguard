@@ -77,6 +77,8 @@ public class UDProxy {
     private final InetSocketAddress serverAddress;
     private final DatagramSocket clientSocket;
     private final DatagramSocket serverSocket;
+    private final Http2Filter http2Filter;
+    private final DNSFilter dnsFilter;
 
     private UDProxy(InspectorVpn vpn, InetSocketAddress clientAddress, InetSocketAddress serverAddress) throws SocketException {
         this.vpn = vpn;
@@ -87,6 +89,9 @@ public class UDProxy {
         this.clientSocket = new DatagramSocket(new InetSocketAddress(0));
         this.clientSocket.setSoTimeout(3000);
         log.trace("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", clientAddress, serverAddress, clientSocket.getLocalPort(), serverSocket.getLocalPort());
+        IPacketCapture packetCapture = vpn.getPacketCapture();
+        this.http2Filter = packetCapture == null ? null : packetCapture.getH2Filter();
+        this.dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
 
         ExecutorService executorService = vpn.getExecutorService();
         Client client = new Client();
@@ -112,7 +117,6 @@ public class UDProxy {
         @Override
         public void run() {
             IPacketCapture packetCapture = vpn.getPacketCapture();
-            DNSFilter dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
             try {
                 final byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
                 final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -190,7 +194,7 @@ public class UDProxy {
                                             setUdpProxy(packetRequest, udpProxy);
                                             break; // forward traffic
                                         }
-                                        Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? packetCapture.getH2Filter() : null;
+                                        Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? UDProxy.this.http2Filter : null;
                                         handleQuicProxy(packetRequest, http2Filter, clientHello, packetCapture.getQuicProxyProvider(), udpProxy);
                                     }
                                 }
@@ -454,8 +458,6 @@ public class UDProxy {
         private QuicServer quicServer;
         @Override
         public void run() {
-            IPacketCapture packetCapture = vpn.getPacketCapture();
-            DNSFilter dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
             try {
                 final byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
                 final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);

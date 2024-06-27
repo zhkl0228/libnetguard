@@ -54,6 +54,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     public final byte[] filterResponse(Http2SessionKey sessionKey, HttpResponse response, HttpHeaders headers, byte[] responseData) {
         RequestData data = requestMap.remove(sessionKey);
         if (data == null) {
+            log.info("May not filter response. sessionKey={}, this={}", sessionKey, this);
             return responseData;
         }
         byte[] fakeResponseData = filterResponseInternal(data.request, data.requestData, response, responseData);
