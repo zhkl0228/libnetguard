@@ -115,8 +115,8 @@ public class Main {
             if (("weixin.qq.com".equals(host) || "http3.is".equals(host)) && "/".equals(request.uri())) {
                 HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
                 HttpHeaders headers = response.headers();
-                headers.set("content-type", "text/plain; charset=utf-8");
-                headers.set("cache-control", "no-cache, must-revalidate");
+                headers.set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=utf-8");
+                headers.set(HttpHeaderNames.CACHE_CONTROL, "no-cache, must-revalidate");
                 return CancelResult.fake(response, ("FAKE_HTML: " + new Date()).getBytes());
             }
             return super.cancelRequest(request, requestData, polling);

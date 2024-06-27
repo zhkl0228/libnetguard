@@ -81,6 +81,7 @@ public class PacketRequest {
                 "serverIp='" + serverIp + '\'' +
                 ", port=" + port +
                 ", hostName='" + hostName + '\'' +
+                ", isDNSQuery='" + (dnsQuery != null) + '\'' +
                 ", applicationLayerProtocols=" + applicationLayerProtocols +
                 '}';
     }
