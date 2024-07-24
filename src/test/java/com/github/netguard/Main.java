@@ -23,6 +23,7 @@ import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
 import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
+import com.github.netguard.vpn.udp.quic.kwik.KwikProvider;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.ServiceSinkhole;
@@ -227,7 +228,7 @@ public class Main {
 
             @Override
             public QuicProxyProvider getQuicProxyProvider() {
-                return QuicProxyProvider.netty();
+                return new KwikProvider();
             }
 
             private SSLContext createConscryptContext() {
@@ -241,7 +242,7 @@ public class Main {
             }
             @Override
             public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
-                TlsSignature tlsSignature = connectRequest.tlsSignature;
+                TlsSignature tlsSignature = connectRequest.getTlsSignature();
                 if (tlsSignature != null) {
                     System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\"%n", connectRequest,
                             DigestUtil.md5Hex(tlsSignature.getJa3Text()),
@@ -270,7 +271,7 @@ public class Main {
                 if (packetRequest.dnsQuery != null) {
                     return AcceptUdpResult.rule(AcceptRule.Forward);
                 }
-                TlsSignature tlsSignature = packetRequest.tlsSignature;
+                TlsSignature tlsSignature = packetRequest.getTlsSignature();
                 if (tlsSignature != null) {
                     System.out.printf("acceptUdp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\"%n", packetRequest,
                             DigestUtil.md5Hex(tlsSignature.getJa3Text()),

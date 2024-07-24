@@ -21,12 +21,12 @@ class KwikClientConnection implements ClientConnection {
         connection.connect();
         List<X509Certificate> chain = connection.getServerCertificateChain();
         X509Certificate peerCertificate = chain.get(0);
-        String handshakeApplicationProtocol = connection.getHandshakeApplicationProtocol();
+        String handshakeApplicationProtocol = "h3";
         return new KwikHandshakeResult(peerCertificate, handshakeApplicationProtocol, session, connection);
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         connection.close();
     }
 

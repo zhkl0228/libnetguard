@@ -355,12 +355,7 @@ public class SSLProxyV2 implements Runnable {
         }
         if (record.hostName == null || allowRule == AllowRule.CONNECT_TCP) {
             try (Socket socket = new Socket(socketProxy)) {
-                InetSocketAddress address;
-                if (socketProxy != Proxy.NO_PROXY && socketProxy.type() == Proxy.Type.SOCKS && redirectHost != null) {
-                    address = InetSocketAddress.createUnresolved(redirectHost, redirectPort);
-                } else {
-                    address = new InetSocketAddress(redirectAddress, redirectPort);
-                }
+                InetSocketAddress address = createSocketAddress(socketProxy, redirectAddress, redirectPort, redirectHost);
                 socket.connect(address, timeout);
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     socketOut.write(record.prologue);
@@ -375,7 +370,8 @@ public class SSLProxyV2 implements Runnable {
             SSLSocket secureSocket = null;
             try {
                 app = new Socket(socketProxy);
-                app.connect(new InetSocketAddress(redirectAddress, redirectPort), timeout);
+                InetSocketAddress address = createSocketAddress(socketProxy, redirectAddress, redirectPort, redirectHost);
+                app.connect(address, timeout);
                 secureSocket = (SSLSocket) factory.createSocket(app, record.hostName, redirectPort, true);
                 if (!record.applicationLayerProtocols.isEmpty()) {
                     setApplicationProtocols(secureSocket, record.applicationLayerProtocols.toArray(new String[0]));
@@ -422,6 +418,16 @@ public class SSLProxyV2 implements Runnable {
                 throw e;
             }
         }
+    }
+
+    private InetSocketAddress createSocketAddress(Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost) {
+        InetSocketAddress address;
+        if (socketProxy != Proxy.NO_PROXY && socketProxy.type() == Proxy.Type.SOCKS && redirectHost != null) {
+            address = InetSocketAddress.createUnresolved(redirectHost, redirectPort);
+        } else {
+            address = new InetSocketAddress(redirectAddress, redirectPort);
+        }
+        return address;
     }
 
     private static Method isConscrypt, setApplicationProtocols;

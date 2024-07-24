@@ -10,7 +10,7 @@ import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.log.NullLogger;
 import net.luminis.quic.server.ServerConnectionConfig;
 import net.luminis.quic.server.ServerConnector;
-import net.luminis.tls.handshake.TlsServerEngineFactory;
+import net.luminis.tls.engine.TlsServerEngineFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -1,8 +1,8 @@
 package com.github.netguard.vpn.udp;
 
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.thread.ThreadUtil;
 import com.github.netguard.Inspector;
-import net.luminis.quic.concurrent.DaemonThreadFactory;
 import net.luminis.quic.receive.Receiver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +29,9 @@ public class UDPRelay implements Runnable, Closeable {
 
     private static final Logger log = LoggerFactory.getLogger(UDPRelay.class);
 
-    private final ExecutorService executorService = Executors.newCachedThreadPool(new DaemonThreadFactory("udp-relay"));
+    private final ExecutorService executorService = Executors.newCachedThreadPool(
+            ThreadUtil.newNamedThreadFactory("udp-relay", true)
+    );
     private final DatagramSocket serverSocket;
 
     public UDPRelay(int port) throws SocketException {

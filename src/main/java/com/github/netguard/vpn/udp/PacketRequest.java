@@ -1,10 +1,13 @@
 package com.github.netguard.vpn.udp;
 
 import com.github.netguard.vpn.ClientOS;
+import com.github.netguard.vpn.ConnectRequest;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tls.JA3Signature;
 import com.github.netguard.vpn.tls.QuicClientHello;
 import com.github.netguard.vpn.tls.TlsSignature;
+import eu.faircode.netguard.Application;
+import eu.faircode.netguard.Packet;
 import net.luminis.tls.extension.ApplicationLayerProtocolNegotiationExtension;
 import net.luminis.tls.extension.Extension;
 import net.luminis.tls.extension.ServerNameExtension;
@@ -19,7 +22,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-public class PacketRequest {
+public class PacketRequest implements ConnectRequest {
 
     private static final Logger log = LoggerFactory.getLogger(PacketRequest.class);
 
@@ -28,27 +31,41 @@ public class PacketRequest {
     public final String hostName;
     public final List<String> applicationLayerProtocols;
     public final Message dnsQuery;
-    public final TlsSignature tlsSignature;
+    private final TlsSignature tlsSignature;
 
+    @Override
     public byte[] getPrologue() {
         return Arrays.copyOf(buffer, length);
     }
 
+    @Override
+    public TlsSignature getTlsSignature() {
+        return tlsSignature;
+    }
+
+    @Override
     public ClientOS getClientOS() {
         return vpn.getClientOS();
+    }
+
+    @Override
+    public Application[] queryApplications() {
+        return vpn.queryApplications(packet.hashCode());
     }
 
     private final byte[] buffer;
     private final int length;
     private final InspectorVpn vpn;
+    private final Packet packet;
 
-    public PacketRequest(byte[] buffer, int length, ClientHello clientHello, Message dnsQuery, InetSocketAddress serverAddress, InspectorVpn vpn) {
+    public PacketRequest(byte[] buffer, int length, ClientHello clientHello, Message dnsQuery, InetSocketAddress serverAddress, InspectorVpn vpn, Packet packet) {
         this.serverIp = serverAddress.getAddress().getHostAddress();
         this.port = serverAddress.getPort();
         this.dnsQuery = dnsQuery;
         this.buffer = buffer;
         this.length = length;
         this.vpn = vpn;
+        this.packet = packet;
 
         if (clientHello != null) {
             String hostName = null;
@@ -60,6 +77,9 @@ public class PacketRequest {
                 } else if (extension instanceof ApplicationLayerProtocolNegotiationExtension) {
                     ApplicationLayerProtocolNegotiationExtension applicationLayerProtocolNegotiationExtension = (ApplicationLayerProtocolNegotiationExtension) extension;
                     applicationLayerProtocols = applicationLayerProtocolNegotiationExtension.getProtocols();
+                    if (!applicationLayerProtocols.contains("h3")) {
+                        throw new IllegalStateException("applicationLayerProtocols=" + applicationLayerProtocols);
+                    }
                 }
             }
             if(hostName == null || applicationLayerProtocols == null || applicationLayerProtocols.isEmpty()) {

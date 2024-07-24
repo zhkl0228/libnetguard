@@ -2,7 +2,7 @@ package com.github.netguard.vpn.udp.quic.kwik;
 
 import com.github.netguard.vpn.udp.quic.QuicServer;
 import net.luminis.quic.server.ServerConnector;
-import net.luminis.tls.handshake.TlsServerEngineFactory;
+import net.luminis.tls.engine.TlsServerEngineFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

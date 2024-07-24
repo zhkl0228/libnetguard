@@ -46,10 +46,11 @@ public class KwikProvider extends QuicProxyProvider {
 
     @Override
     public ClientConnection newClientConnection(PacketRequest packetRequest, Duration connectTimeout, InetSocketAddress udpProxy) throws SocketException, UnknownHostException {
-        QuicClientConnection.Builder builder = QuicClientConnection.newBuilder();
-        for (String applicationLayerProtocol : packetRequest.applicationLayerProtocols) {
-            builder.applicationProtocol(applicationLayerProtocol);
+        if (!packetRequest.applicationLayerProtocols.contains("h3")) {
+            throw new IllegalStateException("newClientConnection applicationLayerProtocols=" + packetRequest.applicationLayerProtocols);
         }
+        QuicClientConnection.Builder builder = QuicClientConnection.newBuilder();
+        builder.applicationProtocol("h3");
         if(udpProxy != null) {
             builder.socketFactory(new UdpProxySocketFactory(udpProxy, connectTimeout, new InetSocketAddress(packetRequest.serverIp, packetRequest.port)));
         }

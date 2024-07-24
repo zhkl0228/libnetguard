@@ -11,18 +11,27 @@ import io.netty.handler.codec.http.HttpRequest;
 
 import java.util.List;
 
-public class ConnectRequest {
+public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
 
     public final String serverIp;
     public final int port;
     public final String hostName;
     public final List<String> applicationLayerProtocols;
-    public final byte[] prologue;
+    private final byte[] prologue;
     public final HttpRequest httpRequest;
-    public final TlsSignature tlsSignature;
+    private final TlsSignature tlsSignature;
 
+    @Override
+    public byte[] getPrologue() {
+        return prologue;
+    }
 
-    @SuppressWarnings("unused")
+    @Override
+    public TlsSignature getTlsSignature() {
+        return tlsSignature;
+    }
+
+    @Override
     public Application[] queryApplications() {
         return vpn.queryApplications(packet.hashCode());
     }
@@ -43,6 +52,7 @@ public class ConnectRequest {
         this.tlsSignature = tlsSignature;
     }
 
+    @Override
     public ClientOS getClientOS() {
         return vpn.getClientOS();
     }

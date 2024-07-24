@@ -15,12 +15,13 @@ import com.github.netguard.vpn.udp.quic.HandshakeResult;
 import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
 import com.github.netguard.vpn.udp.quic.QuicServer;
 import eu.faircode.netguard.Allowed;
-import net.luminis.quic.core.Role;
-import net.luminis.quic.core.Version;
-import net.luminis.quic.core.VersionHolder;
+import eu.faircode.netguard.Packet;
 import net.luminis.quic.crypto.Aead;
 import net.luminis.quic.crypto.ConnectionSecrets;
 import net.luminis.quic.frame.QuicFrame;
+import net.luminis.quic.impl.Role;
+import net.luminis.quic.impl.Version;
+import net.luminis.quic.impl.VersionHolder;
 import net.luminis.quic.log.NullLogger;
 import net.luminis.quic.log.SysOutLogger;
 import net.luminis.quic.packet.InitialPacket;
@@ -59,13 +60,13 @@ public class UDProxy {
 
     private static final int READ_TIMEOUT = 60000;
 
-    public static Allowed redirect(InspectorVpn vpn, InetSocketAddress client, InetSocketAddress server) {
-        if ("255.255.255.255".equals(server.getHostString())) {
+    public static Allowed redirect(InspectorVpn vpn, Packet packet) {
+        if ("255.255.255.255".equals(packet.daddr)) {
             return new Allowed();
         }
-        log.trace("redirect client={}, server={}", client, server);
+        log.trace("redirect packet={}", packet);
         try {
-            UDProxy proxy = new UDProxy(vpn, client, server);
+            UDProxy proxy = new UDProxy(vpn, packet);
             return proxy.redirect();
         } catch (SocketException e) {
             throw new IllegalStateException("redirect", e);
@@ -80,10 +81,10 @@ public class UDProxy {
     private final Http2Filter http2Filter;
     private final DNSFilter dnsFilter;
 
-    private UDProxy(InspectorVpn vpn, InetSocketAddress clientAddress, InetSocketAddress serverAddress) throws SocketException {
+    private UDProxy(InspectorVpn vpn, Packet packet) throws SocketException {
         this.vpn = vpn;
-        this.clientAddress = clientAddress;
-        this.serverAddress = serverAddress;
+        this.clientAddress = packet.createClientAddress();
+        this.serverAddress = packet.createServerAddress();
         this.serverSocket = new DatagramSocket(new InetSocketAddress(0));
         this.serverSocket.setSoTimeout(READ_TIMEOUT);
         this.clientSocket = new DatagramSocket(new InetSocketAddress(0));
@@ -95,7 +96,7 @@ public class UDProxy {
 
         ExecutorService executorService = vpn.getExecutorService();
         Client client = new Client();
-        executorService.submit(new Server(client, serverAddress));
+        executorService.submit(new Server(client, serverAddress, packet));
         executorService.submit(client);
     }
 
@@ -107,9 +108,11 @@ public class UDProxy {
 
     private class Server implements Runnable {
         private final Client client;
-        Server(Client client, InetSocketAddress serverAddress) {
+        private final Packet packet;
+        Server(Client client, InetSocketAddress serverAddress, Packet packet) {
             this.client = client;
             this.forwardAddress = serverAddress;
+            this.packet = packet;
         }
         private InetSocketAddress forwardAddress;
         private final List<QuicFrame> bufferFrames = new ArrayList<>(10);
@@ -171,7 +174,7 @@ public class UDProxy {
                                 continue;
                             }
                             if (packetCapture != null) {
-                                PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, client.dnsQuery, serverAddress, vpn);
+                                PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, client.dnsQuery, serverAddress, vpn, this.packet);
                                 AcceptUdpResult acceptUdpResult = packetCapture.acceptUdp(packetRequest);
                                 AcceptRule rule = acceptUdpResult == null ? null : acceptUdpResult.acceptRule;
                                 InetSocketAddress udpProxy = acceptUdpResult == null ? null : acceptUdpResult.udpProxy;

@@ -1,6 +1,6 @@
 package com.github.netguard.vpn.tcp;
 
-import net.luminis.tls.handshake.TlsServerEngineFactory;
+import net.luminis.tls.engine.TlsServerEngineFactory;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.x500.X500Name;

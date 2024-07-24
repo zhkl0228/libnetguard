@@ -392,7 +392,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public QuicProxyProvider getQuicProxyProvider() {
-        return QuicProxyProvider.kwik();
+        return QuicProxyProvider.netty();
     }
 
     public static Map<String, String> parseParameters(String parameters) {

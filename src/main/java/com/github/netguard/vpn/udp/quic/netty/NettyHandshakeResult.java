@@ -1,5 +1,6 @@
 package com.github.netguard.vpn.udp.quic.netty;
 
+import cn.hutool.core.thread.ThreadUtil;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
@@ -39,7 +40,6 @@ import io.netty.incubator.codec.quic.QuicChannel;
 import io.netty.incubator.codec.quic.QuicSslContext;
 import io.netty.incubator.codec.quic.QuicSslContextBuilder;
 import io.netty.incubator.codec.quic.QuicStreamChannel;
-import net.luminis.quic.concurrent.DaemonThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,7 +65,8 @@ class NettyHandshakeResult implements HandshakeResult {
 
     @Override
     public QuicServer startServer(InspectorVpn vpn, Http2Filter http2Filter) throws Exception {
-        NioEventLoopGroup group = new NioEventLoopGroup(1, new DaemonThreadFactory("netty-server-nio-event-loop"));
+        NioEventLoopGroup group = new NioEventLoopGroup(1,
+                ThreadUtil.newNamedThreadFactory("netty-server-nio-event-loop", true));
         ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
         ServerCertificate.ServerContext serverContext = serverCertificate.getServerContext(vpn.getRootCert());
         KeyManagerFactory keyManagerFactory = serverContext.newKeyManagerFactory();

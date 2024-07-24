@@ -1,5 +1,6 @@
 package com.github.netguard;
 
+import cn.hutool.core.thread.ThreadUtil;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
@@ -9,7 +10,6 @@ import com.github.netguard.vpn.udp.UDProxy;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
-import net.luminis.quic.concurrent.DaemonThreadFactory;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -19,7 +19,9 @@ import java.util.concurrent.Executors;
 
 public abstract class ProxyVpn implements Runnable, InspectorVpn {
 
-    protected final ExecutorService executorService = Executors.newCachedThreadPool(new DaemonThreadFactory(getClass().getSimpleName()));
+    protected final ExecutorService executorService = Executors.newCachedThreadPool(
+            ThreadUtil.newNamedThreadFactory(getClass().getSimpleName(), true)
+    );
 
     protected static ClientOS readOS(DataInput vpnReadStream) throws IOException {
         int os = vpnReadStream.readUnsignedByte();
@@ -98,7 +100,7 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
     }
 
     protected final Allowed redirectUdp(Packet packet) {
-        return UDProxy.redirect(this, packet.createClientAddress(), packet.createServerAddress());
+        return UDProxy.redirect(this, packet);
     }
 
 }
