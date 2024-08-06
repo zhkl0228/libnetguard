@@ -47,8 +47,7 @@ class KwikHandshakeResult implements HandshakeResult {
                 .build();
         ServerConnector.Builder builder = ServerConnector.builder();
         ServerCertificate.ServerContext serverContext = serverCertificate.getServerContext(vpn.getRootCert());
-        TlsServerEngineFactory tlsServerEngineFactory = serverContext.newTlsServerEngineFactory();
-        builder.withTlsServerEngineFactory(tlsServerEngineFactory);
+        serverContext.configServerConnector(builder);
         net.luminis.quic.log.Logger serverLogger;
         if (log.isDebugEnabled()) {
             serverLogger = new PrintStreamLogger(System.out);
@@ -68,7 +67,7 @@ class KwikHandshakeResult implements HandshakeResult {
         log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, listenPort, http2Filter);
         serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new KwikProxy(vpn.getExecutorService(), connection, session, http2Filter));
         InetSocketAddress forwardAddress = new InetSocketAddress("127.0.0.1", listenPort);
-        return new KwikServer(serverConnector, forwardAddress, tlsServerEngineFactory);
+        return new KwikServer(serverConnector, forwardAddress, null);
     }
 
     @Override

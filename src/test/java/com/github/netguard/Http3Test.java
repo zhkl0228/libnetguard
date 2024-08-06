@@ -241,7 +241,7 @@ public class Http3Test extends TestCase {
                 .maxOpenPeerInitiatedUnidirectionalStreams(50)
                 .build();
         ServerConnector.Builder builder = ServerConnector.builder();
-        builder.withTlsServerEngineFactory(serverCertificate.getServerContext(rootCert).newTlsServerEngineFactory());
+        serverCertificate.getServerContext(rootCert).configServerConnector(builder);
         ServerConnector serverConnector = builder
                 .withPort(20170)
                 .withConfiguration(serverConnectionConfig)
@@ -254,7 +254,7 @@ public class Http3Test extends TestCase {
     }
 
     public void testFlupkeClient() throws Exception {
-        URI serverUrl = URI.create("https://http3.is/");
+        URI serverUrl = URI.create("https://quic.nginx.org/test");
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(serverUrl)
                 .timeout(Duration.ofSeconds(30))
@@ -297,7 +297,7 @@ public class Http3Test extends TestCase {
                     .maxOpenPeerInitiatedUnidirectionalStreams(50)
                     .build();
             ServerConnector.Builder builder = ServerConnector.builder();
-            builder.withTlsServerEngineFactory(serverCertificate.getServerContext(rootCert).newTlsServerEngineFactory());
+            serverCertificate.getServerContext(rootCert).configServerConnector(builder);
             ServerConnector serverConnector = builder
                     .withPort(20170)
                     .withConfiguration(serverConnectionConfig)

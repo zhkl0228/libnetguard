@@ -24,10 +24,11 @@ class KwikServer implements QuicServer {
         return forwardAddress;
     }
 
+    // TODO
     @Override
     public void close() throws IOException {
-        serverConnector.shutdown();
-        tlsServerEngineFactory.close();
+//        serverConnector.shutdown();
+//        tlsServerEngineFactory.close();
     }
 
 }

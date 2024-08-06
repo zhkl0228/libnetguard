@@ -1,6 +1,6 @@
 package com.github.netguard.vpn.tcp;
 
-import net.luminis.tls.engine.TlsServerEngineFactory;
+import net.luminis.quic.server.ServerConnector;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -45,7 +45,6 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
-import java.security.spec.InvalidKeySpecException;
 import java.util.Date;
 import java.util.Map;
 import java.util.Random;
@@ -99,8 +98,8 @@ public class ServerCertificate {
             KeyManager[] keyManagers = newKeyManagerFactory().getKeyManagers();
             return newServerContext(keyManagers);
         }
-        public TlsServerEngineFactory newTlsServerEngineFactory() throws CertificateException, IOException, InvalidKeySpecException {
-            return new TlsServerEngineFactory(keyStore, authority.alias(), authority.password());
+        public void configServerConnector(ServerConnector.Builder builder) {
+            builder.withKeyStore(keyStore, authority.alias(), authority.password());
         }
         public KeyManagerFactory newKeyManagerFactory() throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException {
             String keyManAlg = KeyManagerFactory.getDefaultAlgorithm();
