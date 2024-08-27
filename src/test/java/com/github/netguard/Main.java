@@ -13,8 +13,6 @@ import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.tcp.ConnectRequest;
-import com.github.netguard.vpn.tcp.SSLProxyV2;
-import com.github.netguard.vpn.tcp.StreamForward;
 import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
@@ -24,9 +22,9 @@ import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
 import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
 import com.github.netguard.vpn.udp.quic.kwik.KwikProvider;
+import com.github.zhkl0228.impersonator.ImpersonatorFactory;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
-import eu.faircode.netguard.ServiceSinkhole;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -38,8 +36,6 @@ import io.netty.util.ResourceLeakDetector;
 import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-import org.conscrypt.OpenSSLProvider;
-import org.krakenapps.pcap.decoder.http.HttpDecoder;
 import org.krakenapps.pcap.decoder.http.impl.HttpSession;
 import org.xbill.DNS.ARecord;
 import org.xbill.DNS.DClass;
@@ -49,17 +45,12 @@ import org.xbill.DNS.Message;
 import org.xbill.DNS.Name;
 import org.xbill.DNS.Record;
 
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
@@ -73,15 +64,9 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
-        Logger.getLogger(ServiceSinkhole.class).setLevel(Level.INFO);
-        Logger.getLogger(SSLProxyV2.class).setLevel(Level.INFO);
-        Logger.getLogger(HttpFrameForward.class).setLevel(Level.INFO);
-        Logger.getLogger(PacketDecoder.class).setLevel(Level.INFO);
-        Logger.getLogger(HttpDecoder.class).setLevel(Level.INFO);
-        Logger.getLogger(StreamForward.class).setLevel(Level.INFO);
         Logger.getLogger(HttpFrameForward.class.getPackageName()).setLevel(Level.INFO);
         Logger.getLogger(DNSFilter.class.getPackageName()).setLevel(Level.DEBUG);
-        VpnServer vpnServer = new VpnServer(20260);
+        VpnServer vpnServer = new VpnServer(20240);
         vpnServer.preparePreMasterSecretsLogFile();
         vpnServer.enableBroadcast(10);
         vpnServer.enableTransparentProxying();
@@ -230,16 +215,6 @@ public class Main {
             public QuicProxyProvider getQuicProxyProvider() {
                 return new KwikProvider();
             }
-
-            private SSLContext createConscryptContext() {
-                try {
-                    SSLContext context = SSLContext.getInstance("TLSv1.3", "Conscrypt");
-                    context.init(null, new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
-                    return context;
-                } catch (NoSuchAlgorithmException | KeyManagementException | NoSuchProviderException e) {
-                    throw new IllegalStateException(e);
-                }
-            }
             @Override
             public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
                 TlsSignature tlsSignature = connectRequest.getTlsSignature();
@@ -252,14 +227,30 @@ public class Main {
                             tlsSignature.getJa3Text(),
                             tlsSignature.getJa3nText());
                 }
-                if ("weixin.qq.com".equals(connectRequest.hostName) || "tls.browserleaks.com".equals(connectRequest.hostName)) {
+                if ("legy.line-apps.com".equals(connectRequest.hostName)) {
+                    return AcceptTcpResult.builder(AllowRule.CONNECT_TCP)
+                            .enableSocksProxy("127.0.0.1", 20230)
+                            .build();
+                }
+                if ("tls.browserleaks.com".equals(connectRequest.hostName)) {
+                    return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
+                            .enableSocksProxy("127.0.0.1", 20230)
+                            .configClientSSLContext(ImpersonatorFactory.macFirefox().newSSLContext(null, null))
+                            .build();
+                }
+                if ("tools.scrapfly.io".equals(connectRequest.hostName)) {
+                    return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
+                            .enableSocksProxy("127.0.0.1", 20230)
+                            .configClientSSLContext(ImpersonatorFactory.macChrome().newSSLContext(null, null))
+                            .build();
+                }
+                if ("weixin.qq.com".equals(connectRequest.hostName)) {
                     return AcceptTcpResult.builder(AllowRule.FILTER_H2)
-                            .configClientSSLContext(createConscryptContext())
                             .build();
                 }
                 if (connectRequest.isSSL()) {
                     return AcceptTcpResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
-                            .configClientSSLContext(createConscryptContext())
+                            .configClientSSLContext(ImpersonatorFactory.android().newSSLContext(null, new TrustManager[]{DefaultTrustManager.INSTANCE}))
                             .build();
                 }
                 Application[] applications = connectRequest.queryApplications();
@@ -288,13 +279,6 @@ public class Main {
                 return result;
             }
         }
-    }
-
-    static {
-        /*
-         * https://github.com/google/conscrypt
-         */
-        Security.addProvider(new OpenSSLProvider());
     }
 
 }

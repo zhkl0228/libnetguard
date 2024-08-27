@@ -14,9 +14,8 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
@@ -41,41 +40,41 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
     }
 
-    private static Method getImpl, getFileDescriptor;
     private static Field fdField;
 
     private final Socket socket;
     private final long jni_context;
     private final int fd;
 
+    private static FileDescriptor getFileDescriptor(Socket s) {
+        try {
+            Field f_impl = Socket.class.getDeclaredField("impl");
+            f_impl.setAccessible(true);
+            Object socketImpl = f_impl.get(s);
+            Field f_fd = SocketImpl.class.getDeclaredField("fd");
+            f_fd.setAccessible(true);
+            return (FileDescriptor) f_fd.get(socketImpl);
+        } catch (Exception e) {
+            throw new RuntimeException("Can't get FileDescriptor from socket", e);
+        }
+    }
+
     public ServiceSinkhole(Socket socket, List<ProxyVpn> clients, RootCert rootCert) throws IOException {
         super(clients, rootCert);
-        this.clientOS = readOS(new DataInputStream(socket.getInputStream()));
+        InputStream inputStream = socket.getInputStream();
+        this.clientOS = readOS(new DataInputStream(inputStream));
 
         int mtu = jni_get_mtu();
 
         this.jni_context = jni_init(30);
         try {
-            if (getImpl == null) {
-                getImpl = Socket.class.getDeclaredMethod("getImpl");
-                getImpl.setAccessible(true);
-            }
-            if (getFileDescriptor == null) {
-                getFileDescriptor = SocketImpl.class.getDeclaredMethod("getFileDescriptor");
-                getFileDescriptor.setAccessible(true);
-            }
             if (fdField == null) {
                 fdField = FileDescriptor.class.getDeclaredField("fd");
                 fdField.setAccessible(true);
             }
-            SocketImpl impl = (SocketImpl) getImpl.invoke(socket);
-            FileDescriptor fileDescriptor = (FileDescriptor) getFileDescriptor.invoke(impl);
-            if (!fileDescriptor.valid()) {
-                throw new IllegalStateException("Invalid fd: " + fileDescriptor);
-            }
+            FileDescriptor fileDescriptor = getFileDescriptor(socket);
             this.fd = (Integer) fdField.get(fileDescriptor);
-        } catch (NoSuchMethodException | NoSuchFieldException | IllegalAccessException |
-                 InvocationTargetException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("init ServiceSinkhole", e);
         }
         this.socket = socket;

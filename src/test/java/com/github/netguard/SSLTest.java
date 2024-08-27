@@ -12,7 +12,7 @@ import java.io.DataInputStream;
 
 public class SSLTest extends TestCase {
 
-    public void testByteBuf() throws Exception {
+    public void testByteBuf() {
         ByteBuf byteBuf = Unpooled.buffer();
         assertNotNull(byteBuf);
         System.out.println(byteBuf);

@@ -8,6 +8,3 @@
 
 Depend on
 - [kraken](https://github.com/zhkl0228/kraken)
-- [kwik](https://github.com/zhkl0228/kwik)
-- [agent15](https://github.com/zhkl0228/agent15)
-- [conscrypt](https://github.com/zhkl0228/conscrypt)
