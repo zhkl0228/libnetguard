@@ -320,7 +320,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream, int streamId) {
-        HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey, null);
+        HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey, akamai);
         if (filter != null) {
             CancelResult result = filter.cancelRequest(request, requestData == null ? new byte[0] : requestData, true);
             if (result != null) {
@@ -348,7 +348,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private void handlePollingResponse(HttpHeadersFrame headersFrame, byte[] responseData, boolean endStreamOnFlush) {
         byte[] data = filter == null ? responseData : filter.filterPollingResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
-                createHttpResponse(headersFrame, sessionKey),
+                createHttpResponse(headersFrame, sessionKey, akamai),
                 responseData, endStreamOnFlush);
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
         ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
@@ -404,7 +404,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData, ByteArrayOutputStream outputBuffer) {
         byte[] data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
-                createHttpResponse(headersFrame, sessionKey),
+                createHttpResponse(headersFrame, sessionKey, akamai),
                 headersFrame.headers(), responseData == null ? new byte[0] : responseData);
         if (data == null) {
             throw new IllegalStateException();
@@ -631,13 +631,13 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
-    private static HttpResponse createHttpResponse(HttpHeadersFrame headersFrame, String sessionKey) {
+    private static HttpResponse createHttpResponse(HttpHeadersFrame headersFrame, String sessionKey, Akamai akamai) {
         HttpHeaders headers = headersFrame.headers().copy();
         // Create the first line of the request from the name/value pairs
         HttpResponseStatus status = HttpResponseStatus.valueOf(headers.getInt(":status"));
         headers.remove(":status");
         HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
-        addNetGuardHeaders(headers, headersFrame, sessionKey, null);
+        addNetGuardHeaders(headers, headersFrame, sessionKey, akamai);
         addHeaders(response, headers);
         return response;
     }

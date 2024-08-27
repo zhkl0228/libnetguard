@@ -20,8 +20,8 @@ class Akamai {
     }
 
     public String getText() {
-        if (httpSettingsFrame == null || windowSize == 0 || httpHeadersFrame == null) {
-            log.debug("httpSettingsFrame({}) or windowSize({}) or httpHeadersFrame({}) is null", httpHeadersFrame != null, windowSize, httpHeadersFrame != null);
+        if (httpSettingsFrame == null || httpHeadersFrame == null) {
+            log.debug("httpSettingsFrame({}) or httpHeadersFrame({}) is null", httpHeadersFrame != null, httpHeadersFrame != null);
             return null;
         }
         StringBuilder builder = new StringBuilder();
@@ -32,7 +32,7 @@ class Akamai {
             }
             builder.append(String.join(";", list)).append("|");
         }
-        builder.append(windowSize).append("|");
+        builder.append(windowSize == 0 ? "00" : String.valueOf(windowSize)).append("|");
         if (priorityFrames.isEmpty()) {
             builder.append("0");
         } else {
