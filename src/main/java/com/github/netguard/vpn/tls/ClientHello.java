@@ -16,4 +16,6 @@ public interface ClientHello {
 
     char getJa4Prefix();
 
+    List<Integer> getCompressionMethods();
+
 }

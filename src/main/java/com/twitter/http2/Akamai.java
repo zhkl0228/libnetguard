@@ -7,6 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * <a href="https://tools.scrapfly.io/api/http2">API</a>
+ */
 class Akamai {
 
     private static final Logger log = LoggerFactory.getLogger(Akamai.class);

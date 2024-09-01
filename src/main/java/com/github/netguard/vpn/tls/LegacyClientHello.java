@@ -14,8 +14,10 @@ class LegacyClientHello implements ClientHello {
     private final List<Integer> signatureAlgorithms;
     private final String hostName;
     private final List<String> applicationLayerProtocols;
+    private final List<Integer> compressionMethods;
 
-    LegacyClientHello(int clientVersion, List<Integer> cipherSuites, Map<Integer, byte[]> extensionTypes, List<Integer> ec, List<Integer> ecpf, List<Integer> signatureAlgorithms, String hostName, List<String> applicationLayerProtocols) {
+    LegacyClientHello(int clientVersion, List<Integer> cipherSuites, Map<Integer, byte[]> extensionTypes, List<Integer> ec, List<Integer> ecpf, List<Integer> signatureAlgorithms, String hostName, List<String> applicationLayerProtocols,
+                      List<Integer> compressionMethods) {
         this.clientVersion = clientVersion;
         this.cipherSuites = Collections.unmodifiableList(cipherSuites);
         this.extensionTypes = Collections.unmodifiableMap(extensionTypes);
@@ -24,6 +26,12 @@ class LegacyClientHello implements ClientHello {
         this.signatureAlgorithms = Collections.unmodifiableList(signatureAlgorithms);
         this.hostName = hostName;
         this.applicationLayerProtocols = Collections.unmodifiableList(applicationLayerProtocols);
+        this.compressionMethods = compressionMethods;
+    }
+
+    @Override
+    public List<Integer> getCompressionMethods() {
+        return compressionMethods;
     }
 
     @Override

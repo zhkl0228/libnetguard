@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -155,14 +156,20 @@ public final class JA3Signature implements TlsSignature {
             convertUInt16ArrayToJa3(packet, off, off + cipherSuiteLength, cipherSuites);
             off += cipherSuiteLength;
 
-            off += packet.get(off) + SSL_VERSION_LENGTH; // Skip Compression Methods and length of extensions
+            final int compressionLength = packet.get(off) & 0xff;
+            off++;
+            final List<Integer> compressionMethods = new ArrayList<>(compressionLength);
+            for(int i = 0; i < compressionLength; i++) {
+                compressionMethods.add(packet.get(off + i) & 0xff);
+            }
+            off += compressionLength + UINT16_LENGTH;
 
             final List<Integer> ec = new ArrayList<>(); // elliptic curves
             final List<Integer> ecpf = new ArrayList<>(); // elliptic curve point formats
             final List<Integer> signatureAlgorithms = new ArrayList<>();
             Map<Integer, byte[]> extensionTypes = parseExtensions(packet, off, end, ec, ecpf, signatureAlgorithms);
             return new JA3Signature(new LegacyClientHello(clientVersion, cipherSuites, extensionTypes, ec, ecpf, signatureAlgorithms,
-                    hostName, applicationLayerProtocols));
+                    hostName, applicationLayerProtocols, compressionMethods));
         } catch (BufferUnderflowException | ArrayIndexOutOfBoundsException e) {
             return null;
         }
@@ -279,11 +286,180 @@ public final class JA3Signature implements TlsSignature {
                 case "hq-interop":
                     break;
                 default:
-                    log.warn("Unknown application layer protocol: {}", applicationLayerProtocol);
+                    log.warn("createApplicationLayerProtocols unknown application layer protocol: {}", applicationLayerProtocol);
                     break;
             }
         }
         return list;
+    }
+
+    private List<String> createSupportedProtocols() {
+        List<String> applicationLayerProtocols = clientHello.getApplicationLayerProtocols();
+        List<String> list = new ArrayList<>(3);
+        for (String applicationLayerProtocol : applicationLayerProtocols) {
+            switch (applicationLayerProtocol) {
+                case "http/0.9":
+                    list.add("http09");
+                    break;
+                case "http/1.0":
+                    list.add("http10");
+                    break;
+                case "http/1.1":
+                    list.add("http11");
+                    break;
+                case "h2":
+                    list.add("h2");
+                    break;
+                case "h3":
+                case "h3-27":
+                case "h3-29":
+                    list.add("h3");
+                    break;
+                case "dot":
+                case "apns-security-v3":
+                case "apns-pack-v1":
+                case "spdy/3.1":
+                case "hq-interop":
+                    break;
+                default:
+                    log.warn("createSupportedProtocols unknown application layer protocol: {}", applicationLayerProtocol);
+                    break;
+            }
+        }
+        return list;
+    }
+
+    /**
+     * version:772|
+     * ch_ciphers:GREASE-4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53|
+     * ch_extensions:GREASE-0-5-10-11-13-16-18-23-27-35-43-45-51-17513-65037-65281-GREASE|
+     * groups:GREASE-25497-29-23-24|
+     * points:0|
+     * compression:0|
+     * supported_versions:GREASE-772-771|
+     * supported_protocols:h2-http11|
+     * key_shares:GREASE-25497-29|
+     * psk:1|
+     * signature_algs:1027-2052-1025-1283-2053-1281-2054-1537|
+     * early_data:0|
+     */
+    @Override
+    public String getScrapflyFP() {
+        Map<Integer, byte[]> extensionTypes = new LinkedHashMap<>(clientHello.getExtensionTypes());
+        StringBuilder builder = new StringBuilder();
+        builder.append("version:").append(getVersion(extensionTypes)).append("|");
+        {
+            List<String> list = buildIntegerList(clientHello.getCipherSuites());
+            builder.append("ch_ciphers:").append(String.join("-", list)).append("|");
+        }
+        {
+            List<Integer> extensions = new ArrayList<>(extensionTypes.size());
+            Map<Integer, Integer> map = new LinkedHashMap<>();
+            for(Integer extensionType : extensionTypes.keySet()) {
+                if (extensionType == TlsConstants.ExtensionType.padding.value) {
+                    continue;
+                }
+                if (isNotGrease(extensionType)) {
+                    extensions.add(extensionType);
+                } else {
+                    map.put(extensions.size() + map.size(), extensionType);
+                }
+            }
+            Collections.sort(extensions);
+            for (Map.Entry<Integer, Integer> entry : map.entrySet()) {
+                extensions.add(entry.getKey(), entry.getValue());
+            }
+            List<String> list = buildIntegerList(extensions);
+            builder.append("ch_extensions:").append(String.join("-", list)).append("|");
+        }
+        {
+            List<String> list = buildIntegerList(clientHello.getEllipticCurves());
+            builder.append("groups:").append(String.join("-", list)).append("|");
+        }
+        {
+            List<String> list = buildIntegerList(clientHello.getEllipticCurvePointFormats());
+            builder.append("points:").append(String.join("-", list)).append("|");
+        }
+        {
+            List<String> list = buildIntegerList(clientHello.getCompressionMethods());
+            builder.append("compression:").append(String.join("-", list)).append("|");
+        }
+        byte[] supportedVersions = extensionTypes.get(TlsConstants.ExtensionType.supported_versions.value & 0xffff);
+        if(supportedVersions != null) {
+            ByteBuffer buffer = ByteBuffer.wrap(supportedVersions);
+            int length = buffer.get() & 0xff;
+            List<Integer> versions = new ArrayList<>(length / 2);
+            convertUInt16ArrayToJa3(buffer, 1, length + 1, versions);
+            List<String> list = buildIntegerList(versions);
+            builder.append("supported_versions:").append(String.join("-", list)).append("|");
+        }
+        {
+            List<String> list = createSupportedProtocols();
+            builder.append("supported_protocols:").append(String.join("-", list)).append("|");
+        }
+        byte[] keyShare = extensionTypes.get(TlsConstants.ExtensionType.key_share.value & 0xffff);
+        if (keyShare != null) {
+            ByteBuffer buffer = ByteBuffer.wrap(keyShare);
+            int length = buffer.getShort() & 0xffff;
+            if (length != (keyShare.length - 2)) {
+                throw new IllegalStateException("Invalid keyShare");
+            }
+            List<Integer> list = new ArrayList<>(2);
+            while (buffer.hasRemaining()) {
+                int namedGroup = buffer.getShort() & 0xffff;
+                int len = buffer.getShort() & 0xffff;
+                if (len < 1) {
+                    throw new IllegalStateException("Invalid keyShare");
+                }
+                buffer.position(buffer.position() + len);
+                list.add(namedGroup);
+            }
+            builder.append("key_shares:").append(String.join("-", buildIntegerList(list))).append("|");
+        }
+        {
+            builder.append("psk:1|");
+        }
+        {
+            List<String> list = buildIntegerList(clientHello.getSignatureAlgorithms());
+            builder.append("signature_algs:").append(String.join("-", list)).append("|");
+        }
+        {
+            boolean isEarlyData = extensionTypes.containsKey(TlsConstants.ExtensionType.early_data.value & 0xffff);
+            builder.append("early_data:").append(isEarlyData ? 1 : 0).append("|");
+        }
+        return builder.toString();
+    }
+
+    private static List<String> buildIntegerList(Collection<Integer> values) {
+        List<String> list = new ArrayList<>(values.size());
+        for(Integer value : values) {
+            if(isNotGrease(value)) {
+                list.add(String.valueOf(value));
+            } else {
+                list.add(GREASE_TEXT);
+            }
+        }
+        return list;
+    }
+
+    private int getVersion(Map<Integer, byte[]> extensionTypes) {
+        int version;
+        byte[] supportedVersions = extensionTypes.get(TlsConstants.ExtensionType.supported_versions.value & 0xffff);
+        if(supportedVersions != null) {
+            ByteBuffer buffer = ByteBuffer.wrap(supportedVersions);
+            int length = buffer.get() & 0xff;
+            List<Integer> list = new ArrayList<>(length / 2);
+            convertUInt16ArrayToJa3(buffer, 1, length + 1, list);
+            version = 0;
+            for (Integer v : list) {
+                if (isNotGrease(v) && v > version) {
+                    version = v;
+                }
+            }
+        } else {
+            version = clientHello.getClientVersion();
+        }
+        return version;
     }
 
     @Override
@@ -293,22 +469,7 @@ public final class JA3Signature implements TlsSignature {
         StringBuilder ja4 = new StringBuilder();
         ja4.append(clientHello.getJa4Prefix());
         {
-            int version;
-            byte[] supportedVersions = extensionTypes.get(TlsConstants.ExtensionType.supported_versions.value & 0xffff);
-            if(supportedVersions != null) {
-                ByteBuffer buffer = ByteBuffer.wrap(supportedVersions);
-                int length = buffer.get() & 0xff;
-                List<Integer> list = new ArrayList<>(length / 2);
-                convertUInt16ArrayToJa3(buffer, 1, length + 1, list);
-                version = 0;
-                for (Integer v : list) {
-                    if (isNotGrease(v) && v > version) {
-                        version = v;
-                    }
-                }
-            } else {
-                version = clientHello.getClientVersion();
-            }
+            int version = getVersion(extensionTypes);
             switch (version) {
                 case 0x0304:
                     ja4.append("13");

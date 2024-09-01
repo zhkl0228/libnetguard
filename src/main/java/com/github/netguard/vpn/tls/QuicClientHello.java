@@ -35,6 +35,11 @@ public class QuicClientHello implements ClientHello {
     }
 
     @Override
+    public List<Integer> getCompressionMethods() {
+        return Collections.singletonList(0);
+    }
+
+    @Override
     public int getClientVersion() {
         return 0x303;
     }
