@@ -430,10 +430,22 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
 
         if (httpHeadersFrame.isLast()) {
-            if (server) {
-                handleRequest(httpHeadersFrame, null, httpHeadersFrame.getStreamId());
+            Stream stream = streamMap.get(httpHeadersFrame.getStreamId());
+            if (stream != null) {
+                streamMap.remove(httpHeadersFrame.getStreamId());
+                stream.httpHeadersFrame.headers().setAll(httpHeadersFrame.headers());
+                if (server) {
+                    handleRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), httpHeadersFrame.getStreamId());
+                } else {
+                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), outputBuffer);
+                }
+                stream.buffer.reset();
             } else {
-                handleResponse(httpHeadersFrame, null, outputBuffer);
+                if (server) {
+                    handleRequest(httpHeadersFrame, null, httpHeadersFrame.getStreamId());
+                } else {
+                    handleResponse(httpHeadersFrame, null, outputBuffer);
+                }
             }
         } else {
             Stream stream = new Stream(httpHeadersFrame);
