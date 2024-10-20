@@ -45,7 +45,7 @@ public class NettyProvider extends QuicProxyProvider {
             int port = 0;
             if (udpProxy != null) {
                 try (DatagramSocket socket = UDPRelay.createRelayProxySocket(udpProxy,
-                        new InetSocketAddress(packetRequest.serverIp, packetRequest.port), connectTimeout.toSeconds())) {
+                        new InetSocketAddress(packetRequest.serverIp, packetRequest.port), connectTimeout.getSeconds())) {
                     port = socket.getLocalPort();
                 }
             }

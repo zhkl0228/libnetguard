@@ -35,7 +35,7 @@ public class KwikProvider extends QuicProxyProvider {
         @Override
         public DatagramSocket createSocket(InetAddress destination) throws SocketException {
             try {
-                return UDPRelay.createRelayProxySocket(udpProxy, serverAddress, connectTimeout.toSeconds());
+                return UDPRelay.createRelayProxySocket(udpProxy, serverAddress, connectTimeout.getSeconds());
             } catch (SocketException e) {
                 throw e;
             } catch (IOException e) {

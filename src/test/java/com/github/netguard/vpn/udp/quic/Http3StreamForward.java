@@ -130,7 +130,7 @@ class Http3StreamForward extends QuicStreamForward {
                     } else {
                         byte[] responseData = result.responseData;
                         HttpResponse response = result.response;
-                        response.headers().set("x-netguard-fake-response", sessionKey.toString());
+                        response.headers().set("X-Netguard-Fake-Response", sessionKey.toString());
                         http2Filter.filterRequest(sessionKey, request, request.headers(), requestData);
                         peer.handleResponse(response, responseData);
                     }
@@ -160,8 +160,8 @@ class Http3StreamForward extends QuicStreamForward {
                     throw new IllegalStateException();
                 }
                 log.debug("onEOF filter response headers={}", headers);
-                headers.setInt("x-http2-stream-id", from.getStreamId());
-                headers.set("x-netguard-session", sessionKey.toString());
+                headers.setInt("X-Http2-Stream-Id", from.getStreamId());
+                headers.set("X-Netguard-Session", sessionKey.toString());
                 headerList = headers.entries();
                 setDataBlocks(data);
             }
@@ -203,8 +203,8 @@ class Http3StreamForward extends QuicStreamForward {
     }
 
     private static void addNetGuardHeaders(Map<String, String> headers, String sessionKey, int streamId) {
-        headers.put("x-http2-stream-id", String.valueOf(streamId));
-        headers.put("x-netguard-session", sessionKey);
+        headers.put("X-Http2-Stream-Id", String.valueOf(streamId));
+        headers.put("X-Netguard-Session", sessionKey);
     }
 
     private static void addHeaders(HttpMessage message, Map<String, String> headers) {

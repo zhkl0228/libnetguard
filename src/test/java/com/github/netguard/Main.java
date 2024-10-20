@@ -64,8 +64,8 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
-        Logger.getLogger(HttpFrameForward.class.getPackageName()).setLevel(Level.INFO);
-        Logger.getLogger(DNSFilter.class.getPackageName()).setLevel(Level.DEBUG);
+        Logger.getLogger(HttpFrameForward.class.getPackage().getName()).setLevel(Level.INFO);
+        Logger.getLogger(DNSFilter.class.getPackage().getName()).setLevel(Level.DEBUG);
         VpnServer vpnServer = new VpnServer(20240);
         vpnServer.preparePreMasterSecretsLogFile();
         vpnServer.enableBroadcast(10);

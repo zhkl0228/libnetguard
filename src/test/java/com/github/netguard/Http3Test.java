@@ -43,6 +43,7 @@ import net.luminis.quic.packet.PacketParser;
 import net.luminis.quic.server.ApplicationProtocolConnection;
 import net.luminis.quic.server.ServerConnectionConfig;
 import net.luminis.quic.server.ServerConnector;
+import org.apache.commons.io.IOUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
@@ -332,7 +333,7 @@ public class Http3Test extends TestCase {
             output.flush();
         }
         try (InputStream input = quicStream.getInputStream()) {
-            Inspector.inspect(input.readAllBytes(), "Response");
+            Inspector.inspect(IOUtils.toByteArray(input), "Response");
         }
         connection.close();
     }
@@ -349,7 +350,7 @@ public class Http3Test extends TestCase {
             @Override
             public void run() {
                 try (InputStream inputStream = stream.getInputStream(); OutputStream outputStream = stream.getOutputStream()) {
-                    System.out.println(new String(inputStream.readAllBytes()));
+                    System.out.println(new String(IOUtils.toByteArray(inputStream)));
                     outputStream.write("Echo".getBytes());
                     outputStream.flush();
                 } catch (IOException e) {

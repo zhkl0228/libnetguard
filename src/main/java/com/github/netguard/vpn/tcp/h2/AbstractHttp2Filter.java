@@ -87,12 +87,12 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
         for (Iterator<Map.Entry<String, String>> iterator = headers.iteratorAsString(); iterator.hasNext(); ) {
             Map.Entry<String, String> entry = iterator.next();
             String name = entry.getKey();
-            if ("x-netguard-session".equalsIgnoreCase(name) ||
-                    "x-netguard-fake-response".equalsIgnoreCase(name) ||
-                    "x-http2-stream-id".equalsIgnoreCase(name) ||
-                    "x-http2-stream-weight".equalsIgnoreCase(name) ||
-                    "x-akamai-text".equalsIgnoreCase(name) ||
-                    "x-akamai-hash".equalsIgnoreCase(name)) {
+            if ("X-Netguard-Session".equalsIgnoreCase(name) ||
+                    "X-Netguard-Fake-Response".equalsIgnoreCase(name) ||
+                    "X-Http2-Stream-Id".equalsIgnoreCase(name) ||
+                    "X-Http2-Stream-Weight".equalsIgnoreCase(name) ||
+                    "X-Akamai-Text".equalsIgnoreCase(name) ||
+                    "X-Akamai-Hash".equalsIgnoreCase(name)) {
                 continue;
             }
             obj.put(name, entry.getValue());

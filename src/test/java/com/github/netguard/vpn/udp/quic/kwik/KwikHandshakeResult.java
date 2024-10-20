@@ -10,7 +10,7 @@ import net.luminis.quic.QuicClientConnection;
 import net.luminis.quic.log.NullLogger;
 import net.luminis.quic.server.ServerConnectionConfig;
 import net.luminis.quic.server.ServerConnector;
-import net.luminis.tls.engine.TlsServerEngineFactory;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +37,7 @@ class KwikHandshakeResult implements HandshakeResult {
 
     @Override
     public QuicServer startServer(InspectorVpn vpn, Http2Filter http2Filter) throws Exception {
-        if (handshakeApplicationProtocol == null || handshakeApplicationProtocol.isBlank()) {
+        if (StringUtils.isAllBlank(handshakeApplicationProtocol)) {
             throw new IllegalStateException("handshakeApplicationProtocol=" + handshakeApplicationProtocol);
         }
         ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
