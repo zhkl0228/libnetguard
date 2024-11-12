@@ -1,5 +1,6 @@
 package com.github.netguard.handler.session;
 
+import com.github.netguard.vpn.Vpn;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.tcp.TcpSession;
 import org.krakenapps.pcap.decoder.tcp.TcpSessionImpl;
@@ -27,7 +28,7 @@ public class SSLProxySession extends TcpSessionImpl implements TcpSession {
 
     @Override
     public Protocol getProtocol() {
-        if ("h2".equals(selectedApplicationProtocol)) {
+        if (Vpn.HTTP2_PROTOCOL.equals(selectedApplicationProtocol)) {
             return Protocol.HTTP2;
         } else if ("http/1.1".equals(selectedApplicationProtocol)) {
             return Protocol.HTTP;

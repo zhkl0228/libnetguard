@@ -234,15 +234,15 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyTx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
-        if (log.isTraceEnabled()) {
+    public void onSSLProxyTx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
+        if (log.isDebugEnabled()) {
             byte[] tmp;
-            if (data.length > 256) {
-                tmp = Arrays.copyOf(data, 256);
-            } else {
+            if (log.isTraceEnabled() || data.length <= 256) {
                 tmp = data;
+            } else {
+                tmp = Arrays.copyOf(data, 256);
             }
-            log.trace(Inspector.inspectString(tmp, String.format("onSSLProxyTX %d bytes %s => %s", data.length, client, server)));
+            log.debug(Inspector.inspectString(tmp, String.format("onSSLProxyTX %d bytes %s => %s", data.length, client, server)));
         }
         try {
             TcpSessionKey key = new TcpSessionKeyImpl(client.getAddress(), server.getAddress(), client.getPort(), server.getPort());
@@ -253,15 +253,15 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     @Override
-    public final void onSSLProxyRx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
-        if (log.isTraceEnabled()) {
+    public void onSSLProxyRx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
+        if (log.isDebugEnabled()) {
             byte[] tmp;
-            if (data.length > 256) {
-                tmp = Arrays.copyOf(data, 256);
-            } else {
+            if (log.isTraceEnabled() || data.length <= 256) {
                 tmp = data;
+            } else {
+                tmp = Arrays.copyOf(data, 256);
             }
-            log.trace(Inspector.inspectString(tmp, String.format("onSSLProxyRX %d bytes %s => %s", data.length, client, server)));
+            log.debug(Inspector.inspectString(tmp, String.format("onSSLProxyRX %d bytes %s => %s", data.length, client, server)));
         }
         try {
             TcpSessionKey key = new TcpSessionKeyImpl(client.getAddress(), server.getAddress(), client.getPort(), server.getPort());
@@ -302,7 +302,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
-            log.debug("onResponse {} bytes session={}, application={}, request={}, response={}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request, response, response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
+            log.debug("onResponse {} bytes session={}, application={}, requestUri={}, response={}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), response, response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
         }
     }
 
@@ -313,17 +313,17 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public void onChunkedRequest(HttpSession session, HttpRequest request, Buffer chunked) {
-        log.debug("onChunkedRequest session={}, request={}, chunked={}", session, request, chunked);
+        log.debug("onChunkedRequest session={}, requestURL={}, chunked={}", session, request.getURL(), chunked);
     }
 
     @Override
     public void onChunkedResponse(HttpSession session, HttpRequest request, HttpResponse response, Buffer chunked) {
-        log.debug("onChunkedResponse session={}, request={}, response={}, chunked={}", session, request, response, chunked);
+        log.debug("onChunkedResponse session={}, requestURL={}, response={}, chunked={}", session, request.getURL(), response, chunked);
     }
 
     @Override
     public void onWebSocketHandshake(HttpSession session, HttpRequest request, HttpResponse response) {
-        log.debug("onWebSocketHandshake session={}, request={}, response={}", session, request, response);
+        log.debug("onWebSocketHandshake session={}, requestURL={}, response={}", session, request.getURL(), response);
     }
 
     @Override

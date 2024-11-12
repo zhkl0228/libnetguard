@@ -6,6 +6,7 @@
 package com.github.netguard.vpn.tls;
 
 import cn.hutool.crypto.digest.DigestUtil;
+import com.github.netguard.vpn.Vpn;
 import net.luminis.tls.TlsConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -308,7 +309,7 @@ public final class JA3Signature implements TlsSignature {
                     list.add("http11");
                     break;
                 case "h2":
-                    list.add("h2");
+                    list.add(Vpn.HTTP2_PROTOCOL);
                     break;
                 case "h3":
                 case "h3-27":

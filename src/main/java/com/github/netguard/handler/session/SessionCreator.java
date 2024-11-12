@@ -97,10 +97,13 @@ public abstract class SessionCreator implements TcpProcessor, SessionFactory {
 	 * @see org.krakenapps.pcap.decoder.tcp.TcpProcessor#onEstablish(org.krakenapps.pcap.decoder.tcp.TcpSession)
 	 */
 	@Override
-	public final void onEstablish(TcpSession session) {
+	public final boolean onEstablish(TcpSession session) {
 		Session s = this.createSession(session);
 		if(s != null) {
 			sessionMap.put(session.getKey(), new InternalSession(session, s));
+			return true;
+		} else {
+			return false;
 		}
 	}
 

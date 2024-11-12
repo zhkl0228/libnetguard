@@ -19,11 +19,15 @@ public class AcceptTcpResult {
         }
         private Proxy proxy = Proxy.NO_PROXY;
         public AcceptResultBuilder enableSocksProxy(String socksHost, int socksPort) {
+            return enableSocksProxyV5(socksHost, socksPort, null);
+        }
+        public AcceptResultBuilder enableSocksProxyV5(String socksHost, int socksPort, String remoteHost) {
             this.proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(socksHost, socksPort));
-            return this;
+            return setRedirectHost(remoteHost);
         }
         private String redirectAddress;
         private int redirectPort;
+        @SuppressWarnings("unused")
         public AcceptResultBuilder redirectAddress(String ip, int port) {
             this.redirectAddress = ip;
             this.redirectPort = port;
@@ -34,14 +38,20 @@ public class AcceptTcpResult {
             this.sslContext = context;
             return this;
         }
+        private String redirectHost;
+        public AcceptResultBuilder setRedirectHost(String redirectHost) {
+            this.redirectHost = redirectHost;
+            return this;
+        }
         public AcceptTcpResult build() {
             return build(null);
         }
         public AcceptTcpResult build(String redirectHost) {
-            return new AcceptTcpResult(rule, proxy, redirectAddress, redirectPort, redirectHost, sslContext);
+            return new AcceptTcpResult(rule, proxy, redirectAddress, redirectPort, redirectHost == null ? this.redirectHost : redirectHost, sslContext);
         }
     }
 
+    @SuppressWarnings("unused")
     public static AcceptTcpResult disableConnect() {
         return AcceptTcpResult.builder(AllowRule.DISCONNECT).build();
     }

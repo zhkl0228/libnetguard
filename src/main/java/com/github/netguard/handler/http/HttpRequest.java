@@ -21,6 +21,8 @@ public interface HttpRequest extends HttpEntity {
      */
     int getPort();
 
+    String getQuery();
+
     /**
      * @return 请求uri
      */

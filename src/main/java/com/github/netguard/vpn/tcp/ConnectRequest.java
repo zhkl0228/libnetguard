@@ -4,6 +4,7 @@ import com.github.netguard.vpn.AcceptTcpResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.tls.TlsSignature;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
@@ -61,13 +62,28 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
         return AcceptTcpResult.builder(AllowRule.CONNECT_TCP);
     }
 
+    @SuppressWarnings("unused")
+    public AcceptTcpResult.AcceptResultBuilder tryMITM(boolean filterH2) {
+        if (isSSL()) {
+            boolean isH2 = applicationLayerProtocols.contains(Vpn.HTTP2_PROTOCOL);
+            if (filterH2 && isH2) {
+                return AcceptTcpResult.builder(AllowRule.FILTER_H2).setRedirectHost(hostName);
+            } else {
+                return AcceptTcpResult.builder(AllowRule.CONNECT_SSL).setRedirectHost(hostName);
+            }
+        } else {
+            return connectTcpDirect();
+        }
+    }
+
     public AcceptTcpResult disconnect() {
         return AcceptTcpResult.builder(AllowRule.DISCONNECT).build();
     }
 
     public boolean isAppleHost() {
         return isSSL() && (hostName.endsWith(".icloud.com") ||
-                hostName.endsWith(".apple.com"));
+                hostName.endsWith(".apple.com") ||
+                hostName.endsWith(".icloud.com.cn"));
     }
 
     public boolean isAndroidHost() {

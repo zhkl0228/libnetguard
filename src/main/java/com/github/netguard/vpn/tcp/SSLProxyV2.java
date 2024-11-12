@@ -5,6 +5,7 @@ import com.github.netguard.vpn.AcceptTcpResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2Session;
 import com.twitter.http2.HttpFrameForward;
@@ -264,7 +265,7 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private static boolean isHttp2(String applicationProtocol) {
-        return "h2".equals(applicationProtocol);
+        return Vpn.HTTP2_PROTOCOL.equals(applicationProtocol);
     }
 
     private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, InspectorVpn vpn,

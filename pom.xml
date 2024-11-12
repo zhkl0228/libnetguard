@@ -157,7 +157,7 @@
         <dependency>
             <groupId>tech.kwik</groupId>
             <artifactId>kwik</artifactId>
-            <version>0.8.13</version>
+            <version>0.9</version>
         </dependency>
         <dependency>
             <groupId>tech.kwik</groupId>
@@ -174,7 +174,7 @@
         <dependency>
             <groupId>dnsjava</groupId>
             <artifactId>dnsjava</artifactId>
-            <version>3.6.0</version>
+            <version>3.6.2</version>
         </dependency>
         <dependency>
             <groupId>name.neykov</groupId>
