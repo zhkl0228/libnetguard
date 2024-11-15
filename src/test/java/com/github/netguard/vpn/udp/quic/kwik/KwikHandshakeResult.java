@@ -57,7 +57,7 @@ class KwikHandshakeResult implements HandshakeResult {
         }
         DatagramSocket socket = new DatagramSocket(0);
         ServerConnector serverConnector = builder
-                .withPort(443)
+                .withPort(1) // placeholder
                 .withSocket(socket)
                 .withConfiguration(serverConnectionConfig)
                 .withLogger(serverLogger)
@@ -67,7 +67,7 @@ class KwikHandshakeResult implements HandshakeResult {
         log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, listenPort, http2Filter);
         serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new KwikProxy(vpn.getExecutorService(), connection, session, http2Filter));
         InetSocketAddress forwardAddress = new InetSocketAddress("127.0.0.1", listenPort);
-        return new KwikServer(serverConnector, forwardAddress, null);
+        return new KwikServer(serverConnector, forwardAddress);
     }
 
     @Override

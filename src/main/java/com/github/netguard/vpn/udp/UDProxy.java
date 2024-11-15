@@ -309,7 +309,7 @@ public class UDProxy {
                         Version quicVersion = Version.parse(version);
                         byte[] dcid = new byte[dcidLength];
                         bb.get(dcid);
-                        if (InitialPacket.isInitial(type, quicVersion)) {
+                        if (InitialPacket.isInitialType(type, quicVersion)) {
                             InitialPacket initialPacket = new InitialPacket(quicVersion);
                             ConnectionSecrets connectionSecrets = new ConnectionSecrets(VersionHolder.with(quicVersion), Role.Server, null, new NullLogger());
                             connectionSecrets.computeInitialKeys(dcid);
@@ -443,7 +443,7 @@ public class UDProxy {
         }
 
         private boolean initialWithUnspportedVersion(int type, int version, int length) {
-            if (InitialPacket.isInitial(type, Version.parse(version))) {
+            if (InitialPacket.isInitialType(type, Version.parse(version))) {
                 // https://tools.ietf.org/html/draft-ietf-quic-transport-32#section-14.1
                 // "A server MUST discard an Initial packet that is carried in a UDP
                 //   datagram with a payload that is smaller than the smallest allowed

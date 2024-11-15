@@ -2,21 +2,17 @@ package com.github.netguard.vpn.udp.quic.kwik;
 
 import com.github.netguard.vpn.udp.quic.QuicServer;
 import net.luminis.quic.server.ServerConnector;
-import net.luminis.tls.engine.TlsServerEngineFactory;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 
 class KwikServer implements QuicServer {
 
     private final ServerConnector serverConnector;
     private final InetSocketAddress forwardAddress;
-    private final TlsServerEngineFactory tlsServerEngineFactory;
 
-    KwikServer(ServerConnector serverConnector, InetSocketAddress forwardAddress, TlsServerEngineFactory tlsServerEngineFactory) {
+    KwikServer(ServerConnector serverConnector, InetSocketAddress forwardAddress) {
         this.serverConnector = serverConnector;
         this.forwardAddress = forwardAddress;
-        this.tlsServerEngineFactory = tlsServerEngineFactory;
     }
 
     @Override
@@ -24,11 +20,9 @@ class KwikServer implements QuicServer {
         return forwardAddress;
     }
 
-    // TODO
     @Override
-    public void close() throws IOException {
-//        serverConnector.shutdown();
-//        tlsServerEngineFactory.close();
+    public void close() {
+        serverConnector.close();
     }
 
 }
