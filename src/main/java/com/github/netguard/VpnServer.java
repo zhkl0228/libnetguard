@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Scanner;
 
 /**
+ * java9: --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED
  * Download root cert: <a href="http://88.88.88.88:88">LINK</a>
  */
 public class VpnServer {

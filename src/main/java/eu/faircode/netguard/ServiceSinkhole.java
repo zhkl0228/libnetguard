@@ -44,18 +44,36 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     private final Socket socket;
     private final long jni_context;
-    private final int fd;
 
-    private static FileDescriptor getFileDescriptor(Socket s) {
+    private static FileDescriptor getFileDescriptor(Socket socket) {
         try {
             Field f_impl = Socket.class.getDeclaredField("impl");
             f_impl.setAccessible(true);
-            Object socketImpl = f_impl.get(s);
+            Object socketImpl = f_impl.get(socket);
             Field f_fd = SocketImpl.class.getDeclaredField("fd");
             f_fd.setAccessible(true);
             return (FileDescriptor) f_fd.get(socketImpl);
         } catch (Exception e) {
             throw new RuntimeException("Can't get FileDescriptor from socket", e);
+        }
+    }
+
+    private static int getFileDescriptorFromSocket(Socket socket) {
+        try {
+            FileDescriptor descriptor = jni_getFileDescriptorFromSocket(socket);
+            return jni_getFd(descriptor);
+        } catch (UnsatisfiedLinkError e) {
+            log.trace("getFileDescriptorFromSocket", e);
+        }
+        try {
+            FileDescriptor descriptor = getFileDescriptor(socket);
+            if (fdField == null) {
+                fdField = FileDescriptor.class.getDeclaredField("fd");
+                fdField.setAccessible(true);
+            }
+            return (Integer) fdField.get(descriptor);
+        } catch (Exception e) {
+            throw new IllegalStateException("init ServiceSinkhole", e);
         }
     }
 
@@ -67,21 +85,11 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         int mtu = jni_get_mtu();
 
         this.jni_context = jni_init(30);
-        try {
-            if (fdField == null) {
-                fdField = FileDescriptor.class.getDeclaredField("fd");
-                fdField.setAccessible(true);
-            }
-            FileDescriptor fileDescriptor = getFileDescriptor(socket);
-            this.fd = (Integer) fdField.get(fileDescriptor);
-        } catch (Exception e) {
-            throw new IllegalStateException("init ServiceSinkhole", e);
-        }
         this.socket = socket;
         final int ANDROID_LOG_DEBUG = 3;
         final int ANDROID_LOG_ERROR = 6;
         jni_start(jni_context, log.isTraceEnabled() ? ANDROID_LOG_DEBUG : ANDROID_LOG_ERROR);
-        log.debug("mtu={}, socket={}, fd={}", mtu, socket, fd);
+        log.debug("mtu={}, socket={}", mtu, socket);
     }
 
     @Override
@@ -190,7 +198,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
             log.debug("Vpn thread starting");
 
-            log.debug("Running tunnel");
+            int fd = getFileDescriptorFromSocket(socket);
+            log.debug("Running tunnel: fd={}", fd);
             jni_run(jni_context, fd, true, 3);
             log.debug("Tunnel exited");
             IoUtil.close(applicationDiscoverHandler);
@@ -234,6 +243,12 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     @SuppressWarnings("unused")
     private static native void jni_pcap(String name, int record_size, int file_size);
+
+    @SuppressWarnings("unused")
+    private static native FileDescriptor jni_getFileDescriptorFromSocket(Socket socket);
+
+    @SuppressWarnings("unused")
+    private static native int jni_getFd(FileDescriptor fileDescriptor);
 
     @SuppressWarnings("unused")
     private native void jni_socks5(String addr, int port, String username, String password);

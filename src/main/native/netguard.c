@@ -55,6 +55,10 @@ jclass clsAllowed;
 jclass clsRR;
 jclass clsUsage;
 
+static jfieldID mSocketImpl;
+static jfieldID mFileDescriptor;
+static jfieldID mDescriptor;
+
 jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     log_android(ANDROID_LOG_INFO, "JNI load");
 
@@ -63,6 +67,15 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved) {
         log_android(ANDROID_LOG_INFO, "JNI load GetEnv failed");
         return -1;
     }
+
+    jclass cSocket = jniFindClass(env, "java/net/Socket");
+    mSocketImpl = (*env)->GetFieldID(env, cSocket, "impl", "Ljava/net/SocketImpl;");
+
+    jclass cSocketImpl = jniFindClass(env, "java/net/SocketImpl");
+    mFileDescriptor = (*env)->GetFieldID(env, cSocketImpl, "fd", "Ljava/io/FileDescriptor;");
+
+    jclass cFileDescriptor = jniFindClass(env, "java/io/FileDescriptor");
+    mDescriptor = (*env)->GetFieldID(env, cFileDescriptor, "fd", "I");
 
     const char *packet = "eu/faircode/netguard/Packet";
     clsPacket = jniGlobalRef(env, jniFindClass(env, packet));
@@ -264,6 +277,27 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1get_1stats(
 
     (*env)->ReleaseIntArrayElements(env, jarray, jcount, 0);
     return jarray;
+}
+
+/*
+ * Class:     eu_faircode_netguard_ServiceSinkhole
+ * Method:    jni_getFileDescriptorFromSocket
+ * Signature: (Ljava/net/Socket;)Ljava/io/FileDescriptor;
+ */
+JNIEXPORT jobject JNICALL Java_eu_faircode_netguard_ServiceSinkhole_jni_1getFileDescriptorFromSocket
+  (JNIEnv *env, jclass type, jobject socket) {
+  jobject socketImpl = (*env)->GetObjectField(env, socket, mSocketImpl);
+  return (*env)->GetObjectField(env, socketImpl, mFileDescriptor);
+}
+
+/*
+ * Class:     eu_faircode_netguard_ServiceSinkhole
+ * Method:    jni_getFd
+ * Signature: (Ljava/io/FileDescriptor;)I
+ */
+JNIEXPORT jint JNICALL Java_eu_faircode_netguard_ServiceSinkhole_jni_1getFd
+  (JNIEnv *env, jclass type, jobject descriptor) {
+  return (*env)->GetIntField(env, descriptor, mDescriptor);
 }
 
 JNIEXPORT void JNICALL

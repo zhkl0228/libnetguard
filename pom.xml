@@ -32,6 +32,8 @@
                     <target>11</target>
                     <compilerArgs>
                         <arg>-Xlint:-options</arg>
+                        <arg>-h</arg>
+                        <arg>${project.basedir}/src/main/native</arg>
                     </compilerArgs>
                 </configuration>
             </plugin>

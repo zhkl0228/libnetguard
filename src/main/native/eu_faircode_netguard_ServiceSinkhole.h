@@ -9,16 +9,8 @@ extern "C" {
 #endif
 #undef eu_faircode_netguard_ServiceSinkhole_VPN_MAGIC
 #define eu_faircode_netguard_ServiceSinkhole_VPN_MAGIC 14L
-#undef eu_faircode_netguard_ServiceSinkhole_IP_V4
-#define eu_faircode_netguard_ServiceSinkhole_IP_V4 4L
-#undef eu_faircode_netguard_ServiceSinkhole_IP_V6
-#define eu_faircode_netguard_ServiceSinkhole_IP_V6 6L
 #undef eu_faircode_netguard_ServiceSinkhole_SYSTEM_UID
 #define eu_faircode_netguard_ServiceSinkhole_SYSTEM_UID 2000L
-#undef eu_faircode_netguard_ServiceSinkhole_TCP_PROTOCOL
-#define eu_faircode_netguard_ServiceSinkhole_TCP_PROTOCOL 6L
-#undef eu_faircode_netguard_ServiceSinkhole_UDP_PROTOCOL
-#define eu_faircode_netguard_ServiceSinkhole_UDP_PROTOCOL 17L
 /*
  * Class:     eu_faircode_netguard_ServiceSinkhole
  * Method:    jni_init
@@ -82,6 +74,22 @@ JNIEXPORT jintArray JNICALL Java_eu_faircode_netguard_ServiceSinkhole_jni_1get_1
  */
 JNIEXPORT void JNICALL Java_eu_faircode_netguard_ServiceSinkhole_jni_1pcap
   (JNIEnv *, jclass, jstring, jint, jint);
+
+/*
+ * Class:     eu_faircode_netguard_ServiceSinkhole
+ * Method:    jni_getFileDescriptorFromSocket
+ * Signature: (Ljava/net/Socket;)Ljava/io/FileDescriptor;
+ */
+JNIEXPORT jobject JNICALL Java_eu_faircode_netguard_ServiceSinkhole_jni_1getFileDescriptorFromSocket
+  (JNIEnv *, jclass, jobject);
+
+/*
+ * Class:     eu_faircode_netguard_ServiceSinkhole
+ * Method:    jni_getFd
+ * Signature: (Ljava/io/FileDescriptor;)I
+ */
+JNIEXPORT jint JNICALL Java_eu_faircode_netguard_ServiceSinkhole_jni_1getFd
+  (JNIEnv *, jclass, jobject);
 
 /*
  * Class:     eu_faircode_netguard_ServiceSinkhole
