@@ -43,14 +43,20 @@ class ReplayLog {
         try {
             TcpSessionKey key = new TcpSessionKeyImpl(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort);
             switch (event) {
-                case TcpConnect:
-                    TcpSessionImpl session = new TcpSessionImpl(null);
+                case TcpConnect: {
+                    TcpSessionImpl session = new TcpSessionImpl(null) {
+                        @Override
+                        public String getApplication() {
+                            return "Replay";
+                        }
+                    };
                     session.registerProtocol(protocol);
                     session.setKey(key);
                     session.setClientState(TcpState.ESTABLISHED);
                     session.setServerState(TcpState.ESTABLISHED);
                     httpDecoder.onEstablish(session);
                     break;
+                    }
                 case TcpSend:
                     httpDecoder.handleTx(key, new ChainBuffer(data));
                     break;

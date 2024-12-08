@@ -109,8 +109,11 @@ public class VpnServer {
 
     private Replay replay;
 
+    /**
+     * use BaseVpnListener
+     */
     public final void setReplayLogFile(File logFile) {
-        replay = new FileReplay(logFile);
+        replay = new FileReplay(this, logFile);
     }
 
     public void start() {

@@ -2,6 +2,7 @@ package com.github.netguard.handler.replay;
 
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson.JSON;
+import com.github.netguard.VpnServer;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.http.HttpDecoder;
 import org.krakenapps.pcap.decoder.tcp.TcpSessionKey;
@@ -17,11 +18,11 @@ public class FileReplay extends Replay {
 
     private static final Logger log = LoggerFactory.getLogger(FileReplay.class);
 
-    private static final Object lock = new Object();
-
+    private final VpnServer server;
     private final File logFile;
 
-    public FileReplay(File logFile) {
+    public FileReplay(VpnServer server, File logFile) {
+        this.server = server;
         FileUtil.touch(logFile);
         this.logFile = logFile;
     }
@@ -33,15 +34,15 @@ public class FileReplay extends Replay {
             System.out.println("Start replay log file: " + logFile.getAbsolutePath());
         }
         for(String line : lines) {
-            ReplayLog log = JSON.parseObject(line, ReplayLog.class);
-            log.replay(httpDecoder);
+            ReplayLog replayLog = JSON.parseObject(line, ReplayLog.class);
+            replayLog.replay(httpDecoder);
         }
     }
 
-    private void writeLog(ReplayLog log) {
-        FileReplay.log.debug("writeLog: {}", log);
-        synchronized (lock) {
-            FileUtil.appendUtf8Lines(Collections.singletonList(JSON.toJSONString(log)), logFile);
+    private void writeLog(ReplayLog replayLog) {
+        log.debug("writeLog: {}", replayLog);
+        synchronized (server) {
+            FileUtil.appendUtf8Lines(Collections.singletonList(JSON.toJSONString(replayLog)), logFile);
         }
     }
 
