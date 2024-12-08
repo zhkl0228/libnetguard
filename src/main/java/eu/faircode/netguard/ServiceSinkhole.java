@@ -182,7 +182,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     private ApplicationDiscoverHandler applicationDiscoverHandler;
 
     @Override
-    public void run() {
+    protected void doRunVpn() {
         try {
             tunnelThread = Thread.currentThread();
             if (!directAllowAll && clientOS == ClientOS.Android) {
@@ -216,7 +216,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
             jni_done(jni_context);
 
             if (packetCapture != null) {
-                packetCapture.notifyFinish();
+                packetCapture.notifyVpnFinish();
             }
         } catch (Throwable e) {
             log.warn("vpn run", e);

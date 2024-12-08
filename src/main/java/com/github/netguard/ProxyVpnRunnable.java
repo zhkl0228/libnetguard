@@ -76,7 +76,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
     private boolean running;
 
     @Override
-    public void run() {
+    protected void doRunVpn() {
         if (running) {
             log.warn("Vpn runnable started, but it's already running");
             return;
@@ -124,7 +124,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
         clients.remove(this);
 
         if (packetCapture != null) {
-            packetCapture.notifyFinish();
+            packetCapture.notifyVpnFinish();
         }
     }
 

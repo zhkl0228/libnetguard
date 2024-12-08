@@ -234,12 +234,12 @@ public class VpnServer {
 
     private void sendBroadcast() {
         try (DatagramSocket datagramSocket = new DatagramSocket()) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            DataOutput dataOutput = new DataOutputStream(baos);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            DataOutput dataOutput = new DataOutputStream(outputStream);
             dataOutput.writeUTF("vpn");
             dataOutput.writeShort(serverSocket.getLocalPort());
 
-            byte[] data = baos.toByteArray();
+            byte[] data = outputStream.toByteArray();
             if (log.isTraceEnabled()) {
                 log.trace(Inspector.inspectString(data, "sendBroadcast"));
             }

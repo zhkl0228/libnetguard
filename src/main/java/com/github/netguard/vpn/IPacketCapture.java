@@ -12,6 +12,7 @@ import java.util.Collection;
 public interface IPacketCapture {
 
     void onPacket(byte[] packetData, String type);
+
     void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName,
                              Collection<String> applicationProtocols, String selectedApplicationProtocol, String application);
     void onSSLProxyTx(InetSocketAddress client, InetSocketAddress server, byte[] data);
@@ -23,7 +24,7 @@ public interface IPacketCapture {
     void onSocketRx(InetSocketAddress client, InetSocketAddress server, byte[] data);
     void onSocketFinish(InetSocketAddress client, InetSocketAddress server);
 
-    void notifyFinish();
+    void notifyVpnFinish();
 
     /**
      * 默认返回 <code>null</code> 表示允许连接
@@ -34,5 +35,6 @@ public interface IPacketCapture {
     Http2Filter getH2Filter();
     DNSFilter getDNSFilter();
     QuicProxyProvider getQuicProxyProvider();
+    void replay();
 
 }

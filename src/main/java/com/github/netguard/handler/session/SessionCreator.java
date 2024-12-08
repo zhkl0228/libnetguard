@@ -45,7 +45,7 @@ public abstract class SessionCreator implements TcpProcessor, SessionFactory {
 			} catch (DecodeFailedException e) {
 				if (isFirstTx && SessionCreator.this.fallbackTcpProcessor != null) {
 					this.fallbackTcpProcessor = SessionCreator.this.fallbackTcpProcessor;
-					log.debug("decode failed, fallback to: " + fallbackTcpProcessor);
+                    log.debug("decode failed, fallback to: {}", fallbackTcpProcessor);
 					txBuffer.reset();
 					this.fallbackTcpProcessor.onEstablish(tcpSession);
 					this.fallbackTcpProcessor.handleTx(tcpSession.getKey(), txBuffer);
@@ -166,6 +166,7 @@ public abstract class SessionCreator implements TcpProcessor, SessionFactory {
 
 	private TcpProcessor fallbackTcpProcessor;
 
+	@SuppressWarnings("unused")
 	public void setFallbackTcpProcessor(TcpProcessor fallbackTcpProcessor) {
 		this.fallbackTcpProcessor = fallbackTcpProcessor;
 	}

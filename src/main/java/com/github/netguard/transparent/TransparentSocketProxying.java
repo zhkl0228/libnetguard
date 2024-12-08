@@ -37,7 +37,7 @@ public class TransparentSocketProxying extends ProxyVpn implements InspectorVpn 
     private static final Pattern PATTERN = Pattern.compile("127\\.0\\.0\\.1:(\\d+)\\s+<-\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+):(\\d+)\\s+<-\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+):(\\d+)");
 
     @Override
-    public void run() {
+    protected void doRunVpn() {
         try {
             Process process = Runtime.getRuntime().exec("sudo /sbin/pfctl -s state");
             int exitCode = process.waitFor();

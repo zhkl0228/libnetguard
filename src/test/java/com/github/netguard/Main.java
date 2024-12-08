@@ -181,6 +181,8 @@ public class Main {
 
         private class MyPacketDecoder extends PacketDecoder {
             MyPacketDecoder() {
+                setReplayLogFile(new File("target/replay.json"));
+
                 try {
                     File pcapFile = new File("target/vpn.pcap");
                     FileUtils.deleteQuietly(pcapFile);
