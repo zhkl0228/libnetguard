@@ -4,7 +4,6 @@ import cn.hutool.core.codec.Base64;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.URLUtil;
 import com.github.netguard.Inspector;
-import com.github.netguard.handler.replay.FileReplay;
 import com.github.netguard.handler.replay.Replay;
 import com.github.netguard.handler.session.SSLProxySession;
 import com.github.netguard.handler.session.SSLSessionKey;
@@ -63,8 +62,6 @@ import java.util.Map;
 public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(PacketDecoder.class);
-
-    private final Logger iLog = LoggerFactory.getLogger(getClass());
 
     private final IpDecoder ip;
     private final Ipv6Decoder ipv6;
@@ -132,12 +129,12 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public void onSocketEstablish(InetSocketAddress client, InetSocketAddress server) {
-        iLog.debug("onSocketEstablish {} => {}", client, server);
+        log.debug("onSocketEstablish {} => {}", client, server);
     }
 
     @Override
     public void onSocketTx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
-        if (iLog.isTraceEnabled() || log.isTraceEnabled()) {
+        if (log.isTraceEnabled()) {
             byte[] tmp;
             if (data.length > 256) {
                 tmp = Arrays.copyOf(data, 256);
@@ -145,14 +142,14 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
                 tmp = data;
             }
             log.trace(Inspector.inspectString(tmp, String.format("onSocketTx %d bytes %s => %s", data.length, client, server)));
-        } else if (iLog.isDebugEnabled() || log.isDebugEnabled()) {
+        } else if (log.isDebugEnabled()) {
             log.debug("onSocketTx {} bytes {} => {}", data.length, client, server);
         }
     }
 
     @Override
     public void onSocketRx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
-        if (iLog.isTraceEnabled() || log.isTraceEnabled()) {
+        if (log.isTraceEnabled()) {
             byte[] tmp;
             if (data.length > 256) {
                 tmp = Arrays.copyOf(data, 256);
@@ -160,14 +157,14 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
                 tmp = data;
             }
             log.trace(Inspector.inspectString(tmp, String.format("onSocketRx %d bytes %s => %s", data.length, client, server)));
-        } else if (iLog.isDebugEnabled() || log.isDebugEnabled()) {
+        } else if (log.isDebugEnabled()) {
             log.debug("onSocketRx {} bytes {} => {}", data.length, client, server);
         }
     }
 
     @Override
     public void onSocketFinish(InetSocketAddress client, InetSocketAddress server) {
-        iLog.debug("onSocketFinish {} => {}", client, server);
+        log.debug("onSocketFinish {} => {}", client, server);
     }
 
     private ProtocolDetector protocolDetector;
@@ -218,31 +215,31 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
                     ipv6.process(new EthernetFrame(null, data));
                     break;
                 default:
-                    iLog.warn("Unsupported raw ip version: {}", version);
+                    log.warn("Unsupported raw ip version: {}", version);
                     break;
             }
         } catch (Exception e) {
-            iLog.warn("onPacket type={}", type, e);
+            log.warn("onPacket type={}", type, e);
         }
     }
 
     @Override
     public final void onSSLProxyEstablish(InetSocketAddress client, InetSocketAddress server, String hostName,
                                           Collection<String> applicationProtocols, String selectedApplicationProtocol, String application) {
-        iLog.trace("onSSLProxyEstablish {} {} => {} selectedApplicationProtocol={}", hostName, client, server, selectedApplicationProtocol);
+        log.trace("onSSLProxyEstablish {} {} => {} selectedApplicationProtocol={}", hostName, client, server, selectedApplicationProtocol);
         try {
             TcpSessionKey key = new SSLSessionKey(client.getAddress(), server.getAddress(), client.getPort(), server.getPort(), hostName);
             httpDecoder.onEstablish(new SSLProxySession(key, hostName, applicationProtocols, selectedApplicationProtocol, application));
         } catch (Exception e) {
-            iLog.warn("onSSLProxyEstablish", e);
+            log.warn("onSSLProxyEstablish", e);
         }
     }
 
     @Override
     public void onSSLProxyTx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
-        if (iLog.isDebugEnabled() || log.isDebugEnabled()) {
+        if (log.isDebugEnabled()) {
             byte[] tmp;
-            if (iLog.isTraceEnabled() || log.isTraceEnabled() || data.length <= 256) {
+            if (log.isTraceEnabled() || data.length <= 256) {
                 tmp = data;
             } else {
                 tmp = Arrays.copyOf(data, 256);
@@ -253,15 +250,15 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             TcpSessionKey key = new TcpSessionKeyImpl(client.getAddress(), server.getAddress(), client.getPort(), server.getPort());
             httpDecoder.handleTx(key, new ChainBuffer(data));
         } catch (Exception e) {
-            iLog.warn("onSSLProxyTX", e);
+            log.warn("onSSLProxyTX", e);
         }
     }
 
     @Override
     public void onSSLProxyRx(InetSocketAddress client, InetSocketAddress server, byte[] data) {
-        if (iLog.isDebugEnabled() || log.isDebugEnabled()) {
+        if (log.isDebugEnabled()) {
             byte[] tmp;
-            if (iLog.isTraceEnabled() || log.isTraceEnabled() || data.length <= 256) {
+            if (log.isTraceEnabled() || data.length <= 256) {
                 tmp = data;
             } else {
                 tmp = Arrays.copyOf(data, 256);
@@ -272,18 +269,18 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             TcpSessionKey key = new TcpSessionKeyImpl(client.getAddress(), server.getAddress(), client.getPort(), server.getPort());
             httpDecoder.handleRx(key, new ChainBuffer(data));
         } catch (Exception e) {
-            iLog.warn("onSSLProxyRX: {} => {}", client, server, e);
+            log.warn("onSSLProxyRX: {} => {}", client, server, e);
         }
     }
 
     @Override
     public final void onSSLProxyFinish(InetSocketAddress client, InetSocketAddress server, String hostName) {
-        iLog.trace("onSSLProxyFinish {} {} => {}", hostName, client, server);
+        log.trace("onSSLProxyFinish {} {} => {}", hostName, client, server);
         try {
             TcpSessionKey key = new SSLSessionKey(client.getAddress(), server.getAddress(), client.getPort(), server.getPort(), hostName);
             httpDecoder.onFinish(key);
         } catch (Exception e) {
-            iLog.warn("onSSLProxyFinish", e);
+            log.warn("onSSLProxyFinish", e);
         }
     }
 
@@ -293,7 +290,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     protected void onRequest(HttpSession session, com.github.netguard.handler.http.HttpRequest request) {
-        if (iLog.isDebugEnabled() || log.isDebugEnabled()) {
+        if (log.isDebugEnabled()) {
             byte[] data = request.getPostData();
             log.debug("onRequest {} bytes session={}, application={}, request={}\n{}{}\n", data == null ? 0 : data.length, session, session.getApplication(), request, request.getHeaderString(), parseParameters(request.getRequestUri()));
         }
@@ -305,7 +302,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
-        if (iLog.isDebugEnabled() || log.isDebugEnabled()) {
+        if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
             log.debug("onResponse {} bytes session={}, application={}, requestUri={}, response={}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), response, response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
         }
@@ -313,32 +310,32 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public void onMultipartData(HttpSession session, Buffer buffer) {
-        iLog.debug("onMultipartData session={}, buffer={}", session, buffer);
+        log.debug("onMultipartData session={}, buffer={}", session, buffer);
     }
 
     @Override
     public void onChunkedRequest(HttpSession session, HttpRequest request, Buffer chunked) {
-        iLog.debug("onChunkedRequest session={}, requestURL={}, chunked={}", session, request.getURL(), chunked);
+        log.debug("onChunkedRequest session={}, requestURL={}, chunked={}", session, request.getURL(), chunked);
     }
 
     @Override
     public void onChunkedResponse(HttpSession session, HttpRequest request, HttpResponse response, Buffer chunked) {
-        iLog.debug("onChunkedResponse session={}, requestURL={}, response={}, chunked={}", session, request.getURL(), response, chunked);
+        log.debug("onChunkedResponse session={}, requestURL={}, response={}, chunked={}", session, request.getURL(), response, chunked);
     }
 
     @Override
     public void onWebSocketHandshake(HttpSession session, HttpRequest request, HttpResponse response) {
-        iLog.debug("onWebSocketHandshake session={}, requestURL={}, response={}", session, request.getURL(), response);
+        log.debug("onWebSocketHandshake session={}, requestURL={}, response={}", session, request.getURL(), response);
     }
 
     @Override
     public void onWebSocketRequest(HttpSession session, WebSocketFrame frame) {
-        iLog.debug("onWebSocketRequest session={}, frame={}", session, frame);
+        log.debug("onWebSocketRequest session={}, frame={}", session, frame);
     }
 
     @Override
     public void onWebSocketResponse(HttpSession session, WebSocketFrame frame) {
-        iLog.debug("onWebSocketResponse session={}, frame={}", session, frame);
+        log.debug("onWebSocketResponse session={}, frame={}", session, frame);
     }
 
     private PcapFileOutputStream pcapFileOutputStream;
@@ -368,7 +365,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
-        iLog.debug("acceptTcp connectRequest={}", connectRequest);
+        log.debug("acceptTcp connectRequest={}", connectRequest);
         if (connectRequest.isAppleHost()) {
             return configAcceptResultBuilder(connectRequest.hostName, connectRequest.port, connectRequest.connectTcpDirect()).build(); // Enable iOS traffic.
         }
