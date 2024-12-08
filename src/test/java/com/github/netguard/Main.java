@@ -65,27 +65,23 @@ public class Main {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
         Logger.getLogger(HttpFrameForward.class.getPackage().getName()).setLevel(Level.INFO);
         Logger.getLogger(DNSFilter.class.getPackage().getName()).setLevel(Level.DEBUG);
-        VpnServer vpnServer = createVpnServer();
+        VpnServerBuilder builder = VpnServerBuilder.create()
+                .withPort(20240)
+                .enablePreMasterSecretsLogFile()
+                .enableBroadcast(10)
+                .enableTransparentProxying()
+                .enableUdpRelay()
+                .withReplayLogFile(new File("target/replay.json"))
+                .withVpnListener(new BaseVpnListener() {
+                    @Override
+                    protected IPacketCapture createPacketCapture() {
+                        return new MyPacketDecoder();
+                    }
+                });
+        VpnServer vpnServer = builder.startServer();
 
         System.out.println("vpn server listen on: " + vpnServer.getPort());
         vpnServer.waitShutdown();
-    }
-
-    private static VpnServer createVpnServer() throws IOException {
-        VpnServer vpnServer = new VpnServer(20240);
-        vpnServer.preparePreMasterSecretsLogFile();
-        vpnServer.enableBroadcast(10);
-        vpnServer.enableTransparentProxying();
-        vpnServer.enableUdpRelay();
-        vpnServer.setReplayLogFile(new File("target/replay.json"));
-        vpnServer.setVpnListener(new BaseVpnListener() {
-            @Override
-            protected IPacketCapture createPacketCapture() {
-                return new MyPacketDecoder();
-            }
-        });
-        vpnServer.start();
-        return vpnServer;
     }
 
     static class MyPacketDecoder extends PacketDecoder {

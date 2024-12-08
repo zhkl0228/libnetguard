@@ -50,18 +50,17 @@ public class VpnServer {
     private final ServerSocket serverSocket;
     private final RootCert rootCert = RootCert.load();
 
-    @SuppressWarnings("unused")
-    public VpnServer() throws IOException {
+    VpnServer() throws IOException {
         this(UDP_PORT);
     }
 
-    public VpnServer(int port) throws IOException {
+    VpnServer(int port) throws IOException {
         this.serverSocket = new ServerSocket(port);
     }
 
     private VpnListener vpnListener;
 
-    public void setVpnListener(VpnListener vpnListener) {
+    final void setVpnListener(VpnListener vpnListener) {
         this.vpnListener = vpnListener;
     }
 
@@ -69,15 +68,14 @@ public class VpnServer {
 
     private boolean useNetGuardCore = true;
 
-    @SuppressWarnings("unused")
-    public void disableNetGuard() {
+    final void disableNetGuard() {
         useNetGuardCore = false;
     }
 
     private boolean broadcast;
     private int broadcastSeconds;
 
-    public void enableBroadcast(int broadcastSeconds) {
+    final void enableBroadcast(int broadcastSeconds) {
         if (broadcastSeconds < 1) {
             throw new IllegalArgumentException("broadcastSeconds=" + broadcastSeconds);
         }
@@ -88,7 +86,7 @@ public class VpnServer {
     /**
      * see osx_pf/enable.sh
      */
-    public void enableTransparentProxying() {
+    final void enableTransparentProxying() {
         enableTransparentProxying(PROXY_PORT);
     }
 
@@ -96,14 +94,14 @@ public class VpnServer {
     private Thread transparentProxyingThread;
     private ServerSocket transparentProxyingSocketServer;
 
-    public void enableTransparentProxying(int port) {
+    final void enableTransparentProxying(int port) {
         this.transparentProxyingPort = port;
     }
 
     private boolean enableUdpRelay;
     private UDPRelay udpRelay;
 
-    public void enableUdpRelay() {
+    final void enableUdpRelay() {
         this.enableUdpRelay = true;
     }
 
@@ -112,11 +110,11 @@ public class VpnServer {
     /**
      * use BaseVpnListener
      */
-    public final void setReplayLogFile(File logFile) {
+    final void setReplayLogFile(File logFile) {
         replay = new FileReplay(this, logFile);
     }
 
-    public void start() {
+    final void start() {
         if (thread != null) {
             throw new IllegalStateException("Already started.");
         }
@@ -274,7 +272,7 @@ public class VpnServer {
         return serverSocket.getLocalPort();
     }
 
-    public final void preparePreMasterSecretsLogFile() {
+    final void preparePreMasterSecretsLogFile() {
         File preMasterSecretsLogFile = new File("target/pre_master_secrets.log");
         String preMasterSecretsLogPath = preMasterSecretsLogFile.getAbsolutePath();
         FileUtil.del(preMasterSecretsLogFile);

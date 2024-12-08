@@ -6,7 +6,7 @@
 
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.3</version>
+    <version>0.0.4</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -115,7 +115,7 @@
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-crypto</artifactId>
-            <version>5.8.28</version>
+            <version>5.8.34</version>
         </dependency>
         <dependency>
             <groupId>com.github.zhkl0228</groupId>
@@ -202,7 +202,7 @@
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
-            <version>2.23.1</version>
+            <version>2.24.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
