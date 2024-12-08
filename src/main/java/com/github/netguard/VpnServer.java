@@ -2,6 +2,8 @@ package com.github.netguard;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
+import com.github.netguard.handler.replay.FileReplay;
+import com.github.netguard.handler.replay.Replay;
 import com.github.netguard.transparent.TransparentSocketProxying;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.tcp.RootCert;
@@ -105,9 +107,18 @@ public class VpnServer {
         this.enableUdpRelay = true;
     }
 
+    private Replay replay;
+
+    public final void setReplayLogFile(File logFile) {
+        replay = new FileReplay(logFile);
+    }
+
     public void start() {
         if (thread != null) {
             throw new IllegalStateException("Already started.");
+        }
+        if (vpnListener != null && replay != null) {
+            vpnListener.initializeReplay(replay);
         }
         if (broadcast) {
             sendBroadcast();

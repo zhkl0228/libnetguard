@@ -350,14 +350,8 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         pcapFileOutputStream = new PcapFileOutputStream(pcapFile);
     }
 
-    private Replay replay;
-
-    protected final void setReplayLogFile(File logFile) {
-        replay = new FileReplay(logFile);
-    }
-
     @Override
-    public void replay() {
+    public void replay(Replay replay) {
         if(replay != null) {
             replay.doReplay(httpDecoder);
             httpDecoder.setTcpVisitor(replay);

@@ -1,5 +1,6 @@
 package com.github.netguard.vpn;
 
+import com.github.netguard.handler.replay.Replay;
 import com.github.netguard.vpn.tcp.ConnectRequest;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.udp.DNSFilter;
@@ -35,6 +36,6 @@ public interface IPacketCapture {
     Http2Filter getH2Filter();
     DNSFilter getDNSFilter();
     QuicProxyProvider getQuicProxyProvider();
-    void replay();
+    void replay(Replay replay);
 
 }

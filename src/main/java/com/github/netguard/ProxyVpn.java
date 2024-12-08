@@ -84,9 +84,6 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
 
     @Override
     public final void run() {
-        if (packetCapture != null) {
-            packetCapture.replay();
-        }
         doRunVpn();
     }
 

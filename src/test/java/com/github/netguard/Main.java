@@ -9,9 +9,8 @@ import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.vpn.AcceptTcpResult;
 import com.github.netguard.vpn.AcceptUdpResult;
 import com.github.netguard.vpn.AllowRule;
+import com.github.netguard.vpn.BaseVpnListener;
 import com.github.netguard.vpn.IPacketCapture;
-import com.github.netguard.vpn.Vpn;
-import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.tcp.ConnectRequest;
 import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
@@ -66,25 +65,133 @@ public class Main {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
         Logger.getLogger(HttpFrameForward.class.getPackage().getName()).setLevel(Level.INFO);
         Logger.getLogger(DNSFilter.class.getPackage().getName()).setLevel(Level.DEBUG);
-        VpnServer vpnServer = new VpnServer(20240);
-        vpnServer.preparePreMasterSecretsLogFile();
-        vpnServer.enableBroadcast(10);
-        vpnServer.enableTransparentProxying();
-        vpnServer.setVpnListener(new MyVpnListener());
-        vpnServer.enableUdpRelay();
-        vpnServer.start();
+        VpnServer vpnServer = createVpnServer();
 
         System.out.println("vpn server listen on: " + vpnServer.getPort());
         vpnServer.waitShutdown();
     }
 
-    private static class MyVpnListener extends AbstractHttp2Filter implements VpnListener, Http2Filter, DNSFilter {
-        @Override
-        public void onConnectClient(Vpn vpn) {
-            System.out.println("client: " + vpn.getClientOS() + ", impl=" + vpn.getClass());
-            IPacketCapture packetCapture = new MyPacketDecoder();
-            vpn.setPacketCapture(packetCapture);
+    private static VpnServer createVpnServer() throws IOException {
+        VpnServer vpnServer = new VpnServer(20240);
+        vpnServer.preparePreMasterSecretsLogFile();
+        vpnServer.enableBroadcast(10);
+        vpnServer.enableTransparentProxying();
+        vpnServer.enableUdpRelay();
+        vpnServer.setReplayLogFile(new File("target/replay.json"));
+        vpnServer.setVpnListener(new BaseVpnListener() {
+            @Override
+            protected IPacketCapture createPacketCapture() {
+                return new MyPacketDecoder();
+            }
+        });
+        vpnServer.start();
+        return vpnServer;
+    }
+
+    static class MyPacketDecoder extends PacketDecoder {
+        public MyPacketDecoder() {
+            try {
+                File pcapFile = new File("target/vpn.pcap");
+                FileUtils.deleteQuietly(pcapFile);
+                setOutputPcapFile(pcapFile);
+            } catch (IOException e) {
+                throw new IllegalStateException("setOutputPcapFile", e);
+            }
         }
+
+        @Override
+        protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
+            if ("application/json".equals(response.getContentType())) {
+                try {
+                    JSONObject obj = JSONObject.parseObject(new String(response.getResponseData(), StandardCharsets.UTF_8));
+                    System.out.println(obj.toString(SerializerFeature.PrettyFormat));
+                } catch(Exception ignored) {}
+            }
+            super.onResponse(session, request, response);
+        }
+
+        @Override
+        public Http2Filter getH2Filter() {
+            return new MyVpnFilter();
+        }
+
+        @Override
+        public DNSFilter getDNSFilter() {
+            return new MyVpnFilter();
+        }
+
+        @Override
+        public QuicProxyProvider getQuicProxyProvider() {
+            return new KwikProvider();
+        }
+        @Override
+        public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
+            TlsSignature tlsSignature = connectRequest.getTlsSignature();
+            if (tlsSignature != null) {
+                System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\", ScrapflyText=\"%s\", ScrapflyFP=%s%n", connectRequest,
+                        DigestUtil.md5Hex(tlsSignature.getJa3Text()),
+                        DigestUtil.md5Hex(tlsSignature.getJa3nText()),
+                        tlsSignature.getJa4Text(),
+                        DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
+                        tlsSignature.getJa3Text(),
+                        tlsSignature.getJa3nText(),
+                        tlsSignature.getScrapflyFP(),
+                        DigestUtil.md5Hex(tlsSignature.getScrapflyFP()));
+            }
+            if ("legy.line-apps.com".equals(connectRequest.hostName)) {
+                return AcceptTcpResult.builder(AllowRule.CONNECT_TCP)
+                        .enableSocksProxy("127.0.0.1", 20230)
+                        .build();
+            }
+            if ("tls.browserleaks.com".equals(connectRequest.hostName)) {
+                return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
+                        .enableSocksProxy("127.0.0.1", 20230)
+                        .configClientSSLContext(ImpersonatorFactory.macFirefox().newSSLContext(null, null))
+                        .build();
+            }
+            if ("tools.scrapfly.io".equals(connectRequest.hostName)) {
+                return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
+                        .enableSocksProxy("127.0.0.1", 20230)
+                        .configClientSSLContext(ImpersonatorFactory.macChrome().newSSLContext(null, null))
+                        .build();
+            }
+            if ("weixin.qq.com".equals(connectRequest.hostName)) {
+                return AcceptTcpResult.builder(AllowRule.FILTER_H2)
+                        .build();
+            }
+            if (connectRequest.isSSL()) {
+                return AcceptTcpResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
+                        .configClientSSLContext(ImpersonatorFactory.android().newSSLContext(null, new TrustManager[]{DefaultTrustManager.INSTANCE}))
+                        .build();
+            }
+            Application[] applications = connectRequest.queryApplications();
+            System.out.printf("acceptTcp request=%s, applications=%s, httpRequest=%s%n", connectRequest, Arrays.toString(applications), connectRequest.httpRequest);
+            return super.acceptTcp(connectRequest);
+        }
+        @Override
+        public AcceptUdpResult acceptUdp(PacketRequest packetRequest) {
+            if (packetRequest.dnsQuery != null) {
+                return AcceptUdpResult.rule(AcceptRule.Forward);
+            }
+            TlsSignature tlsSignature = packetRequest.getTlsSignature();
+            if (tlsSignature != null) {
+                System.out.printf("acceptUdp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\"%n", packetRequest,
+                        DigestUtil.md5Hex(tlsSignature.getJa3Text()),
+                        DigestUtil.md5Hex(tlsSignature.getJa3nText()),
+                        tlsSignature.getJa4Text(),
+                        DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
+                        tlsSignature.getJa3Text(),
+                        tlsSignature.getJa3nText());
+            }
+            AcceptUdpResult result = AcceptUdpResult.rule(AcceptRule.FILTER_H3);
+            if (tlsSignature != null) {
+                result.setUdpProxy(new InetSocketAddress("8.216.131.32", 20240));
+            }
+            return result;
+        }
+    }
+
+    private static class MyVpnFilter extends AbstractHttp2Filter implements Http2Filter, DNSFilter {
         @Override
         public boolean filterHost(String hostName, boolean h3) {
             if ("weixin.qq.com".equals(hostName) || "http3.is".equals(hostName)) {
@@ -177,111 +284,6 @@ public class Main {
                 }
             }
             return dnsResponse;
-        }
-
-        private class MyPacketDecoder extends PacketDecoder {
-            MyPacketDecoder() {
-                setReplayLogFile(new File("target/replay.json"));
-
-                try {
-                    File pcapFile = new File("target/vpn.pcap");
-                    FileUtils.deleteQuietly(pcapFile);
-                    setOutputPcapFile(pcapFile);
-                } catch (IOException e) {
-                    throw new IllegalStateException("setOutputPcapFile", e);
-                }
-            }
-
-            @Override
-            protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
-                if ("application/json".equals(response.getContentType())) {
-                    try {
-                        JSONObject obj = JSONObject.parseObject(new String(response.getResponseData(), StandardCharsets.UTF_8));
-                        System.out.println(obj.toString(SerializerFeature.PrettyFormat));
-                    } catch(Exception ignored) {}
-                }
-                super.onResponse(session, request, response);
-            }
-
-            @Override
-            public Http2Filter getH2Filter() {
-                return MyVpnListener.this;
-            }
-
-            @Override
-            public DNSFilter getDNSFilter() {
-                return MyVpnListener.this;
-            }
-
-            @Override
-            public QuicProxyProvider getQuicProxyProvider() {
-                return new KwikProvider();
-            }
-            @Override
-            public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
-                TlsSignature tlsSignature = connectRequest.getTlsSignature();
-                if (tlsSignature != null) {
-                    System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\", ScrapflyText=\"%s\", ScrapflyFP=%s%n", connectRequest,
-                            DigestUtil.md5Hex(tlsSignature.getJa3Text()),
-                            DigestUtil.md5Hex(tlsSignature.getJa3nText()),
-                            tlsSignature.getJa4Text(),
-                            DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
-                            tlsSignature.getJa3Text(),
-                            tlsSignature.getJa3nText(),
-                            tlsSignature.getScrapflyFP(),
-                            DigestUtil.md5Hex(tlsSignature.getScrapflyFP()));
-                }
-                if ("legy.line-apps.com".equals(connectRequest.hostName)) {
-                    return AcceptTcpResult.builder(AllowRule.CONNECT_TCP)
-                            .enableSocksProxy("127.0.0.1", 20230)
-                            .build();
-                }
-                if ("tls.browserleaks.com".equals(connectRequest.hostName)) {
-                    return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
-                            .enableSocksProxy("127.0.0.1", 20230)
-                            .configClientSSLContext(ImpersonatorFactory.macFirefox().newSSLContext(null, null))
-                            .build();
-                }
-                if ("tools.scrapfly.io".equals(connectRequest.hostName)) {
-                    return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
-                            .enableSocksProxy("127.0.0.1", 20230)
-                            .configClientSSLContext(ImpersonatorFactory.macChrome().newSSLContext(null, null))
-                            .build();
-                }
-                if ("weixin.qq.com".equals(connectRequest.hostName)) {
-                    return AcceptTcpResult.builder(AllowRule.FILTER_H2)
-                            .build();
-                }
-                if (connectRequest.isSSL()) {
-                    return AcceptTcpResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
-                            .configClientSSLContext(ImpersonatorFactory.android().newSSLContext(null, new TrustManager[]{DefaultTrustManager.INSTANCE}))
-                            .build();
-                }
-                Application[] applications = connectRequest.queryApplications();
-                System.out.printf("acceptTcp request=%s, applications=%s, httpRequest=%s%n", connectRequest, Arrays.toString(applications), connectRequest.httpRequest);
-                return super.acceptTcp(connectRequest);
-            }
-            @Override
-            public AcceptUdpResult acceptUdp(PacketRequest packetRequest) {
-                if (packetRequest.dnsQuery != null) {
-                    return AcceptUdpResult.rule(AcceptRule.Forward);
-                }
-                TlsSignature tlsSignature = packetRequest.getTlsSignature();
-                if (tlsSignature != null) {
-                    System.out.printf("acceptUdp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\"%n", packetRequest,
-                            DigestUtil.md5Hex(tlsSignature.getJa3Text()),
-                            DigestUtil.md5Hex(tlsSignature.getJa3nText()),
-                            tlsSignature.getJa4Text(),
-                            DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
-                            tlsSignature.getJa3Text(),
-                            tlsSignature.getJa3nText());
-                }
-                AcceptUdpResult result = AcceptUdpResult.rule(AcceptRule.FILTER_H3);
-                if (tlsSignature != null) {
-                    result.setUdpProxy(new InetSocketAddress("8.216.131.32", 20240));
-                }
-                return result;
-            }
         }
     }
 
