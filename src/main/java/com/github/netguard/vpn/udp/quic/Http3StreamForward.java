@@ -161,7 +161,7 @@ class Http3StreamForward extends QuicStreamForward {
                 }
                 log.debug("onEOF filter response headers={}", headers);
                 headers.setInt("X-Http2-Stream-Id", from.getStreamId());
-                headers.set("X-Netguard-Session", sessionKey.toString());
+                headers.set("X-Netguard-Session", String.valueOf(sessionKey));
                 headerList = headers.entries();
                 setDataBlocks(data);
             }
