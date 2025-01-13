@@ -13,6 +13,7 @@ import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import org.krakenapps.pcap.decoder.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -207,11 +208,11 @@ public class SSLProxyV2 implements Runnable {
         String pem = vpn.getRootCert().pem;
         StringBuilder builder = new StringBuilder();
         builder.append("HTTP/1.1 200 OK\r\n");
-        builder.append(HttpHeaderNames.CONNECTION).append(": close\r\n");
-        builder.append(HttpHeaderNames.PRAGMA).append(": no-cache\r\n");
-        builder.append(HttpHeaderNames.CONTENT_TYPE).append(": application/x-pem-file\r\n");
-        builder.append(HttpHeaderNames.CONTENT_LENGTH).append(": ").append(pem.length()).append("\r\n");
-        builder.append(HttpHeaderNames.SERVER).append(": ").append(getClass().getSimpleName()).append("\r\n");
+        builder.append(HttpHeaders.CONNECTION).append(": close\r\n");
+        builder.append("Pragma").append(": no-cache\r\n");
+        builder.append(HttpHeaders.CONTENT_TYPE).append(": application/x-pem-file\r\n");
+        builder.append(HttpHeaders.CONTENT_LENGTH).append(": ").append(pem.length()).append("\r\n");
+        builder.append(HttpHeaders.SERVER).append(": ").append(getClass().getSimpleName()).append("\r\n");
 
         {
             String fileName = "NetGuard.pem";
