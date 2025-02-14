@@ -1,6 +1,6 @@
 package com.github.netguard.vpn.udp;
 
-import net.luminis.quic.frame.QuicFrame;
+import tech.kwik.core.frame.QuicFrame;
 
 import java.nio.BufferUnderflowException;
 import java.util.List;

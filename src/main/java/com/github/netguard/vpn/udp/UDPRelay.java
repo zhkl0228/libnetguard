@@ -3,9 +3,9 @@ package com.github.netguard.vpn.udp;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.thread.ThreadUtil;
 import com.github.netguard.Inspector;
-import net.luminis.quic.receive.Receiver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tech.kwik.core.receive.Receiver;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;

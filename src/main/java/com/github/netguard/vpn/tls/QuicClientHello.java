@@ -1,18 +1,18 @@
 package com.github.netguard.vpn.tls;
 
-import net.luminis.tls.TlsConstants;
-import net.luminis.tls.extension.ApplicationLayerProtocolNegotiationExtension;
-import net.luminis.tls.extension.CertificateAuthoritiesExtension;
-import net.luminis.tls.extension.ClientHelloPreSharedKeyExtension;
-import net.luminis.tls.extension.EarlyDataExtension;
-import net.luminis.tls.extension.Extension;
-import net.luminis.tls.extension.KeyShareExtension;
-import net.luminis.tls.extension.PskKeyExchangeModesExtension;
-import net.luminis.tls.extension.ServerNameExtension;
-import net.luminis.tls.extension.SignatureAlgorithmsExtension;
-import net.luminis.tls.extension.SupportedGroupsExtension;
-import net.luminis.tls.extension.SupportedVersionsExtension;
-import net.luminis.tls.extension.UnknownExtension;
+import tech.kwik.agent15.TlsConstants;
+import tech.kwik.agent15.extension.ApplicationLayerProtocolNegotiationExtension;
+import tech.kwik.agent15.extension.CertificateAuthoritiesExtension;
+import tech.kwik.agent15.extension.ClientHelloPreSharedKeyExtension;
+import tech.kwik.agent15.extension.KeyShareExtension;
+import tech.kwik.agent15.extension.PskKeyExchangeModesExtension;
+import tech.kwik.agent15.extension.ServerNameExtension;
+import tech.kwik.agent15.extension.SupportedGroupsExtension;
+import tech.kwik.agent15.extension.SupportedVersionsExtension;
+import tech.kwik.agent15.extension.UnknownExtension;
+import tech.kwik.agent15.extension.EarlyDataExtension;
+import tech.kwik.agent15.extension.Extension;
+import tech.kwik.agent15.extension.SignatureAlgorithmsExtension;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -24,11 +24,11 @@ import java.util.Map;
 
 public class QuicClientHello implements ClientHello {
 
-    private final net.luminis.tls.handshake.ClientHello clientHello;
+    private final tech.kwik.agent15.handshake.ClientHello clientHello;
     private final String hostName;
     private final List<String> applicationLayerProtocols;
 
-    public QuicClientHello(net.luminis.tls.handshake.ClientHello clientHello, String hostName, List<String> applicationLayerProtocols) {
+    public QuicClientHello(tech.kwik.agent15.handshake.ClientHello clientHello, String hostName, List<String> applicationLayerProtocols) {
         this.clientHello = clientHello;
         this.hostName = hostName;
         this.applicationLayerProtocols = Collections.unmodifiableList(applicationLayerProtocols);

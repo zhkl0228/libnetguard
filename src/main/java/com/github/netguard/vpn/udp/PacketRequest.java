@@ -8,13 +8,13 @@ import com.github.netguard.vpn.tls.QuicClientHello;
 import com.github.netguard.vpn.tls.TlsSignature;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
-import net.luminis.tls.extension.ApplicationLayerProtocolNegotiationExtension;
-import net.luminis.tls.extension.Extension;
-import net.luminis.tls.extension.ServerNameExtension;
-import net.luminis.tls.handshake.ClientHello;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xbill.DNS.Message;
+import tech.kwik.agent15.extension.ApplicationLayerProtocolNegotiationExtension;
+import tech.kwik.agent15.extension.Extension;
+import tech.kwik.agent15.extension.ServerNameExtension;
+import tech.kwik.agent15.handshake.ClientHello;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;

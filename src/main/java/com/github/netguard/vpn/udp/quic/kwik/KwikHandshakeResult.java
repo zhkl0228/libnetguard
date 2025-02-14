@@ -6,13 +6,13 @@ import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2Session;
 import com.github.netguard.vpn.udp.quic.HandshakeResult;
 import com.github.netguard.vpn.udp.quic.QuicServer;
-import net.luminis.quic.QuicClientConnection;
-import net.luminis.quic.log.NullLogger;
-import net.luminis.quic.server.ServerConnectionConfig;
-import net.luminis.quic.server.ServerConnector;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tech.kwik.core.QuicClientConnection;
+import tech.kwik.core.log.NullLogger;
+import tech.kwik.core.server.ServerConnectionConfig;
+import tech.kwik.core.server.ServerConnector;
 
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
@@ -48,7 +48,7 @@ class KwikHandshakeResult implements HandshakeResult {
         ServerConnector.Builder builder = ServerConnector.builder();
         ServerCertificate.ServerContext serverContext = serverCertificate.getServerContext(vpn.getRootCert());
         serverContext.configServerConnector(builder);
-        net.luminis.quic.log.Logger serverLogger;
+        tech.kwik.core.log.Logger serverLogger;
         if (log.isDebugEnabled()) {
             serverLogger = new PrintStreamLogger(System.out);
             serverLogger.logDebug(true);

@@ -1,6 +1,6 @@
 package com.github.netguard.vpn.udp.quic.kwik;
 
-import net.luminis.quic.log.BaseLogger;
+import tech.kwik.core.log.BaseLogger;
 
 import java.io.PrintStream;
 import java.nio.ByteBuffer;

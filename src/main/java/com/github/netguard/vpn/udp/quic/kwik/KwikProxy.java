@@ -5,13 +5,13 @@ import com.github.netguard.vpn.tcp.h2.Http2Session;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
 import com.github.netguard.vpn.udp.quic.QuicStreamForward;
 import com.github.netguard.vpn.udp.quic.QuicStream;
-import net.luminis.quic.QuicClientConnection;
-import net.luminis.quic.QuicConnection;
-import net.luminis.quic.QuicConstants;
-import net.luminis.quic.server.ApplicationProtocolConnection;
-import net.luminis.quic.server.ApplicationProtocolConnectionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tech.kwik.core.QuicClientConnection;
+import tech.kwik.core.QuicConnection;
+import tech.kwik.core.QuicConstants;
+import tech.kwik.core.server.ApplicationProtocolConnection;
+import tech.kwik.core.server.ApplicationProtocolConnectionFactory;
 
 import java.util.concurrent.ExecutorService;
 
@@ -35,7 +35,7 @@ class KwikProxy implements ApplicationProtocolConnectionFactory {
         log.debug("createConnection protocol={}, serverConnection={}", protocol, serverConnection);
         return new ApplicationProtocolConnection() {
             @Override
-            public void acceptPeerInitiatedStream(net.luminis.quic.QuicStream serverStream) {
+            public void acceptPeerInitiatedStream(tech.kwik.core.QuicStream serverStream) {
                 log.debug("acceptPeerInitiatedStream serverStream={}", serverStream);
                 executorService.submit(new AcceptPeerInitiatedStream(serverConnection, serverStream));
             }
@@ -44,9 +44,9 @@ class KwikProxy implements ApplicationProtocolConnectionFactory {
 
     private class AcceptPeerInitiatedStream implements Runnable {
         private final QuicConnection serverConnection;
-        private final net.luminis.quic.QuicStream serverStream;
+        private final tech.kwik.core.QuicStream serverStream;
 
-        AcceptPeerInitiatedStream(QuicConnection serverConnection, net.luminis.quic.QuicStream serverStream) {
+        AcceptPeerInitiatedStream(QuicConnection serverConnection, tech.kwik.core.QuicStream serverStream) {
             this.serverConnection = serverConnection;
             this.serverStream = serverStream;
         }
@@ -61,7 +61,7 @@ class KwikProxy implements ApplicationProtocolConnectionFactory {
 
             try {
                 boolean bidirectional = serverStream.isBidirectional();
-                net.luminis.quic.QuicStream clientStream = clientConnection.createStream(bidirectional);
+                tech.kwik.core.QuicStream clientStream = clientConnection.createStream(bidirectional);
                 log.debug("createStream bidirectional={}, clientStream={}, serverStream={}", bidirectional, clientStream, serverStream);
                 QuicStream server = new KwikStream(serverStream);
                 QuicStream client = new KwikStream(clientStream);

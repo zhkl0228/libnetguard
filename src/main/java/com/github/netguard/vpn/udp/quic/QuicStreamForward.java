@@ -3,9 +3,9 @@ package com.github.netguard.vpn.udp.quic;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
-import net.luminis.quic.receive.Receiver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tech.kwik.core.receive.Receiver;
 
 import java.io.DataOutputStream;
 import java.io.EOFException;
