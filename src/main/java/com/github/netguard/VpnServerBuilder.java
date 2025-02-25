@@ -23,7 +23,7 @@ public class VpnServerBuilder {
 
     private boolean preparePreMasterSecretsLogFile;
 
-    public VpnServerBuilder enablePreMasterSecretsLogFile() {
+    public VpnServerBuilder preparePreMasterSecretsLogFile() {
         this.preparePreMasterSecretsLogFile = true;
         return this;
     }
