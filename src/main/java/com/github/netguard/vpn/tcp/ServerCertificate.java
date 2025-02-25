@@ -1,6 +1,5 @@
 package com.github.netguard.vpn.tcp;
 
-import net.luminis.quic.server.ServerConnector;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -21,6 +20,7 @@ import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tech.kwik.core.server.ServerConnector;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;

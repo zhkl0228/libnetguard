@@ -18,13 +18,15 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
-import net.luminis.qpack.Decoder;
-import net.luminis.qpack.Encoder;
-import net.luminis.quic.QuicConstants;
 import org.krakenapps.pcap.util.Buffer;
 import org.krakenapps.pcap.util.ChainBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tech.kwik.core.QuicConstants;
+import tech.kwik.qpack.Decoder;
+import tech.kwik.qpack.Encoder;
+import tech.kwik.qpack.impl.DecoderImpl;
+import tech.kwik.qpack.impl.EncoderImpl;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -161,7 +163,7 @@ class Http3StreamForward extends QuicStreamForward {
                 }
                 log.debug("onEOF filter response headers={}", headers);
                 headers.setInt("X-Http2-Stream-Id", from.getStreamId());
-                headers.set("X-Netguard-Session", sessionKey.toString());
+                headers.set("X-Netguard-Session", String.valueOf(sessionKey));
                 headerList = headers.entries();
                 setDataBlocks(data);
             }
@@ -219,8 +221,8 @@ class Http3StreamForward extends QuicStreamForward {
 
     private long type = -1;
     private int payLoadLength = -1;
-    private final Decoder decoder = new Decoder();
-    private final Encoder encoder = new Encoder();
+    private final Decoder decoder = new DecoderImpl();
+    private final Encoder encoder = new EncoderImpl();
 
     private boolean forwardHttp3Frame(DataOutputStream outputStream) throws IOException {
         {

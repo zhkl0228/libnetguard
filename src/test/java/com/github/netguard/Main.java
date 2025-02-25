@@ -67,7 +67,7 @@ public class Main {
         Logger.getLogger(DNSFilter.class.getPackage().getName()).setLevel(Level.DEBUG);
         VpnServerBuilder builder = VpnServerBuilder.create()
                 .withPort(20240)
-                .preparePreMasterSecretsLogFile()
+                .enablePreMasterSecretsLogFile()
                 .enableBroadcast(10)
                 .enableTransparentProxying()
                 .enableUdpRelay()

@@ -272,8 +272,7 @@ public class VpnServer {
         return serverSocket.getLocalPort();
     }
 
-    final void preparePreMasterSecretsLogFile() {
-        File preMasterSecretsLogFile = new File("target/pre_master_secrets.log");
+    final void preparePreMasterSecretsLogFile(File preMasterSecretsLogFile) {
         String preMasterSecretsLogPath = preMasterSecretsLogFile.getAbsolutePath();
         FileUtil.del(preMasterSecretsLogFile);
         CodeSource codeSource = AgentAttach.class.getProtectionDomain().getCodeSource();

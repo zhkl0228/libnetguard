@@ -51,6 +51,6 @@ public class Http2Session {
 
     @Override
     public String toString() {
-        return String.format("%s:%d => %s:%d", clientIp, clientPort, serverIp, serverPort);
+        return String.format("%s:%d => %s:%d", clientIp, clientPort, hostName == null ? serverIp : hostName, serverPort);
     }
 }

@@ -4,11 +4,11 @@ import com.github.netguard.vpn.udp.PacketRequest;
 import com.github.netguard.vpn.udp.UDPRelay;
 import com.github.netguard.vpn.udp.quic.ClientConnection;
 import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
-import net.luminis.quic.DatagramSocketFactory;
-import net.luminis.quic.QuicClientConnection;
-import net.luminis.quic.log.NullLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tech.kwik.core.DatagramSocketFactory;
+import tech.kwik.core.QuicClientConnection;
+import tech.kwik.core.log.NullLogger;
 
 import java.io.IOException;
 import java.net.DatagramSocket;
@@ -54,7 +54,7 @@ public class KwikProvider extends QuicProxyProvider {
         if(udpProxy != null) {
             builder.socketFactory(new UdpProxySocketFactory(udpProxy, connectTimeout, new InetSocketAddress(packetRequest.serverIp, packetRequest.port)));
         }
-        net.luminis.quic.log.Logger clientLogger;
+        tech.kwik.core.log.Logger clientLogger;
         if (log.isDebugEnabled()) {
             clientLogger = new PrintStreamLogger(System.err);
             clientLogger.logDebug(true);

@@ -77,7 +77,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
         this.session = session;
         this.filter = packetCapture == null ? null : packetCapture.getH2Filter();
-        this.sessionKey = session.toString();
+        this.sessionKey = String.valueOf(session);
     }
 
     private HttpFrameForward peer;
@@ -145,7 +145,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 byte[] output = outputBuffer.toByteArray();
                 outputBuffer.reset();
                 if (input != null) {
-                    log.debug("forward server={}, inHash={}, outHash={}, input={}, output={}", server, DigestUtil.md5Hex(input), DigestUtil.md5Hex(output), HexUtil.encodeHexStr(input), HexUtil.encodeHexStr(output));
+                    log.debug("forward server={}, inHash={}, outHash={}, output={}, input={}", server, DigestUtil.md5Hex(input), DigestUtil.md5Hex(output), HexUtil.encodeHexStr(output), HexUtil.encodeHexStr(input));
                 }
                 if (log.isTraceEnabled()) {
                     String clientIp = clientSocketAddress.getAddress().getHostAddress();
@@ -210,7 +210,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             data.readBytes(stream.buffer, data.readableBytes());
             if (stream.longPolling) {
                 if (server) {
-                    handlePollingRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), endStream, false, streamId);
+                    handlePollingRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), endStream, false, streamId, false);
                 } else {
                     handlePollingResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), endStream);
                 }
@@ -225,14 +225,15 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), outputBuffer);
                 }
                 stream.buffer.reset();
-            } else if (server) {
-                HttpHeaders headers = stream.httpHeadersFrame.headers();
-                if (!headers.contains(HttpHeaderNames.CONTENT_LENGTH) &&
-                        !headers.contains(HttpHeaderNames.TRANSFER_ENCODING) &&
-                        !headers.contains(HttpHeaderNames.CONTENT_RANGE)) {
-                    stream.longPolling = true;
-                    handlePollingRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), false, true, streamId);
-                    stream.buffer.reset();
+            } else {
+                log.debug("readDataFrame server={}", server);
+                if (server) {
+                    if (stream.detectLongPolling()) {
+                        stream.longPolling = true;
+                        handlePollingRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), false, true, streamId, !stream.headerWritten);
+                        stream.headerWritten = false;
+                        stream.buffer.reset();
+                    }
                 }
             }
         } catch (IOException e) {
@@ -319,7 +320,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         readRstStreamFrame(streamId, H2FrameRstStream.ErrorCode.CANCEL.ordinal());
     }
 
-    private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream, int streamId) {
+    private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream, int streamId, boolean writeHeaders) {
         HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey, akamai);
         if (filter != null) {
             CancelResult result = filter.cancelRequest(request, requestData == null ? new byte[0] : requestData, true);
@@ -333,16 +334,16 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             }
         }
         byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request, requestData, newStream);
-        if (newStream) {
+        if (writeHeaders) {
             writeMessage(headersFrame, data, endStreamOnFlush, outputBuffer);
-        } else {
-            ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
-            ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
-            try {
-                forwardFrameBuf(frame, outputBuffer);
-            } finally {
-                frame.release();
-            }
+        }
+
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
+        ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
+        try {
+            forwardFrameBuf(frame, outputBuffer);
+        } finally {
+            frame.release();
         }
     }
 
@@ -452,6 +453,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             Stream old = streamMap.put(httpHeadersFrame.getStreamId(), stream);
             if (old != null) {
                 log.warn("readHeaderBlockEnd replace exists stream old={}", old);
+            } else {
+                log.debug("readHeaderBlockEnd server={}, stream={}", server, stream);
             }
 
             Stream peerStream;
@@ -460,6 +463,17 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     peerStream.longPolling) {
                 stream.longPolling = true;
                 writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
+            } else {
+                log.debug("readHeaderBlockEnd server={}, httpHeadersFrame={}, streamMap={}", server, httpHeadersFrame, peer.streamMap);
+
+                if (server) {
+                    if (stream.detectLongPolling()) {
+                        stream.longPolling = true;
+                        writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
+                        stream.headerWritten = true;
+                        stream.buffer.reset();
+                    }
+                }
             }
         }
         httpHeadersFrame = null;

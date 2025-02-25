@@ -7,9 +7,9 @@ import java.io.OutputStream;
 
 class KwikStream implements QuicStream {
 
-    private final net.luminis.quic.QuicStream stream;
+    private final tech.kwik.core.QuicStream stream;
 
-    KwikStream(net.luminis.quic.QuicStream stream) {
+    KwikStream(tech.kwik.core.QuicStream stream) {
         this.stream = stream;
     }
 

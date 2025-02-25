@@ -32,20 +32,21 @@ import io.netty.incubator.codec.quic.QuicStreamChannel;
 import io.netty.util.CharsetUtil;
 import io.netty.util.ReferenceCountUtil;
 import junit.framework.TestCase;
-import net.luminis.http3.Http3Client;
-import net.luminis.http3.impl.Http3ClientConnectionImpl;
-import net.luminis.http3.server.Http3ApplicationProtocolFactory;
-import net.luminis.quic.QuicClientConnection;
-import net.luminis.quic.QuicConnection;
-import net.luminis.quic.QuicStream;
-import net.luminis.quic.log.SysOutLogger;
-import net.luminis.quic.packet.PacketParser;
-import net.luminis.quic.server.ApplicationProtocolConnection;
-import net.luminis.quic.server.ServerConnectionConfig;
-import net.luminis.quic.server.ServerConnector;
 import org.apache.commons.io.IOUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import tech.kwik.core.QuicClientConnection;
+import tech.kwik.core.QuicConnection;
+import tech.kwik.core.QuicStream;
+import tech.kwik.core.log.SysOutLogger;
+import tech.kwik.core.packet.PacketParser;
+import tech.kwik.core.server.ApplicationProtocolConnection;
+import tech.kwik.core.server.ServerConnectionConfig;
+import tech.kwik.core.server.ServerConnector;
+import tech.kwik.flupke.Http3Client;
+import tech.kwik.flupke.impl.Http3ClientConnectionImpl;
+import tech.kwik.flupke.sample.FileServer;
+import tech.kwik.flupke.server.Http3ApplicationProtocolFactory;
 
 import javax.net.ssl.SSLEngine;
 import java.io.ByteArrayInputStream;
@@ -243,15 +244,16 @@ public class Http3Test extends TestCase {
                 .build();
         ServerConnector.Builder builder = ServerConnector.builder();
         serverCertificate.getServerContext(rootCert).configServerConnector(builder);
-        ServerConnector serverConnector = builder
+        try (ServerConnector serverConnector = builder
                 .withPort(20170)
                 .withConfiguration(serverConnectionConfig)
                 .withLogger(logger)
                 .withPort(8443)
-                .build();
-        serverConnector.registerApplicationProtocol("h3", new Http3ApplicationProtocolFactory(new File("target/")));
-        serverConnector.start();
-        TimeUnit.HOURS.sleep(1);
+                .build()) {
+            serverConnector.registerApplicationProtocol("h3", new Http3ApplicationProtocolFactory(new FileServer(new File("target/"))));
+            serverConnector.start();
+            TimeUnit.HOURS.sleep(1);
+        }
     }
 
     public void testFlupkeClient() throws Exception {
@@ -299,17 +301,18 @@ public class Http3Test extends TestCase {
                     .build();
             ServerConnector.Builder builder = ServerConnector.builder();
             serverCertificate.getServerContext(rootCert).configServerConnector(builder);
-            ServerConnector serverConnector = builder
+            try (ServerConnector serverConnector = builder
                     .withPort(20170)
                     .withConfiguration(serverConnectionConfig)
                     .withLogger(logger)
-                    .build();
-            serverConnector.registerApplicationProtocol(applicationProtocol, (protocol, quicConnection) -> {
-                System.out.println("protocol=" + protocol + ", quicConnection=" + quicConnection);
-                return new MyApplicationProtocolConnection(quicConnection);
-            });
-            serverConnector.start();
-            TimeUnit.HOURS.sleep(1);
+                    .build()) {
+                serverConnector.registerApplicationProtocol(applicationProtocol, (protocol, quicConnection) -> {
+                    System.out.println("protocol=" + protocol + ", quicConnection=" + quicConnection);
+                    return new MyApplicationProtocolConnection(quicConnection);
+                });
+                serverConnector.start();
+                TimeUnit.HOURS.sleep(1);
+            }
         }
     }
 

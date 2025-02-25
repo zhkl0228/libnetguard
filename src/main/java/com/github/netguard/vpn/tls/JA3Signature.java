@@ -7,9 +7,9 @@ package com.github.netguard.vpn.tls;
 
 import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.vpn.Vpn;
-import net.luminis.tls.TlsConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tech.kwik.agent15.TlsConstants;
 
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;

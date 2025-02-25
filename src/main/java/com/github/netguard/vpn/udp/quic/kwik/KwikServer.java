@@ -1,7 +1,7 @@
 package com.github.netguard.vpn.udp.quic.kwik;
 
 import com.github.netguard.vpn.udp.quic.QuicServer;
-import net.luminis.quic.server.ServerConnector;
+import tech.kwik.core.server.ServerConnector;
 
 import java.net.InetSocketAddress;
 

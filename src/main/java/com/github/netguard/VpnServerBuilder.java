@@ -21,10 +21,15 @@ public class VpnServerBuilder {
         return this;
     }
 
-    private boolean preparePreMasterSecretsLogFile;
+    private File preparePreMasterSecretsLogFile;
 
-    public VpnServerBuilder preparePreMasterSecretsLogFile() {
-        this.preparePreMasterSecretsLogFile = true;
+    public VpnServerBuilder enablePreMasterSecretsLogFile() {
+        File preMasterSecretsLogFile = new File("target/pre_master_secrets.log");
+        return enablePreMasterSecretsLogFile(preMasterSecretsLogFile);
+    }
+
+    public VpnServerBuilder enablePreMasterSecretsLogFile(File preparePreMasterSecretsLogFile) {
+        this.preparePreMasterSecretsLogFile = preparePreMasterSecretsLogFile;
         return this;
     }
 
@@ -76,18 +81,7 @@ public class VpnServerBuilder {
     }
 
     public VpnServer startServer() throws IOException {
-        VpnServer server = port > 0 ? new VpnServer(port) : new VpnServer();
-        if (preparePreMasterSecretsLogFile) {
-            server.preparePreMasterSecretsLogFile();
-        }
-        if(broadcastSeconds > 0) {
-            server.enableBroadcast(broadcastSeconds);
-        }
-        if (transparentProxyingPort == 0) {
-            server.enableTransparentProxying();
-        } else if(transparentProxyingPort > 0) {
-            server.enableTransparentProxying(transparentProxyingPort);
-        }
+        VpnServer server = createVpnServer();
         if (enableUdpRelay) {
             server.enableUdpRelay();
         }
@@ -101,6 +95,22 @@ public class VpnServerBuilder {
             server.disableNetGuard();
         }
         server.start();
+        return server;
+    }
+
+    private VpnServer createVpnServer() throws IOException {
+        VpnServer server = port > 0 ? new VpnServer(port) : new VpnServer();
+        if (preparePreMasterSecretsLogFile != null) {
+            server.preparePreMasterSecretsLogFile(preparePreMasterSecretsLogFile);
+        }
+        if(broadcastSeconds > 0) {
+            server.enableBroadcast(broadcastSeconds);
+        }
+        if (transparentProxyingPort == 0) {
+            server.enableTransparentProxying();
+        } else if(transparentProxyingPort > 0) {
+            server.enableTransparentProxying(transparentProxyingPort);
+        }
         return server;
     }
 

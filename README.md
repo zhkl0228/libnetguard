@@ -5,6 +5,3 @@
 - [MacVPN](https://github.com/zhkl0228/SwiftConnect)
 
 [Vpn Server DEMO](https://github.com/zhkl0228/libnetguard/blob/master/src/test/java/com/github/netguard/Main.java)
-
-Depend on
-- [kraken](https://github.com/zhkl0228/kraken)
