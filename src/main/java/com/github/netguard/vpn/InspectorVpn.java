@@ -14,4 +14,6 @@ public interface InspectorVpn extends Vpn {
     RootCert getRootCert();
     ExecutorService getExecutorService();
 
+    String getExtraData();
+
 }

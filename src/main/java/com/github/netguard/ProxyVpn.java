@@ -23,8 +23,13 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
             ThreadUtil.newNamedThreadFactory(getClass().getSimpleName(), true)
     );
 
-    protected static ClientOS readOS(DataInput vpnReadStream) throws IOException {
+    protected static ClientOS readOS(ProxyVpn vpn, DataInput vpnReadStream) throws IOException {
         int os = vpnReadStream.readUnsignedByte();
+        boolean hasExtraData = (os & 0x80) != 0;
+        if (hasExtraData) {
+            os &= 0x7f;
+            vpn.extraData = vpnReadStream.readUTF();
+        }
         switch (os) {
             case 0:
                 return ClientOS.Android;
@@ -35,6 +40,13 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
             default:
                 throw new IOException("Invalid os=" + os);
         }
+    }
+
+    private String extraData;
+
+    @Override
+    public String getExtraData() {
+        return extraData;
     }
 
     protected final List<ProxyVpn> clients;

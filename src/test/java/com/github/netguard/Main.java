@@ -124,7 +124,7 @@ public class Main {
         public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
             TlsSignature tlsSignature = connectRequest.getTlsSignature();
             if (tlsSignature != null) {
-                System.out.printf("acceptTcp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\", ScrapflyText=\"%s\", ScrapflyFP=%s%n", connectRequest,
+                System.out.printf("acceptTcp extraData=%s, request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\", ScrapflyText=\"%s\", ScrapflyFP=%s%n", connectRequest.getExtraData(), connectRequest,
                         DigestUtil.md5Hex(tlsSignature.getJa3Text()),
                         DigestUtil.md5Hex(tlsSignature.getJa3nText()),
                         tlsSignature.getJa4Text(),

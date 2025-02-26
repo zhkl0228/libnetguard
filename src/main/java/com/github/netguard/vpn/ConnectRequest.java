@@ -9,5 +9,6 @@ public interface ConnectRequest {
     Application[] queryApplications();
     TlsSignature getTlsSignature();
     byte[] getPrologue();
+    String getExtraData();
 
 }

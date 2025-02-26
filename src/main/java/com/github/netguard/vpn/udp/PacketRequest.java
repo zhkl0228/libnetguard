@@ -49,6 +49,11 @@ public class PacketRequest implements ConnectRequest {
     }
 
     @Override
+    public String getExtraData() {
+        return vpn.getExtraData();
+    }
+
+    @Override
     public Application[] queryApplications() {
         return vpn.queryApplications(packet.hashCode());
     }

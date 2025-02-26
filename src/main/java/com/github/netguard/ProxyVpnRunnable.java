@@ -51,7 +51,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
         super(clients, rootCert);
         this.socket = socket;
         this.vpnReadStream = new DataInputStream(socket.getInputStream());
-        this.clientOS = readOS(vpnReadStream);
+        this.clientOS = readOS(this, vpnReadStream);
 
         // Packets from upstream servers, received by this VPN
         OutputStream vpnWriteStream = socket.getOutputStream();

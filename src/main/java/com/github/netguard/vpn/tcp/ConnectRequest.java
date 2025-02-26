@@ -58,6 +58,11 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
         return vpn.getClientOS();
     }
 
+    @Override
+    public String getExtraData() {
+        return vpn.getExtraData();
+    }
+
     public AcceptTcpResult.AcceptResultBuilder connectTcpDirect() {
         return AcceptTcpResult.builder(AllowRule.CONNECT_TCP);
     }
