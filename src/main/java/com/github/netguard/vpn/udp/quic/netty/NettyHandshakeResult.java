@@ -243,7 +243,8 @@ class NettyHandshakeResult implements HandshakeResult {
             byte[] responseData = new byte[content.readableBytes()];
             content.readBytes(responseData);
             HttpHeaders headers = new NetGuardHttp2Headers();
-            for(Map.Entry<String, String> entry : response.headers().entries()) {
+            HttpHeaders responseHeaders = response.headers();
+            for(Map.Entry<String, String> entry : responseHeaders.entries()) {
                 headers.add(entry.getKey(), entry.getValue());
             }
             responseData = http2Filter == null ? responseData : http2Filter.filterResponse(sessionKey, response, headers, responseData);

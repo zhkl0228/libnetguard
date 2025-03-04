@@ -6,7 +6,7 @@
 
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.5-SNAPSHOT</version>
+    <version>0.0.5</version>
     <packaging>jar</packaging>
     <name>VPN packet capture server</name>
     <description>VPN packet capture server</description>
