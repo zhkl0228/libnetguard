@@ -240,6 +240,9 @@ class NettyHandshakeResult implements HandshakeResult {
         }
         @Override
         public void channelReadComplete(ChannelHandlerContext ctx) {
+            if (response == null) {
+                return;
+            }
             byte[] responseData = new byte[content.readableBytes()];
             content.readBytes(responseData);
             HttpHeaders headers = new NetGuardHttp2Headers();

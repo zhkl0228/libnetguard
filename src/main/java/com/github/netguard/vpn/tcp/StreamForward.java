@@ -57,7 +57,18 @@ public class StreamForward implements Runnable {
         this.packet = packet;
     }
 
-    final void startThread() {
+    final void startThread(byte[] prologue) {
+        if (packetCapture != null && prologue != null) {
+            if (server) {
+                if (isSSL) {
+                    packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, prologue);
+                } else {
+                    packetCapture.onSocketTx(clientSocketAddress, serverSocketAddress, prologue);
+                }
+            } else {
+                throw new IllegalStateException("Invalid prologue");
+            }
+        }
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Thread thread = new Thread(this, getClass().getSimpleName() + " for " + clientSocketAddress + "_" + serverSocketAddress + "_" + dateFormat.format(new Date()));
         thread.setDaemon(true);
