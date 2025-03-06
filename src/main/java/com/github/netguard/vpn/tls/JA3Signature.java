@@ -273,6 +273,9 @@ public final class JA3Signature implements TlsSignature {
                     list.add("1.1");
                     break;
                 case "h2":
+                case "h2-14":
+                case "h2-15":
+                case "h2-16":
                     list.add("2");
                     break;
                 case "h3":
@@ -283,6 +286,7 @@ public final class JA3Signature implements TlsSignature {
                 case "dot":
                 case "apns-security-v3":
                 case "apns-pack-v1":
+                case "spdy/3":
                 case "spdy/3.1":
                 case "hq-interop":
                     break;
@@ -309,6 +313,9 @@ public final class JA3Signature implements TlsSignature {
                     list.add("http11");
                     break;
                 case "h2":
+                case "h2-14":
+                case "h2-15":
+                case "h2-16":
                     list.add(Vpn.HTTP2_PROTOCOL);
                     break;
                 case "h3":
@@ -319,6 +326,7 @@ public final class JA3Signature implements TlsSignature {
                 case "dot":
                 case "apns-security-v3":
                 case "apns-pack-v1":
+                case "spdy/3":
                 case "spdy/3.1":
                 case "hq-interop":
                     break;
