@@ -39,7 +39,7 @@ public class ExtensionServerName {
         dataOutput.writeByte(contentType);
         if (contentType != ContentType.Handshake.getValue()) {
             if (log.isDebugEnabled()) {
-                log.debug(String.format("Not handshake record: contentType=0x%x, server=%s", contentType, server));
+                log.debug("{}", String.format("Not handshake record: contentType=0x%x, server=%s", contentType, server));
             }
             return ClientHelloRecord.prologue(baos, dataInput);
         }
@@ -48,7 +48,7 @@ public class ExtensionServerName {
         Version recordVersion = getVersion(version);
         if (recordVersion == Version.NONE) {
             if (log.isDebugEnabled()) {
-                log.debug(String.format("Tls version=0x%x, server=%s", version, server));
+                log.debug("{}", String.format("Tls version=0x%x, server=%s", version, server));
             }
             return ClientHelloRecord.prologue(baos, dataInput);
         }
@@ -56,7 +56,7 @@ public class ExtensionServerName {
         dataOutput.writeShort(length);
         if(length > 0x1200) {
             if (log.isDebugEnabled()) {
-                log.debug(String.format("Tls length=0x%x, server=%s", length, server));
+                log.debug("{}", String.format("Tls length=0x%x, server=%s", length, server));
             }
             return ClientHelloRecord.prologue(baos, dataInput);
         }
@@ -75,7 +75,7 @@ public class ExtensionServerName {
         Version tlsVer = getVersion(version);
         if (tlsVer == Version.NONE) {
             if (log.isDebugEnabled()) {
-                log.debug(String.format("Tls handshake version=0x%x, server=%s", version, server));
+                log.debug("{}", String.format("Tls handshake version=0x%x, server=%s", version, server));
             }
             return ClientHelloRecord.prologue(baos, dataInput);
         }

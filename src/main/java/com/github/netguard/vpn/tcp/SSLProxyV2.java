@@ -362,8 +362,10 @@ public class SSLProxyV2 implements Runnable {
                 InetSocketAddress address = createSocketAddress(socketProxy, redirectAddress, redirectPort, redirectHost);
                 socket.connect(address, timeout);
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
-                    socketOut.write(record.prologue);
-                    socketOut.flush();
+                    if (record.prologue.length > 0) {
+                        socketOut.write(record.prologue);
+                        socketOut.flush();
+                    }
                     doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, null, false, null, null, false, packet,
                             record.prologue);
                 }
@@ -412,8 +414,10 @@ public class SSLProxyV2 implements Runnable {
                         record, applicationProtocol, allowRule == AllowRule.FILTER_H2);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
-                        socketOut.write(record.prologue);
-                        socketOut.flush();
+                        if (record.prologue.length > 0) {
+                            socketOut.write(record.prologue);
+                            socketOut.flush();
+                        }
                         doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false, null, null, false, packet,
                                 record.prologue);
                     }
