@@ -6,11 +6,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.handler.PacketDecoder;
-import com.github.netguard.vpn.AcceptTcpResult;
-import com.github.netguard.vpn.AcceptUdpResult;
-import com.github.netguard.vpn.AllowRule;
-import com.github.netguard.vpn.BaseVpnListener;
-import com.github.netguard.vpn.IPacketCapture;
+import com.github.netguard.vpn.*;
 import com.github.netguard.vpn.tcp.ConnectRequest;
 import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
@@ -24,25 +20,12 @@ import com.github.netguard.vpn.udp.quic.kwik.KwikProvider;
 import com.github.zhkl0228.impersonator.ImpersonatorFactory;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
-import io.netty.handler.codec.http.DefaultHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.*;
 import io.netty.util.ResourceLeakDetector;
-import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.impl.HttpSession;
-import org.xbill.DNS.ARecord;
-import org.xbill.DNS.DClass;
-import org.xbill.DNS.Flags;
-import org.xbill.DNS.Header;
-import org.xbill.DNS.Message;
-import org.xbill.DNS.Name;
-import org.xbill.DNS.Record;
+import org.xbill.DNS.*;
 
 import javax.net.ssl.TrustManager;
 import java.io.File;
@@ -86,13 +69,7 @@ public class Main {
 
     static class MyPacketDecoder extends PacketDecoder {
         public MyPacketDecoder() {
-            try {
-                File pcapFile = new File("target/vpn.pcap");
-                FileUtils.deleteQuietly(pcapFile);
-                setOutputPcapFile(pcapFile);
-            } catch (IOException e) {
-                throw new IllegalStateException("setOutputPcapFile", e);
-            }
+            super(new File("target/vpn.pcap"));
         }
 
         @Override

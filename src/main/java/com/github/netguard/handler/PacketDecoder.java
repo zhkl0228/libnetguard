@@ -5,11 +5,7 @@ import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.URLUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.handler.replay.Replay;
-import com.github.netguard.handler.session.SSLProxySession;
-import com.github.netguard.handler.session.SSLSessionKey;
-import com.github.netguard.handler.session.Session;
-import com.github.netguard.handler.session.SessionCreator;
-import com.github.netguard.handler.session.SessionFactory;
+import com.github.netguard.handler.session.*;
 import com.github.netguard.vpn.AcceptTcpResult;
 import com.github.netguard.vpn.AcceptUdpResult;
 import com.github.netguard.vpn.AllowRule;
@@ -23,22 +19,12 @@ import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.ethernet.EthernetDecoder;
 import org.krakenapps.pcap.decoder.ethernet.EthernetFrame;
 import org.krakenapps.pcap.decoder.ethernet.EthernetType;
-import org.krakenapps.pcap.decoder.http.HttpDecoder;
-import org.krakenapps.pcap.decoder.http.HttpProcessor;
-import org.krakenapps.pcap.decoder.http.HttpRequest;
-import org.krakenapps.pcap.decoder.http.HttpResponse;
-import org.krakenapps.pcap.decoder.http.WebSocketFrame;
+import org.krakenapps.pcap.decoder.http.*;
 import org.krakenapps.pcap.decoder.http.impl.HttpSession;
 import org.krakenapps.pcap.decoder.ip.InternetProtocol;
 import org.krakenapps.pcap.decoder.ip.IpDecoder;
 import org.krakenapps.pcap.decoder.ipv6.Ipv6Decoder;
-import org.krakenapps.pcap.decoder.tcp.ProtocolDetector;
-import org.krakenapps.pcap.decoder.tcp.TcpDecoder;
-import org.krakenapps.pcap.decoder.tcp.TcpPortProtocolMapper;
-import org.krakenapps.pcap.decoder.tcp.TcpProcessor;
-import org.krakenapps.pcap.decoder.tcp.TcpSession;
-import org.krakenapps.pcap.decoder.tcp.TcpSessionKey;
-import org.krakenapps.pcap.decoder.tcp.TcpSessionKeyImpl;
+import org.krakenapps.pcap.decoder.tcp.*;
 import org.krakenapps.pcap.decoder.udp.UdpDecoder;
 import org.krakenapps.pcap.decoder.udp.UdpPortProtocolMapper;
 import org.krakenapps.pcap.util.Buffer;
@@ -53,11 +39,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Enumeration;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 
 public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
@@ -70,6 +52,16 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     public PacketDecoder() {
         this(true);
+    }
+
+    public PacketDecoder(File pcapFile) {
+        this(true);
+
+        try {
+            setOutputPcapFile(pcapFile);
+        } catch (IOException e) {
+            throw new IllegalStateException("setOutputPcapFile", e);
+        }
     }
 
     private final boolean decodePacket;

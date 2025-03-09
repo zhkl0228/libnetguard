@@ -2,9 +2,12 @@ package com.github.netguard;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
+import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.handler.replay.FileReplay;
 import com.github.netguard.handler.replay.Replay;
 import com.github.netguard.transparent.TransparentSocketProxying;
+import com.github.netguard.vpn.BaseVpnListener;
+import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.udp.UDPRelay;
@@ -29,18 +32,23 @@ public class VpnServer {
     private static final Logger log = LoggerFactory.getLogger(VpnServer.class);
 
     @SuppressWarnings("unused")
-    public static VpnServer startSimpleServer(VpnListener vpnListener) throws IOException {
+    public static VpnServer startSimpleServer(PacketDecoder packetCapture) throws IOException {
         Calendar calendar = Calendar.getInstance();
         int year = calendar.get(Calendar.YEAR);
         int port = year * 10;
-        return createSimpleBuilder(port, vpnListener).startServer();
+        return createSimpleBuilder(port, packetCapture).startServer();
     }
 
-    public static VpnServerBuilder createSimpleBuilder(int port, VpnListener vpnListener) {
+    public static VpnServerBuilder createSimpleBuilder(int port, PacketDecoder packetCapture) {
         VpnServerBuilder builder = VpnServerBuilder.create();
         builder.withPort(port);
         builder.enableBroadcast(10);
-        builder.withVpnListener(vpnListener);
+        builder.withVpnListener(new BaseVpnListener() {
+            @Override
+            protected IPacketCapture createPacketCapture() {
+                return packetCapture;
+            }
+        });
         return builder;
     }
 
