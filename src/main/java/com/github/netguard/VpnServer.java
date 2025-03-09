@@ -36,7 +36,9 @@ public class VpnServer {
         Calendar calendar = Calendar.getInstance();
         int year = calendar.get(Calendar.YEAR);
         int port = year * 10;
-        return createSimpleBuilder(port, packetCapture).startServer();
+        VpnServer vpnServer = createSimpleBuilder(port, packetCapture).startServer();
+        System.out.println("vpn server listen on: " + vpnServer.getPort());
+        return vpnServer;
     }
 
     public static VpnServerBuilder createSimpleBuilder(int port, PacketDecoder packetCapture) {
