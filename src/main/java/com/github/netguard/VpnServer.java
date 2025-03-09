@@ -14,26 +14,11 @@ import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.lang.management.ManagementFactory;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
-import java.net.URISyntaxException;
-import java.net.URL;
+import java.net.*;
 import java.security.CodeSource;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
 
 /**
  * java9: --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED
@@ -42,6 +27,22 @@ import java.util.Scanner;
 public class VpnServer {
 
     private static final Logger log = LoggerFactory.getLogger(VpnServer.class);
+
+    @SuppressWarnings("unused")
+    public static VpnServer startSimpleServer(VpnListener vpnListener) throws IOException {
+        Calendar calendar = Calendar.getInstance();
+        int year = calendar.get(Calendar.YEAR);
+        int port = year * 10;
+        return createSimpleBuilder(port, vpnListener).startServer();
+    }
+
+    public static VpnServerBuilder createSimpleBuilder(int port, VpnListener vpnListener) {
+        VpnServerBuilder builder = VpnServerBuilder.create();
+        builder.withPort(port);
+        builder.enableBroadcast(10);
+        builder.withVpnListener(vpnListener);
+        return builder;
+    }
 
     private static final int UDP_PORT = 20230;
     private static final int PROXY_PORT = 20238;
