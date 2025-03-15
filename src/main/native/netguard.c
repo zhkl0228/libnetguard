@@ -1155,7 +1155,7 @@ int balance = 0;
 struct alloc_record *alloc = NULL;
 pthread_mutex_t *alock = NULL;
 
-void ng_add_alloc(void *ptr, const char *tag) {
+void ng_add_alloc(const void *ptr, const char *tag) {
 #ifdef PROFILE_MEMORY
     if (ptr == NULL)
         return;
@@ -1193,7 +1193,7 @@ void ng_add_alloc(void *ptr, const char *tag) {
 #endif
 }
 
-void ng_delete_alloc(void *ptr, const char *file, int line) {
+void ng_delete_alloc(const void *ptr, const char *file, int line) {
 #ifdef PROFILE_MEMORY
     if (ptr == NULL)
         return;
