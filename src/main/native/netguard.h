@@ -631,7 +631,7 @@ void account_usage(const struct arguments *args, jint version, jint protocol, co
                    const char *daddr, jint dport, jint uid, jlong sent, jlong received);
 
 void notify_connected(const struct arguments *args, jlong session, jint version, jint protocol, const char *saddr, jint sport,
-                   const char *daddr, jint dport, jint lport, jboolean connected);
+                   const char *daddr, jint dport, jint lport, jboolean is_connected);
 
 void write_pcap_hdr();
 

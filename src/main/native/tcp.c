@@ -799,6 +799,7 @@ jboolean handle_tcp(const struct arguments *args,
 
             // Register session
             struct ng_session *s = ng_malloc(sizeof(struct ng_session), "tcp session");
+            s->connected_local_port = 0;
             s->protocol = IPPROTO_TCP;
 
             s->tcp.time = time(NULL);
@@ -868,6 +869,12 @@ jboolean handle_tcp(const struct arguments *args,
                 return 0;
             }
 
+            if (s->connected_local_port == 0) {
+                s->connected_local_port = get_local_port(s->socket);
+                notify_connected(args, (jlong) s, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                              dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_TRUE);
+            }
+
             s->tcp.recv_window = get_receive_window(s);
 
             log_android(ANDROID_LOG_DEBUG, "TCP socket %d lport %d",
@@ -887,11 +894,6 @@ jboolean handle_tcp(const struct arguments *args,
             if (!allowed) {
                 log_android(ANDROID_LOG_WARN, "%s resetting blocked session", packet);
                 write_rst(args, &s->tcp);
-            }
-            if (s->connected_local_port == 0) {
-                s->connected_local_port = get_local_port(s->socket);
-                notify_connected(args, (jlong) s, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
-                              dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_TRUE);
             }
         } else {
             log_android(ANDROID_LOG_WARN, "%s unknown session", packet);

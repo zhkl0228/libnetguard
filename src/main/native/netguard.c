@@ -1077,7 +1077,7 @@ jfieldID fidConnectedDPort = NULL;
 jfieldID fidConnectedLPort = NULL;
 
 void notify_connected(const struct arguments *args, jlong jsession, jint version, jint protocol, const char *saddr, jint sport,
-                   const char *daddr, jint dport, jint lport, jboolean notify_connected) {
+                   const char *daddr, jint dport, jint lport, jboolean is_connected) {
 #ifdef PROFILE_JNI
     float mselapsed;
     struct timeval start, end;
@@ -1129,7 +1129,7 @@ void notify_connected(const struct arguments *args, jlong jsession, jint version
     (*args->env)->SetIntField(args->env, jconnected, fidConnectedDPort, dport);
     (*args->env)->SetIntField(args->env, jconnected, fidConnectedLPort, lport);
 
-    if(notify_connected) {
+    if(is_connected) {
         (*args->env)->CallVoidMethod(args->env, args->instance, midNotifyConnected, jconnected);
     } else {
         (*args->env)->CallVoidMethod(args->env, args->instance, midNotifyDisconnected, jconnected);

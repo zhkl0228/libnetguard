@@ -184,6 +184,7 @@ jboolean handle_icmp(const struct arguments *args,
 
         // Register session
         struct ng_session *s = ng_malloc(sizeof(struct ng_session), "icmp session");
+        s->connected_local_port = 0;
         s->protocol = (uint8_t) (version == 4 ? IPPROTO_ICMP : IPPROTO_ICMPV6);
 
         s->icmp.time = time(NULL);

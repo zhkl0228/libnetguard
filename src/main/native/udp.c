@@ -230,6 +230,7 @@ void block_udp(const struct arguments *args,
 
     // Register session
     struct ng_session *s = ng_malloc(sizeof(struct ng_session), "udp session block");
+    s->connected_local_port = 0;
     s->protocol = IPPROTO_UDP;
 
     s->udp.time = time(NULL);
@@ -328,6 +329,7 @@ jboolean handle_udp(const struct arguments *args,
 
         // Register session
         struct ng_session *s = ng_malloc(sizeof(struct ng_session), "udp session");
+        s->connected_local_port = 0;
         s->protocol = IPPROTO_UDP;
 
         s->udp.time = time(NULL);
