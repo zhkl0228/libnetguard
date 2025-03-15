@@ -63,7 +63,7 @@ int check_tcp_session(const struct arguments *args, struct ng_session *s,
         inet_ntop(AF_INET6, &s->tcp.daddr.ip6, dest, sizeof(dest));
     }
 
-    if (s->tcp.state == TCP_ESTABLISHED && !s->connected_local_port && s->socket >= 0) {
+    if (!s->connected_local_port && s->socket >= 0) {
         s->connected_local_port = get_local_port(s->socket);
         notify_connected(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
                       dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_TRUE);

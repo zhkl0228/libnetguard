@@ -42,7 +42,7 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
         inet_ntop(AF_INET6, &s->udp.daddr.ip6, dest, sizeof(dest));
     }
 
-    if (s->udp.state == UDP_ACTIVE && !s->connected_local_port && s->socket >= 0) {
+    if (!s->connected_local_port && s->socket >= 0) {
         s->connected_local_port = get_local_port(s->socket);
         notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
                       dest, ntohs(s->udp.dest), s->connected_local_port, JNI_TRUE);
