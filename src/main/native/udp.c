@@ -42,6 +42,12 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
         inet_ntop(AF_INET6, &s->udp.daddr.ip6, dest, sizeof(dest));
     }
 
+    if (s->udp.state == UDP_ACTIVE && !s->connected_local_port && s->socket >= 0) {
+        s->connected_local_port = get_local_port(s->socket);
+        notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
+                      dest, ntohs(s->udp.dest), s->connected_local_port, true);
+    }
+
     // Check session timeout
     int timeout = get_udp_timeout(&s->udp, sessions, maxsessions);
     if (s->udp.state == UDP_ACTIVE && s->udp.time + timeout < now) {
@@ -53,6 +59,12 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
 
     // Check finished sessions
     if (s->udp.state == UDP_FINISHING) {
+        if (s->connected_local_port) {
+            notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
+                          dest, ntohs(s->udp.dest), s->connected_local_port, false);
+            s->connected_local_port = 0;
+        }
+
         log_android(ANDROID_LOG_INFO, "UDP close from %s/%u to %s/%u socket %d",
                     source, ntohs(s->udp.source), dest, ntohs(s->udp.dest), s->socket);
 
@@ -66,7 +78,7 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
     }
 
     if (s->udp.state == UDP_CLOSED && (s->udp.sent || s->udp.received)) {
-        account_usage(args, s->udp.version, IPPROTO_UDP,
+        account_usage(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
                       dest, ntohs(s->udp.dest), s->udp.uid, s->udp.sent, s->udp.received);
         s->udp.sent = 0;
         s->udp.received = 0;

@@ -8,6 +8,7 @@ import com.github.netguard.vpn.Vpn;
 import com.github.netguard.vpn.tls.TlsSignature;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpRequest;
 
 import java.util.List;
@@ -86,13 +87,21 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
     }
 
     public boolean isAppleHost() {
-        return isSSL() && (hostName.endsWith(".icloud.com") ||
+        String hostName = this.hostName;
+        if(hostName == null && httpRequest != null) {
+            hostName = httpRequest.headers().get(HttpHeaderNames.HOST.toString());
+        }
+        return hostName != null && (hostName.endsWith(".icloud.com") ||
                 hostName.endsWith(".apple.com") ||
                 hostName.endsWith(".icloud.com.cn"));
     }
 
     public boolean isAndroidHost() {
-        return isSSL() && (hostName.endsWith(".googleapis.com") ||
+        String hostName = this.hostName;
+        if(hostName == null && httpRequest != null) {
+            hostName = httpRequest.headers().get(HttpHeaderNames.HOST.toString());
+        }
+        return hostName != null && (hostName.endsWith(".googleapis.com") ||
                 hostName.endsWith(".google.com") ||
                 "www.gstatic.com".equals(hostName));
     }

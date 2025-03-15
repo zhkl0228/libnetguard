@@ -292,6 +292,7 @@ struct ng_session {
         struct tcp_session tcp;
     };
     jint socket;
+    uint16_t connected_local_port;
     struct epoll_event ev;
     struct ng_session *next;
 };
@@ -534,7 +535,7 @@ int open_udp_socket(const struct arguments *args,
 int open_tcp_socket(const struct arguments *args,
                     const struct tcp_session *cur, const struct allowed *redirect);
 
-int32_t get_local_port(const int sock);
+uint16_t get_local_port(const int sock);
 
 int write_syn_ack(const struct arguments *args, struct tcp_session *cur);
 
@@ -626,8 +627,11 @@ jobject create_packet(const struct arguments *args,
 
 void notify_packet(const struct arguments *args, const uint8_t *buffer, size_t length, jint uid);
 
-void account_usage(const struct arguments *args, jint version, jint protocol,
+void account_usage(const struct arguments *args, jint version, jint protocol, const char *saddr, jint sport,
                    const char *daddr, jint dport, jint uid, jlong sent, jlong received);
+
+void notify_connected(const struct arguments *args, jint version, jint protocol, const char *saddr, jint sport,
+                   const char *daddr, jint dport, jint lport, bool connected);
 
 void write_pcap_hdr();
 

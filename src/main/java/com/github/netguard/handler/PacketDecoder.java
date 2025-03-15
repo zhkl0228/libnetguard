@@ -1,6 +1,7 @@
 package com.github.netguard.handler;
 
 import cn.hutool.core.codec.Base64;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.URLUtil;
 import com.github.netguard.Inspector;
@@ -55,9 +56,16 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     }
 
     public PacketDecoder(File pcapFile) {
+        this(pcapFile, false);
+    }
+
+    public PacketDecoder(File pcapFile, boolean delPcapFile) {
         this(true);
 
         try {
+            if (delPcapFile) {
+                FileUtil.del(pcapFile);
+            }
             setOutputPcapFile(pcapFile);
         } catch (IOException e) {
             throw new IllegalStateException("setOutputPcapFile", e);

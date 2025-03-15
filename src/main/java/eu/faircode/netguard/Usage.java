@@ -27,6 +27,8 @@ public class Usage {
     public long Time;
     public int Version;
     public int Protocol;
+    public String SAddr;
+    public int SPort;
     public String DAddr;
     public int DPort;
     public int Uid;
@@ -38,7 +40,8 @@ public class Usage {
         DateFormat formatter = SimpleDateFormat.getDateTimeInstance();
         return formatter.format(new Date(Time).getTime()) +
                 " v" + Version + " p" + Protocol +
-                " " + DAddr + "/" + DPort +
+                " " + SAddr + "/" + SPort +
+                " => " + DAddr + "/" + DPort +
                 " uid " + Uid +
                 " out " + Sent + " in " + Received;
     }

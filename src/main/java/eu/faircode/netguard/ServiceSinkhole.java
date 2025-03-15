@@ -346,6 +346,24 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     // Called from native code
     @SuppressWarnings("unused")
+    private void notifyConnected(Connected connected) {
+        log.debug("notifyConnected connected={}", connected);
+        if (connectionListener != null) {
+            connectionListener.notifyConnected(connected);
+        }
+    }
+
+    // Called from native code
+    @SuppressWarnings("unused")
+    private void notifyDisconnected(Connected connected) {
+        log.debug("notifyDisconnected connected={}", connected);
+        if(connectionListener != null) {
+            connectionListener.notifyDisconnected(connected);
+        }
+    }
+
+    // Called from native code
+    @SuppressWarnings("unused")
     private void notifyPacket(int uid, byte[] packet) {
         if (packetCapture != null) {
             packetCapture.onPacket(packet, "NetGuard");

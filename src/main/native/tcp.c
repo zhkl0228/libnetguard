@@ -63,6 +63,12 @@ int check_tcp_session(const struct arguments *args, struct ng_session *s,
         inet_ntop(AF_INET6, &s->tcp.daddr.ip6, dest, sizeof(dest));
     }
 
+    if (s->tcp.state == TCP_ESTABLISHED && !s->connected_local_port && s->socket >= 0) {
+        s->connected_local_port = get_local_port(s->socket);
+        notify_connected(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                      dest, ntohs(s->tcp.dest), s->connected_local_port, true);
+    }
+
     char session[250];
     sprintf(session, "TCP socket from %s/%u to %s/%u %s socket %d",
             source, ntohs(s->tcp.source), dest, ntohs(s->tcp.dest),
@@ -83,6 +89,12 @@ int check_tcp_session(const struct arguments *args, struct ng_session *s,
 
     // Check closing sessions
     if (s->tcp.state == TCP_CLOSING) {
+        if (s->connected_local_port) {
+            notify_connected(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                          dest, ntohs(s->tcp.dest), s->connected_local_port, false);
+            s->connected_local_port = 0;
+        }
+
         // eof closes socket
         if (s->socket >= 0) {
             if (close(s->socket))
@@ -99,15 +111,16 @@ int check_tcp_session(const struct arguments *args, struct ng_session *s,
 
     if ((s->tcp.state == TCP_CLOSING || s->tcp.state == TCP_CLOSE) &&
         (s->tcp.sent || s->tcp.received)) {
-        account_usage(args, s->tcp.version, IPPROTO_TCP,
+        account_usage(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
                       dest, ntohs(s->tcp.dest), s->tcp.uid, s->tcp.sent, s->tcp.received);
         s->tcp.sent = 0;
         s->tcp.received = 0;
     }
 
     // Cleanup lingering sessions
-    if (s->tcp.state == TCP_CLOSE && s->tcp.time + TCP_KEEP_TIMEOUT < now)
+    if (s->tcp.state == TCP_CLOSE && s->tcp.time + TCP_KEEP_TIMEOUT < now) {
         return 1;
+    }
 
     return 0;
 }
@@ -1021,8 +1034,9 @@ jboolean handle_tcp(const struct arguments *args,
                         cur->tcp.acked = ntohl(tcphdr->ack_seq);
 #endif
 
-                        if (cur->tcp.state == TCP_SYN_RECV)
+                        if (cur->tcp.state == TCP_SYN_RECV) {
                             cur->tcp.state = TCP_ESTABLISHED;
+                        }
 
                         else if (cur->tcp.state == TCP_ESTABLISHED) {
                             // Do nothing

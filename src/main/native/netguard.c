@@ -54,6 +54,7 @@ jclass clsPacket;
 jclass clsAllowed;
 jclass clsRR;
 jclass clsUsage;
+jclass clsConnected;
 
 static jfieldID mSocketImpl;
 static jfieldID mFileDescriptor;
@@ -92,6 +93,10 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     const char *usage = "eu/faircode/netguard/Usage";
     clsUsage = jniGlobalRef(env, jniFindClass(env, usage));
     ng_add_alloc(clsUsage, "clsUsage");
+
+    const char *connected = "eu/faircode/netguard/Connected";
+    clsConnected = jniGlobalRef(env, jniFindClass(env, connected));
+    ng_add_alloc(clsUsage, "clsConnected");
 
     // Raise file number limit to maximum
     struct rlimit rlim;
@@ -970,13 +975,15 @@ jmethodID midInitUsage = NULL;
 jfieldID fidUsageTime = NULL;
 jfieldID fidUsageVersion = NULL;
 jfieldID fidUsageProtocol = NULL;
+jfieldID fidUsageSAddr = NULL;
+jfieldID fidUsageSPort = NULL;
 jfieldID fidUsageDAddr = NULL;
 jfieldID fidUsageDPort = NULL;
 jfieldID fidUsageUid = NULL;
 jfieldID fidUsageSent = NULL;
 jfieldID fidUsageReceived = NULL;
 
-void account_usage(const struct arguments *args, jint version, jint protocol,
+void account_usage(const struct arguments *args, jint version, jint protocol, const char *saddr, jint sport,
                    const char *daddr, jint dport, jint uid, jlong sent, jlong received) {
 #ifdef PROFILE_JNI
     float mselapsed;
@@ -1003,6 +1010,8 @@ void account_usage(const struct arguments *args, jint version, jint protocol,
         fidUsageTime = jniGetFieldID(args->env, clsUsage, "Time", "J");
         fidUsageVersion = jniGetFieldID(args->env, clsUsage, "Version", "I");
         fidUsageProtocol = jniGetFieldID(args->env, clsUsage, "Protocol", "I");
+        fidUsageSAddr = jniGetFieldID(args->env, clsUsage, "SAddr", string);
+        fidUsageSPort = jniGetFieldID(args->env, clsUsage, "SPort", "I");
         fidUsageDAddr = jniGetFieldID(args->env, clsUsage, "DAddr", string);
         fidUsageDPort = jniGetFieldID(args->env, clsUsage, "DPort", "I");
         fidUsageUid = jniGetFieldID(args->env, clsUsage, "Uid", "I");
@@ -1011,12 +1020,16 @@ void account_usage(const struct arguments *args, jint version, jint protocol,
     }
 
     jlong jtime = time(NULL) * 1000LL;
+    jstring jsaddr = (*args->env)->NewStringUTF(args->env, saddr);
+    ng_add_alloc(jsaddr, "jsaddr");
     jstring jdaddr = (*args->env)->NewStringUTF(args->env, daddr);
     ng_add_alloc(jdaddr, "jdaddr");
 
     (*args->env)->SetLongField(args->env, jusage, fidUsageTime, jtime);
     (*args->env)->SetIntField(args->env, jusage, fidUsageVersion, version);
     (*args->env)->SetIntField(args->env, jusage, fidUsageProtocol, protocol);
+    (*args->env)->SetObjectField(args->env, jusage, fidUsageSAddr, jsaddr);
+    (*args->env)->SetIntField(args->env, jusage, fidUsageSPort, sport);
     (*args->env)->SetObjectField(args->env, jusage, fidUsageDAddr, jdaddr);
     (*args->env)->SetIntField(args->env, jusage, fidUsageDPort, dport);
     (*args->env)->SetIntField(args->env, jusage, fidUsageUid, uid);
@@ -1026,6 +1039,7 @@ void account_usage(const struct arguments *args, jint version, jint protocol,
     (*args->env)->CallVoidMethod(args->env, args->instance, midAccountUsage, jusage);
     jniCheckException(args->env);
 
+    (*args->env)->DeleteLocalRef(args->env, jsaddr);
     (*args->env)->DeleteLocalRef(args->env, jdaddr);
     (*args->env)->DeleteLocalRef(args->env, jusage);
     (*args->env)->DeleteLocalRef(args->env, clsService);
@@ -1039,6 +1053,94 @@ void account_usage(const struct arguments *args, jint version, jint protocol,
                 (end.tv_usec - start.tv_usec) / 1000.0;
     if (mselapsed > PROFILE_JNI)
         log_android(ANDROID_LOG_WARN, "log_packet %f", mselapsed);
+#endif
+}
+
+jmethodID midNotifyConnected = NULL;
+jmethodID midNotifyDisconnected = NULL;
+jmethodID midInitConnected = NULL;
+jfieldID fidConnectedTime = NULL;
+jfieldID fidConnectedVersion = NULL;
+jfieldID fidConnectedProtocol = NULL;
+jfieldID fidConnectedSAddr = NULL;
+jfieldID fidConnectedSPort = NULL;
+jfieldID fidConnectedDAddr = NULL;
+jfieldID fidConnectedDPort = NULL;
+jfieldID fidConnectedLPort = NULL;
+
+void notify_connected(const struct arguments *args, jint version, jint protocol, const char *saddr, jint sport,
+                   const char *daddr, jint dport, jint lport, bool notify_connected) {
+#ifdef PROFILE_JNI
+    float mselapsed;
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+
+    jclass clsService = (*args->env)->GetObjectClass(args->env, args->instance);
+    ng_add_alloc(clsService, "clsService");
+
+    const char *signature = "(Leu/faircode/netguard/Connected;)V";
+    if (midNotifyConnected == NULL)
+        midNotifyConnected = jniGetMethodID(args->env, clsService, "notifyConnected", signature);
+    if (midNotifyDisconnected == NULL)
+        midNotifyDisconnected = jniGetMethodID(args->env, clsService, "notifyDisconnected", signature);
+
+    const char *connected = "eu/faircode/netguard/Connected";
+    if (midInitConnected == NULL)
+        midInitConnected = jniGetMethodID(args->env, clsConnected, "<init>", "()V");
+
+    jobject jconnected = jniNewObject(args->env, clsConnected, midInitConnected, connected);
+    ng_add_alloc(jconnected, "jconnected");
+
+    if (fidConnectedTime == NULL) {
+        const char *string = "Ljava/lang/String;";
+        fidConnectedTime = jniGetFieldID(args->env, clsConnected, "Time", "J");
+        fidConnectedVersion = jniGetFieldID(args->env, clsConnected, "Version", "I");
+        fidConnectedProtocol = jniGetFieldID(args->env, clsConnected, "Protocol", "I");
+        fidConnectedSAddr = jniGetFieldID(args->env, clsConnected, "SAddr", string);
+        fidConnectedSPort = jniGetFieldID(args->env, clsConnected, "SPort", "I");
+        fidConnectedDAddr = jniGetFieldID(args->env, clsConnected, "DAddr", string);
+        fidConnectedDPort = jniGetFieldID(args->env, clsConnected, "DPort", "I");
+        fidConnectedLPort = jniGetFieldID(args->env, clsConnected, "LPort", "I");
+    }
+
+    jlong jtime = time(NULL) * 1000LL;
+    jstring jsaddr = (*args->env)->NewStringUTF(args->env, saddr);
+    ng_add_alloc(jsaddr, "jsaddr");
+    jstring jdaddr = (*args->env)->NewStringUTF(args->env, daddr);
+    ng_add_alloc(jdaddr, "jdaddr");
+
+    (*args->env)->SetLongField(args->env, jconnected, fidConnectedTime, jtime);
+    (*args->env)->SetIntField(args->env, jconnected, fidConnectedVersion, version);
+    (*args->env)->SetIntField(args->env, jconnected, fidConnectedProtocol, protocol);
+    (*args->env)->SetObjectField(args->env, jconnected, fidConnectedSAddr, jsaddr);
+    (*args->env)->SetIntField(args->env, jconnected, fidConnectedSPort, sport);
+    (*args->env)->SetObjectField(args->env, jconnected, fidConnectedDAddr, jdaddr);
+    (*args->env)->SetIntField(args->env, jconnected, fidConnectedDPort, dport);
+    (*args->env)->SetIntField(args->env, jconnected, fidConnectedLPort, lport);
+
+    if(notify_connected) {
+        (*args->env)->CallVoidMethod(args->env, args->instance, midNotifyConnected, jconnected);
+    } else {
+        (*args->env)->CallVoidMethod(args->env, args->instance, midNotifyDisconnected, jconnected);
+    }
+    jniCheckException(args->env);
+
+    (*args->env)->DeleteLocalRef(args->env, jsaddr);
+    (*args->env)->DeleteLocalRef(args->env, jdaddr);
+    (*args->env)->DeleteLocalRef(args->env, jconnected);
+    (*args->env)->DeleteLocalRef(args->env, clsService);
+    ng_delete_alloc(jsaddr, __FILE__, __LINE__);
+    ng_delete_alloc(jdaddr, __FILE__, __LINE__);
+    ng_delete_alloc(jconnected, __FILE__, __LINE__);
+    ng_delete_alloc(clsService, __FILE__, __LINE__);
+
+#ifdef PROFILE_JNI
+    gettimeofday(&end, NULL);
+    mselapsed = (end.tv_sec - start.tv_sec) * 1000.0 +
+                (end.tv_usec - start.tv_usec) / 1000.0;
+    if (mselapsed > PROFILE_JNI)
+        log_android(ANDROID_LOG_WARN, "notify_connected %f", mselapsed);
 #endif
 }
 

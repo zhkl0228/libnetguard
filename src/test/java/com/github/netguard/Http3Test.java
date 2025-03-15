@@ -268,6 +268,7 @@ public class Http3Test extends TestCase {
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
         HttpResponse<String> httpResponse = client.send(request, HttpResponse.BodyHandlers.ofString());
+        System.out.println(httpResponse.headers());
         System.out.println(httpResponse.body());
     }
 

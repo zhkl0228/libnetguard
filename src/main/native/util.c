@@ -144,11 +144,11 @@ char *hex(const u_int8_t *data, const size_t len) {
     return hexout;
 }
 
-int32_t get_local_port(const int sock) {
+uint16_t get_local_port(const int sock) {
     struct sockaddr_in sin;
     socklen_t len = sizeof(sin);
     if (getsockname(sock, (struct sockaddr *) &sin, &len) < 0) {
-        log_android(ANDROID_LOG_ERROR, "getsockname error %d: %s", errno, strerror(errno));
+        log_android(ANDROID_LOG_DEBUG, "getsockname error %d: %s", errno, strerror(errno));
         return -1;
     } else
         return ntohs(sin.sin_port);

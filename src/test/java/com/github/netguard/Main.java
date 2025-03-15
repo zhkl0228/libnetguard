@@ -69,7 +69,7 @@ public class Main {
 
     static class MyPacketDecoder extends PacketDecoder {
         public MyPacketDecoder() {
-            super(new File("target/vpn.pcap"));
+            super(new File("target/vpn.pcap"), true);
         }
 
         @Override

@@ -9,6 +9,7 @@ import com.github.netguard.vpn.tcp.SSLProxyV2;
 import com.github.netguard.vpn.udp.UDProxy;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Application;
+import eu.faircode.netguard.ConnectionListener;
 import eu.faircode.netguard.Packet;
 
 import java.io.DataInput;
@@ -120,6 +121,13 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
 
     protected final Allowed redirectUdp(Packet packet) {
         return UDProxy.redirect(this, packet);
+    }
+
+    protected ConnectionListener connectionListener;
+
+    @Override
+    public void setConnectionListener(ConnectionListener connectionListener) {
+        this.connectionListener = connectionListener;
     }
 
 }

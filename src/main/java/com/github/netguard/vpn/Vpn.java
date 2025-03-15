@@ -1,5 +1,7 @@
 package com.github.netguard.vpn;
 
+import eu.faircode.netguard.ConnectionListener;
+
 import java.net.InetSocketAddress;
 
 public interface Vpn {
@@ -16,5 +18,7 @@ public interface Vpn {
     void setDirectAllowAll();
 
     ClientOS getClientOS();
+
+    void setConnectionListener(ConnectionListener connectionListener);
 
 }
