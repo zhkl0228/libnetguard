@@ -42,7 +42,7 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
         inet_ntop(AF_INET6, &s->udp.daddr.ip6, dest, sizeof(dest));
     }
 
-    if (!s->connected_local_port && s->socket >= 0) {
+    if (s->connected_local_port == 0 && s->socket >= 0) {
         s->connected_local_port = get_local_port(s->socket);
         notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
                       dest, ntohs(s->udp.dest), s->connected_local_port, JNI_TRUE);
@@ -59,7 +59,7 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
 
     // Check finished sessions
     if (s->udp.state == UDP_FINISHING) {
-        if (s->connected_local_port) {
+        if (s->connected_local_port > 0) {
             notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
                           dest, ntohs(s->udp.dest), s->connected_local_port, JNI_FALSE);
             s->connected_local_port = 0;
@@ -86,10 +86,11 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
 
     // Cleanup lingering sessions
     if ((s->udp.state == UDP_CLOSED || s->udp.state == UDP_BLOCKED) &&
-        s->udp.time + UDP_KEEP_TIMEOUT < now)
+        s->udp.time + UDP_KEEP_TIMEOUT < now) {
         return 1;
-
-    return 0;
+    } else {
+        return 0;
+    }
 }
 
 void check_udp_socket(const struct arguments *args, const struct epoll_event *ev) {

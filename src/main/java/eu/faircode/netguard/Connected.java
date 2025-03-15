@@ -1,8 +1,6 @@
 package eu.faircode.netguard;
 
 import java.net.InetSocketAddress;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Objects;
 
@@ -81,9 +79,7 @@ public class Connected implements Comparable<Connected> {
 
     @Override
     public String toString() {
-        DateFormat formatter = SimpleDateFormat.getDateTimeInstance();
-        return formatter.format(getEventDate().getTime()) +
-                " " + getVersion() + " " + getProtocol() +
+        return getVersion() + " " + getProtocol() +
                 " " + getSourceAddress() + " => " + getDestinationAddress() +
                 " Local: " + getLocalPort();
     }

@@ -433,7 +433,7 @@ void report_error(const struct arguments *args, jint error, const char *fmt, ...
 
 void check_allowed(const struct arguments *args);
 
-void clear(struct context *ctx);
+void clear(struct context *ctx, struct arguments *args);
 
 int check_icmp_session(const struct arguments *args,
                        struct ng_session *s,

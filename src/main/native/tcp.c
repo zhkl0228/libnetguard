@@ -63,12 +63,6 @@ int check_tcp_session(const struct arguments *args, struct ng_session *s,
         inet_ntop(AF_INET6, &s->tcp.daddr.ip6, dest, sizeof(dest));
     }
 
-    if (!s->connected_local_port && s->socket >= 0) {
-        s->connected_local_port = get_local_port(s->socket);
-        notify_connected(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
-                      dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_TRUE);
-    }
-
     char session[250];
     sprintf(session, "TCP socket from %s/%u to %s/%u %s socket %d",
             source, ntohs(s->tcp.source), dest, ntohs(s->tcp.dest),
@@ -89,14 +83,13 @@ int check_tcp_session(const struct arguments *args, struct ng_session *s,
 
     // Check closing sessions
     if (s->tcp.state == TCP_CLOSING) {
-        if (s->connected_local_port) {
-            notify_connected(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
-                          dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_FALSE);
-            s->connected_local_port = 0;
-        }
-
         // eof closes socket
         if (s->socket >= 0) {
+            if (s->connected_local_port > 0) {
+                notify_connected(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                              dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_FALSE);
+                s->connected_local_port = 0;
+            }
             if (close(s->socket))
                 log_android(ANDROID_LOG_ERROR, "%s close error %d: %s",
                             session, errno, strerror(errno));
@@ -120,9 +113,9 @@ int check_tcp_session(const struct arguments *args, struct ng_session *s,
     // Cleanup lingering sessions
     if (s->tcp.state == TCP_CLOSE && s->tcp.time + TCP_KEEP_TIMEOUT < now) {
         return 1;
+    } else {
+        return 0;
     }
-
-    return 0;
 }
 
 int monitor_tcp_session(const struct arguments *args, struct ng_session *s, int epoll_fd) {
@@ -598,6 +591,12 @@ void check_tcp_socket(const struct arguments *args,
                             write_rst(args, &s->tcp);
                         }
 
+                        if (s->connected_local_port > 0) {
+                            notify_connected(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                                          dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_FALSE);
+                            s->connected_local_port = 0;
+                        }
+
                         if (close(s->socket))
                             log_android(ANDROID_LOG_ERROR, "%s close error %d: %s",
                                         session, errno, strerror(errno));
@@ -888,6 +887,12 @@ jboolean handle_tcp(const struct arguments *args,
             if (!allowed) {
                 log_android(ANDROID_LOG_WARN, "%s resetting blocked session", packet);
                 write_rst(args, &s->tcp);
+            } else {
+                if (s->connected_local_port == 0) {
+                    s->connected_local_port = get_local_port(s->socket);
+                    notify_connected(args, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                                  dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_TRUE);
+                }
             }
         } else {
             log_android(ANDROID_LOG_WARN, "%s unknown session", packet);

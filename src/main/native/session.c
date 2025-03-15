@@ -19,12 +19,30 @@
 
 #include "netguard.h"
 
-void clear(struct context *ctx) {
+void clear(struct context *ctx, struct arguments *args) {
     struct ng_session *s = ctx->ng_session;
     while (s != NULL) {
-        if (s->socket >= 0 && close(s->socket))
-            log_android(ANDROID_LOG_ERROR, "close %d error %d: %s",
+        if (s->socket >= 0) {
+            if (s->connected_local_port > 0) {
+                char source[INET6_ADDRSTRLEN + 1];
+                char dest[INET6_ADDRSTRLEN + 1];
+                if (s->tcp.version == 4) {
+                    inet_ntop(AF_INET, &s->tcp.saddr.ip4, source, sizeof(source));
+                    inet_ntop(AF_INET, &s->tcp.daddr.ip4, dest, sizeof(dest));
+                } else {
+                    inet_ntop(AF_INET6, &s->tcp.saddr.ip6, source, sizeof(source));
+                    inet_ntop(AF_INET6, &s->tcp.daddr.ip6, dest, sizeof(dest));
+                }
+
+                notify_connected(args, s->tcp.version, s->protocol, source, ntohs(s->tcp.source),
+                              dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_FALSE);
+                s->connected_local_port = 0;
+            }
+            if(close(s->socket)) {
+                log_android(ANDROID_LOG_ERROR, "close %d error %d: %s",
                         s->socket, errno, strerror(errno));
+            }
+        }
         if (s->protocol == IPPROTO_TCP)
             clear_tcp_data(&s->tcp);
         struct ng_session *p = s;

@@ -228,7 +228,11 @@ JNIEXPORT void JNICALL
 Java_eu_faircode_netguard_ServiceSinkhole_jni_1clear(
         JNIEnv *env, jobject instance, jlong context) {
     struct context *ctx = (struct context *) context;
-    clear(ctx);
+    struct arguments args;
+    args.env = env;
+    args.instance = instance;
+    args.ctx = ctx;
+    clear(ctx, &args);
 }
 
 JNIEXPORT jint JNICALL
@@ -398,7 +402,11 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1done(
 
     ng_free(ctx->packet, __FILE__, __LINE__);
 
-    clear(ctx);
+    struct arguments args;
+    args.env = env;
+    args.instance = instance;
+    args.ctx = ctx;
+    clear(ctx, &args);
 
     if (pthread_mutex_destroy(&ctx->lock))
         log_android(ANDROID_LOG_ERROR, "pthread_mutex_destroy failed");
