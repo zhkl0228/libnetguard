@@ -215,6 +215,10 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
             jni_done(jni_context);
 
+            if (connectionListener != null) {
+                connectionListener.notifyVpnStop(this);
+            }
+
             if (packetCapture != null) {
                 packetCapture.notifyVpnFinish();
             }
@@ -350,7 +354,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         log.debug("notifyConnected connected={}", connected);
         if (connectionListener != null) {
             try {
-                connectionListener.notifyConnected(connected);
+                connectionListener.notifyConnected(this, connected);
             } catch (Exception e) {
                 log.warn("notifyConnected failed", e);
             }
@@ -363,7 +367,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         log.debug("notifyDisconnected connected={}", connected);
         if(connectionListener != null) {
             try {
-                connectionListener.notifyDisconnected(connected);
+                connectionListener.notifyDisconnected(this, connected);
             } catch(Exception e) {
                 log.warn("notifyDisconnected failed", e);
             }

@@ -6,7 +6,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Objects;
 
-public class Connected {
+public class Connected implements Comparable<Connected> {
 
     public enum IPVersion {
         ipv4, ipv6, unknown
@@ -72,6 +72,11 @@ public class Connected {
     @Override
     public int hashCode() {
         return Objects.hash(Version, Protocol, SAddr, SPort, DAddr, DPort);
+    }
+
+    @Override
+    public int compareTo(Connected o) {
+        return getEventDate().compareTo(o.getEventDate());
     }
 
     @Override
