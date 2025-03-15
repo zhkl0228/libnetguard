@@ -186,7 +186,6 @@ Java_eu_faircode_netguard_ServiceSinkhole_jni_1start(
     ctx->stopping = 0;
 
     log_android(ANDROID_LOG_WARN, "Starting level %d", loglevel);
-
 }
 
 JNIEXPORT void JNICALL
@@ -1067,6 +1066,7 @@ void account_usage(const struct arguments *args, jint version, jint protocol, co
 jmethodID midNotifyConnected = NULL;
 jmethodID midNotifyDisconnected = NULL;
 jmethodID midInitConnected = NULL;
+jfieldID fidConnectedSession = NULL;
 jfieldID fidConnectedTime = NULL;
 jfieldID fidConnectedVersion = NULL;
 jfieldID fidConnectedProtocol = NULL;
@@ -1076,7 +1076,7 @@ jfieldID fidConnectedDAddr = NULL;
 jfieldID fidConnectedDPort = NULL;
 jfieldID fidConnectedLPort = NULL;
 
-void notify_connected(const struct arguments *args, jint version, jint protocol, const char *saddr, jint sport,
+void notify_connected(const struct arguments *args, jlong jsession, jint version, jint protocol, const char *saddr, jint sport,
                    const char *daddr, jint dport, jint lport, jboolean notify_connected) {
 #ifdef PROFILE_JNI
     float mselapsed;
@@ -1102,6 +1102,7 @@ void notify_connected(const struct arguments *args, jint version, jint protocol,
 
     if (fidConnectedTime == NULL) {
         const char *string = "Ljava/lang/String;";
+        fidConnectedSession = jniGetFieldID(args->env, clsConnected, "Session", "J");
         fidConnectedTime = jniGetFieldID(args->env, clsConnected, "Time", "J");
         fidConnectedVersion = jniGetFieldID(args->env, clsConnected, "Version", "I");
         fidConnectedProtocol = jniGetFieldID(args->env, clsConnected, "Protocol", "I");
@@ -1118,6 +1119,7 @@ void notify_connected(const struct arguments *args, jint version, jint protocol,
     jstring jdaddr = (*args->env)->NewStringUTF(args->env, daddr);
     ng_add_alloc(jdaddr, "jdaddr");
 
+    (*args->env)->SetLongField(args->env, jconnected, fidConnectedSession, jsession);
     (*args->env)->SetLongField(args->env, jconnected, fidConnectedTime, jtime);
     (*args->env)->SetIntField(args->env, jconnected, fidConnectedVersion, version);
     (*args->env)->SetIntField(args->env, jconnected, fidConnectedProtocol, protocol);

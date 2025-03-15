@@ -13,6 +13,7 @@ public class Connected implements Comparable<Connected> {
         tcp, udp, unknown
     }
 
+    private long Session;
     private long Time;
     private int Version;
     private int Protocol;
@@ -21,6 +22,10 @@ public class Connected implements Comparable<Connected> {
     private String DAddr;
     private int DPort;
     private int LPort;
+
+    public long getSessionId() {
+        return Session;
+    }
 
     public Date getEventDate() {
         return new Date(Time);
@@ -64,12 +69,12 @@ public class Connected implements Comparable<Connected> {
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         Connected connected = (Connected) o;
-        return Version == connected.Version && Protocol == connected.Protocol && SPort == connected.SPort && DPort == connected.DPort && Objects.equals(SAddr, connected.SAddr) && Objects.equals(DAddr, connected.DAddr);
+        return Session == connected.Session;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(Version, Protocol, SAddr, SPort, DAddr, DPort);
+        return Objects.hashCode(Session);
     }
 
     @Override
@@ -81,7 +86,7 @@ public class Connected implements Comparable<Connected> {
     public String toString() {
         return getVersion() + " " + getProtocol() +
                 " " + getSourceAddress() + " => " + getDestinationAddress() +
-                " Local: " + getLocalPort();
+                " Local: " + getLocalPort() + " [" + "0x" + Long.toHexString(getSessionId()) + "]";
     }
 
 }

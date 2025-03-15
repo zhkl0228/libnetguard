@@ -34,7 +34,7 @@ void clear(struct context *ctx, struct arguments *args) {
                     inet_ntop(AF_INET6, &s->tcp.daddr.ip6, dest, sizeof(dest));
                 }
 
-                notify_connected(args, s->tcp.version, s->protocol, source, ntohs(s->tcp.source),
+                notify_connected(args, (jlong) s, s->tcp.version, s->protocol, source, ntohs(s->tcp.source),
                               dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_FALSE);
                 s->connected_local_port = 0;
             }

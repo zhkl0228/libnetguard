@@ -44,7 +44,7 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
 
     if (s->connected_local_port == 0 && s->socket >= 0) {
         s->connected_local_port = get_local_port(s->socket);
-        notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
+        notify_connected(args, (jlong) s, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
                       dest, ntohs(s->udp.dest), s->connected_local_port, JNI_TRUE);
     }
 
@@ -60,7 +60,7 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
     // Check finished sessions
     if (s->udp.state == UDP_FINISHING) {
         if (s->connected_local_port > 0) {
-            notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
+            notify_connected(args, (jlong) s, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
                           dest, ntohs(s->udp.dest), s->connected_local_port, JNI_FALSE);
             s->connected_local_port = 0;
         }

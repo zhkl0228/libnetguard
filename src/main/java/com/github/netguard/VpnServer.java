@@ -197,7 +197,7 @@ public class VpnServer {
                     if (vpnListener != null) {
                         vpnListener.onConnectClient(vpn);
                     }
-                    Thread vpnThread = new Thread(vpn, "socket: " + socket);
+                    Thread vpnThread = new Thread(vpn, "socket: " + socket + ": vpn=" + vpn.getClass() + ", clientOS=" + vpn.getClientOS());
                     vpnThread.setPriority(Thread.MAX_PRIORITY);
                     vpnThread.start();
                     clients.add(vpn);
