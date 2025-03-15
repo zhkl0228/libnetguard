@@ -4,6 +4,7 @@ import java.net.InetSocketAddress;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Objects;
 
 public class Connected {
 
@@ -59,6 +60,18 @@ public class Connected {
 
     public int getLocalPort() {
         return LPort;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        Connected connected = (Connected) o;
+        return Version == connected.Version && Protocol == connected.Protocol && SPort == connected.SPort && DPort == connected.DPort && Objects.equals(SAddr, connected.SAddr) && Objects.equals(DAddr, connected.DAddr);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(Version, Protocol, SAddr, SPort, DAddr, DPort);
     }
 
     @Override
