@@ -45,7 +45,7 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
     if (s->udp.state == UDP_ACTIVE && !s->connected_local_port && s->socket >= 0) {
         s->connected_local_port = get_local_port(s->socket);
         notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
-                      dest, ntohs(s->udp.dest), s->connected_local_port, true);
+                      dest, ntohs(s->udp.dest), s->connected_local_port, JNI_TRUE);
     }
 
     // Check session timeout
@@ -61,7 +61,7 @@ int check_udp_session(const struct arguments *args, struct ng_session *s,
     if (s->udp.state == UDP_FINISHING) {
         if (s->connected_local_port) {
             notify_connected(args, s->udp.version, IPPROTO_UDP, source, ntohs(s->udp.source),
-                          dest, ntohs(s->udp.dest), s->connected_local_port, false);
+                          dest, ntohs(s->udp.dest), s->connected_local_port, JNI_FALSE);
             s->connected_local_port = 0;
         }
 

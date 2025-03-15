@@ -1069,7 +1069,7 @@ jfieldID fidConnectedDPort = NULL;
 jfieldID fidConnectedLPort = NULL;
 
 void notify_connected(const struct arguments *args, jint version, jint protocol, const char *saddr, jint sport,
-                   const char *daddr, jint dport, jint lport, bool notify_connected) {
+                   const char *daddr, jint dport, jint lport, jboolean notify_connected) {
 #ifdef PROFILE_JNI
     float mselapsed;
     struct timeval start, end;
