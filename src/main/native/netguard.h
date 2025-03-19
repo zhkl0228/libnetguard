@@ -292,7 +292,7 @@ struct ng_session {
         struct tcp_session tcp;
     };
     jint socket;
-    uint16_t connected_local_port;
+    int32_t connected_local_port;
     struct epoll_event ev;
     struct ng_session *next;
 };

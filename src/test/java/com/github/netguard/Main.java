@@ -63,7 +63,11 @@ public class Main {
                 });
         VpnServer vpnServer = builder.startServer();
 
-        System.out.println("vpn server listen on: " + vpnServer.getPort());
+        String lanIp = Inspector.detectLanIP();
+        if (lanIp == null) {
+            lanIp = "127.0.0.1";
+        }
+        System.out.printf("vpn server listen on: %s:%d%n", lanIp, vpnServer.getPort());
         vpnServer.waitShutdown();
     }
 

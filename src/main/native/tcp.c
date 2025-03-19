@@ -86,7 +86,7 @@ int check_tcp_session(const struct arguments *args, struct ng_session *s,
         // eof closes socket
         if (s->socket >= 0) {
             if (s->connected_local_port > 0) {
-                notify_connected(args, (jlong) s, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                notify_connected(args, (jlong) s, s->tcp.version, s->protocol, source, ntohs(s->tcp.source),
                               dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_FALSE);
                 s->connected_local_port = 0;
             }
@@ -592,7 +592,7 @@ void check_tcp_socket(const struct arguments *args,
                         }
 
                         if (s->connected_local_port > 0) {
-                            notify_connected(args, (jlong) s, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                            notify_connected(args, (jlong) s, s->tcp.version, s->protocol, source, ntohs(s->tcp.source),
                                           dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_FALSE);
                             s->connected_local_port = 0;
                         }
@@ -871,7 +871,7 @@ jboolean handle_tcp(const struct arguments *args,
 
             if (s->connected_local_port == 0) {
                 s->connected_local_port = get_local_port(s->socket);
-                notify_connected(args, (jlong) s, s->tcp.version, IPPROTO_TCP, source, ntohs(s->tcp.source),
+                notify_connected(args, (jlong) s, s->tcp.version, s->protocol, source, ntohs(s->tcp.source),
                               dest, ntohs(s->tcp.dest), s->connected_local_port, JNI_TRUE);
             }
 

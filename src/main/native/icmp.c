@@ -45,6 +45,11 @@ int check_icmp_session(const struct arguments *args, struct ng_session *s,
         }
         log_android(ANDROID_LOG_WARN, "ICMP idle %d/%d sec stop %d from %s to %s",
                     now - s->icmp.time, timeout, s->icmp.stop, dest, source);
+        if (s->connected_local_port == -1) {
+            notify_connected(args, (jlong) s, s->icmp.version, s->protocol, source, 0,
+                          dest, 0, s->connected_local_port, JNI_FALSE);
+            s->connected_local_port = 0;
+        }
 
         if (close(s->socket))
             log_android(ANDROID_LOG_ERROR, "ICMP close %d error %d: %s",
@@ -209,6 +214,12 @@ jboolean handle_icmp(const struct arguments *args,
         if (s->socket < 0) {
             ng_free(s, __FILE__, __LINE__);
             return 0;
+        }
+
+        if (s->connected_local_port == 0) {
+            s->connected_local_port = -1;
+            notify_connected(args, (jlong) s, s->icmp.version, s->protocol, source, 0,
+                          dest, 0, s->connected_local_port, JNI_TRUE);
         }
 
         log_android(ANDROID_LOG_DEBUG, "ICMP socket %d id %x", s->socket, s->icmp.id);

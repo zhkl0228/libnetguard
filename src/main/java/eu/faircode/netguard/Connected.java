@@ -10,7 +10,7 @@ public class Connected implements Comparable<Connected> {
         ipv4, ipv6, unknown
     }
     public enum IPProtocol {
-        tcp, udp, unknown
+        icmp, tcp, udp, icmp_v6, unknown
     }
 
     private long Session;
@@ -44,10 +44,14 @@ public class Connected implements Comparable<Connected> {
 
     public IPProtocol getProtocol() {
         switch (Protocol) {
+            case 1:
+                return IPProtocol.icmp;
             case Packet.TCP_PROTOCOL:
                 return IPProtocol.tcp;
             case Packet.UDP_PROTOCOL:
                 return IPProtocol.udp;
+            case 58:
+                return IPProtocol.icmp_v6;
             default:
                 return IPProtocol.unknown;
         }
