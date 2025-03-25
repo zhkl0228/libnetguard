@@ -36,12 +36,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.URLEncoder;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.text.DateFormat;
@@ -423,6 +418,9 @@ public class SSLProxyV2 implements Runnable {
                     }
                 }
             } catch (IOException e) {
+                if (e instanceof SocketException && e.getMessage().contains("SOCKS")) {
+                    log.info("SSL proxy for {} failed", socketProxy, e);
+                }
                 IoUtil.close(app);
                 IoUtil.close(secureSocket);
                 throw e;
