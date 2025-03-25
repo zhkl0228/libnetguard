@@ -91,9 +91,13 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
         if(hostName == null && httpRequest != null) {
             hostName = httpRequest.headers().get(HttpHeaderNames.HOST.toString());
         }
-        return hostName != null && (hostName.endsWith(".icloud.com") ||
+        if (hostName == null) {
+            return false;
+        }
+        return hostName.endsWith(".icloud.com") ||
                 hostName.endsWith(".apple.com") ||
-                hostName.endsWith(".icloud.com.cn"));
+                hostName.endsWith(".icloud.com.cn") ||
+                hostName.endsWith(".cdn-apple.com");
     }
 
     public boolean isAndroidHost() {
@@ -101,9 +105,12 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
         if(hostName == null && httpRequest != null) {
             hostName = httpRequest.headers().get(HttpHeaderNames.HOST.toString());
         }
-        return hostName != null && (hostName.endsWith(".googleapis.com") ||
+        if (hostName == null) {
+            return false;
+        }
+        return hostName.endsWith(".googleapis.com") ||
                 hostName.endsWith(".google.com") ||
-                "www.gstatic.com".equals(hostName));
+                "www.gstatic.com".equals(hostName);
     }
 
     public boolean isSSL() {

@@ -70,7 +70,7 @@ class KrakenHttpRequest implements com.github.netguard.handler.http.HttpRequest 
 
     @Override
     public String getQuery() {
-        return request.getURL().getQuery();
+        return request.getQueryString();
     }
 
     @Override
