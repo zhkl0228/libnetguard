@@ -22,7 +22,16 @@ public class AcceptTcpResult {
             return enableSocksProxyV5(socksHost, socksPort, null);
         }
         public AcceptResultBuilder enableSocksProxyV5(String socksHost, int socksPort, String remoteHost) {
-            this.proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(socksHost, socksPort));
+            return enableSocksProxyV5(new InetSocketAddress(socksHost, socksPort), remoteHost);
+        }
+        public AcceptResultBuilder enableSocksProxyV5(InetSocketAddress address, String remoteHost) {
+            return enableSocksProxyV5(new Proxy(Proxy.Type.SOCKS, address), remoteHost);
+        }
+        public AcceptResultBuilder enableSocksProxyV5(Proxy proxy, String remoteHost) {
+            if (proxy.type() == Proxy.Type.HTTP) {
+                throw new IllegalArgumentException("HTTP proxy type not supported");
+            }
+            this.proxy = proxy;
             return setRedirectHost(remoteHost);
         }
         private String redirectAddress;

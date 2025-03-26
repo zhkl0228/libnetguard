@@ -87,6 +87,12 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
     }
 
     public boolean isAppleHost() {
+        if (httpRequest != null) {
+            String userAgent = httpRequest.headers().get(HttpHeaderNames.USER_AGENT);
+            if (userAgent != null && userAgent.startsWith("com.apple.")) {
+                return true;
+            }
+        }
         String hostName = this.hostName;
         if(hostName == null && httpRequest != null) {
             hostName = httpRequest.headers().get(HttpHeaderNames.HOST.toString());

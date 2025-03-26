@@ -225,7 +225,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         } catch (Throwable e) {
             log.warn("vpn run", e);
         } finally {
-            log.debug("client {} vpn closed: {}", clientOS, socket.getRemoteSocketAddress());
+            log.info("client {} vpn closed: {}", clientOS, socket.getRemoteSocketAddress());
         }
     }
 
