@@ -222,7 +222,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 if (server) {
                     handleRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), streamId);
                 } else {
-                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), outputBuffer);
+                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), outputBuffer, false);
                 }
                 stream.buffer.reset();
             } else {
@@ -382,10 +382,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                         headers.add(entry.getKey(), entry.getValue());
                     }
                     headers.set("X-Netguard-Fake-Response", sessionKey);
-                    filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request,
-                            headersFrame.headers(), requestData == null ? new byte[0] : requestData);
+//                    filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request, headersFrame.headers(), requestData == null ? new byte[0] : requestData);
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    peer.handleResponse(fakeHeadersFrame, responseData, baos);
+                    peer.handleResponse(fakeHeadersFrame, responseData, baos, true);
                     if (settingsReady) {
                         IoUtil.copy(new ByteArrayInputStream(baos.toByteArray()), peer.outputStream);
                     } else {
@@ -403,10 +402,15 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         writeMessage(headersFrame, requestData == null && data.length == 0 ? null : data, true, outputBuffer);
     }
 
-    private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData, ByteArrayOutputStream outputBuffer) {
-        byte[] data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
-                createHttpResponse(headersFrame, sessionKey, akamai),
-                headersFrame.headers(), responseData == null ? new byte[0] : responseData);
+    private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData, ByteArrayOutputStream outputBuffer, boolean fakeResponse) {
+        byte[] data;
+        if (fakeResponse) {
+            data = responseData;
+        } else {
+            data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
+                    createHttpResponse(headersFrame, sessionKey, akamai),
+                    headersFrame.headers(), responseData == null ? new byte[0] : responseData);
+        }
         if (data == null) {
             throw new IllegalStateException();
         }
@@ -438,14 +442,14 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 if (server) {
                     handleRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), httpHeadersFrame.getStreamId());
                 } else {
-                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), outputBuffer);
+                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), outputBuffer, false);
                 }
                 stream.buffer.reset();
             } else {
                 if (server) {
                     handleRequest(httpHeadersFrame, null, httpHeadersFrame.getStreamId());
                 } else {
-                    handleResponse(httpHeadersFrame, null, outputBuffer);
+                    handleResponse(httpHeadersFrame, null, outputBuffer, false);
                 }
             }
         } else {
