@@ -4,6 +4,7 @@ public enum ClientOS {
 
     Android,
     iOS,
-    MacOS
+    MacOS,
+    Windows
 
 }
