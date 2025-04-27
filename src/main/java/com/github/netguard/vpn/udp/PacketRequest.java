@@ -1,5 +1,6 @@
 package com.github.netguard.vpn.udp;
 
+import com.github.netguard.vpn.AcceptUdpResult;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.ConnectRequest;
 import com.github.netguard.vpn.InspectorVpn;
@@ -22,7 +23,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-public class PacketRequest implements ConnectRequest {
+public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
 
     private static final Logger log = LoggerFactory.getLogger(PacketRequest.class);
 
@@ -62,6 +63,12 @@ public class PacketRequest implements ConnectRequest {
     private final int length;
     private final InspectorVpn vpn;
     private final Packet packet;
+
+    @Override
+    public AcceptUdpResult disconnect() {
+        System.err.printf("discardUdpCall: packetRequest=%s%n", this);
+        return AcceptUdpResult.rule(AcceptRule.Discard);
+    }
 
     public PacketRequest(byte[] buffer, int length, ClientHello clientHello, Message dnsQuery, InetSocketAddress serverAddress, InspectorVpn vpn, Packet packet) {
         this.serverIp = serverAddress.getAddress().getHostAddress();

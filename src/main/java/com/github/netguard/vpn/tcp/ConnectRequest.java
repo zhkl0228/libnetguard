@@ -13,7 +13,7 @@ import io.netty.handler.codec.http.HttpRequest;
 
 import java.util.List;
 
-public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
+public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest<AcceptTcpResult> {
 
     public final String serverIp;
     public final int port;
@@ -82,7 +82,9 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
         }
     }
 
+    @Override
     public AcceptTcpResult disconnect() {
+        System.err.printf("disconnectTcp serverIp=%s, port=%d, hostName=%s, applicationLayerProtocols=%s%n", this.serverIp, this.port, this.hostName, this.applicationLayerProtocols);
         return AcceptTcpResult.builder(AllowRule.DISCONNECT).build();
     }
 
@@ -103,7 +105,8 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest {
         return hostName.endsWith(".icloud.com") ||
                 hostName.endsWith(".apple.com") ||
                 hostName.endsWith(".icloud.com.cn") ||
-                hostName.endsWith(".cdn-apple.com");
+                hostName.endsWith(".cdn-apple.com") ||
+                "dispatcher.is.autonavi.com".equals(hostName);
     }
 
     public boolean isAndroidHost() {

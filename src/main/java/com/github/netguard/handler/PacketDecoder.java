@@ -13,6 +13,7 @@ import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.tcp.ConnectRequest;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
+import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
 import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
@@ -373,7 +374,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             return connectRequest.disconnect(); // Disable android traffic.
         }
         if (connectRequest.isSSL()) {
-            return null;
+            return connectRequest.disconnect();
         } else {
             return configAcceptResultBuilder(null, connectRequest.port, AcceptTcpResult.builder(AllowRule.CONNECT_TCP)).build();
         }
@@ -381,7 +382,11 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public AcceptUdpResult acceptUdp(PacketRequest packetRequest) {
-        return null;
+        if (packetRequest.dnsQuery != null || // dns query
+                packetRequest.applicationLayerProtocols.isEmpty()) { // not http3
+            return AcceptUdpResult.rule(AcceptRule.Forward);
+        }
+        return packetRequest.disconnect();
     }
 
     @SuppressWarnings("unused")
