@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+@SuppressWarnings("unused")
 class SacMsgProcessor extends DefaultTcpProcessor implements TcpProcessor {
 
     private static final Logger logger = LoggerFactory.getLogger(SacMsgProcessor.class);
@@ -29,10 +30,8 @@ class SacMsgProcessor extends DefaultTcpProcessor implements TcpProcessor {
     public void handleTx(TcpSessionKey session, Buffer data) {
         Buffer buffer = txBuffer.get(session);
         final Buffer newBuffer;
-        if (buffer == null) {
-            newBuffer = new ChainBuffer();
-        } else {
-            newBuffer = new ChainBuffer();
+        newBuffer = new ChainBuffer();
+        if (buffer != null) {
             newBuffer.addLast(buffer);
         }
         newBuffer.addLast(data);
@@ -125,6 +124,12 @@ class SacMsgProcessor extends DefaultTcpProcessor implements TcpProcessor {
                         break;
                     case 0x2000410:
                         errorText = "密码错误";
+                        break;
+                    case 0x2000419:
+                        errorText = "密码强度不符合要求";
+                        break;
+                    case 0x200041b:
+                        errorText = "验证旧密码失败";
                         break;
                     case 0x200043c:
                         errorText = "验证码发送失败";

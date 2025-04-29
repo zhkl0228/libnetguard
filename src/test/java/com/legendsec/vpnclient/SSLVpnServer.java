@@ -50,7 +50,7 @@ class SSLVpnServer implements Runnable {
         }
 
         this.serverSocket.setReuseAddress(true);
-        this.serverSocket.setSoTimeout(60000);
+//        this.serverSocket.setSoTimeout(60000);
         Thread thread = new Thread(this);
         thread.setDaemon(true);
         thread.start();
@@ -169,6 +169,7 @@ class SSLVpnServer implements Runnable {
                     case GatewayAgent.VPN_LOGIN:
                     case GatewayAgent.VPN_GET_USERDATA:
                     case GatewayAgent.VPN_HEARTBEAT:
+                    case GatewayAgent.VPN_UPDATE_PASSWD_JSON:
                     case GatewayAgent.VPN_LOGOUT:
                     case GatewayAgent.VPN_SMS_SEND:
                     case GatewayAgent.VPN_SUB_AUTH:
@@ -224,6 +225,7 @@ class SSLVpnServer implements Runnable {
                     case GatewayAgent.VPN_LOGIN:
                     case GatewayAgent.VPN_GET_USERDATA:
                     case GatewayAgent.VPN_HEARTBEAT:
+                    case GatewayAgent.VPN_UPDATE_PASSWD_JSON:
                     case GatewayAgent.VPN_LOGOUT:
                     case GatewayAgent.VPN_SMS_SEND:
                     case GatewayAgent.VPN_SUB_AUTH:
@@ -243,8 +245,9 @@ class SSLVpnServer implements Runnable {
 
                         if (error == 0) {
                             ByteBuffer buffer = ByteBuffer.wrap(msg);
-                            if (buffer.remaining() >= 4 && buffer.getInt() > 0) {
-                                byte[] json = new byte[buffer.remaining()];
+                            int jsonSize;
+                            if (buffer.remaining() >= 4 && (jsonSize = buffer.getInt()) > 0 && jsonSize <= buffer.remaining()) {
+                                byte[] json = new byte[jsonSize];
                                 buffer.get(json);
                                 JSONObject obj = JSON.parseObject(new String(json, StandardCharsets.UTF_8).trim(), Feature.OrderedField);
                                 log.info("handleMsgResp: tag=0x{}, {}", Integer.toHexString(tag), obj == null ? "json=" + HexUtil.encodeHexStr(json) : obj.toString(SerializerFeature.PrettyFormat));

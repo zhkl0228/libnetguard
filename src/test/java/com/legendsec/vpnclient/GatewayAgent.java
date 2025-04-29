@@ -46,6 +46,9 @@ interface GatewayAgent {
      */
     int VPN_HEARTBEAT = 0x200020a;
 
+    // req: {"authserid":1,"emark":"","new_pass":"1Ad4rDh5cXmy","old_pass":"","ticket":"1BC7248E5140AC19F8592F239D9D51BDE6E80022461CA2EF0100000000000000","username":"ceshi","usertype":2}
+    int VPN_UPDATE_PASSWD_JSON = 0x200020b;
+
     // req: {"ticket":"7D36B00B719B14B06701F39930061464F78B001631E56D4A01000000120710AC","phone":"155****4532","type":1}
     int VPN_SMS_SEND = 0x200020c;
 
