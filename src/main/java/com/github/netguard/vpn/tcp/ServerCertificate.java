@@ -45,6 +45,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Map;
 import java.util.Random;
@@ -67,7 +68,9 @@ public class ServerCertificate {
         ServerContext serverContext = proxyCertMap.get(commonName);
         if (serverContext == null) {
             SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
-            subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
+            if (peerCertificate != null) {
+                subjectAlternativeNames.addAll(peerCertificate.getSubjectAlternativeNames());
+            }
             log.debug("createSSLContext Subject Alternative Names: {}", subjectAlternativeNames);
             serverContext = this.generateServerContext(commonName, subjectAlternativeNames, rootCert);
             proxyCertMap.put(commonName, serverContext);
@@ -75,7 +78,10 @@ public class ServerCertificate {
         return serverContext;
     }
 
-    private String getCommonName(X509Certificate certificate) {
+    private static String getCommonName(X509Certificate certificate) {
+        if (certificate == null) {
+            return "SSLVpn";
+        }
         log.debug("Subject DN principal name: {}", certificate.getSubjectDN().getName());
         for (String each : certificate.getSubjectDN().getName().split(",\\s*")) {
             if (each.startsWith("CN=")) {
@@ -144,7 +150,7 @@ public class ServerCertificate {
             throws NoSuchAlgorithmException, NoSuchProviderException,
             IOException, OperatorCreationException, CertificateException,
             InvalidKeyException, SignatureException, KeyStoreException, InvalidAlgorithmParameterException {
-        String algorithm = peerCertificate.getPublicKey().getAlgorithm();
+        String algorithm = peerCertificate == null ? "RSA" : peerCertificate.getPublicKey().getAlgorithm();
         log.debug("createServerCertificate algorithm={}, commonName={}, authority={}, peerCertificate={}", algorithm, commonName, authority, peerCertificate);
         KeyPair keyPair = generateKeyPair(algorithm);
 
@@ -157,9 +163,25 @@ public class ServerCertificate {
         name.addRDN(BCStyle.OU, authority.certOrganizationalUnitName());
         X500Name subject = name.build();
 
-        X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
-                issuer, serial, peerCertificate.getNotBefore(), peerCertificate.getNotAfter(), subject,
-                keyPair.getPublic());
+        X509v3CertificateBuilder builder;
+        try {
+            if (peerCertificate == null) {
+                throw new NullPointerException();
+            }
+            peerCertificate.checkValidity();
+            builder = new JcaX509v3CertificateBuilder(
+                    issuer, serial, peerCertificate.getNotBefore(), peerCertificate.getNotAfter(), subject,
+                    keyPair.getPublic());
+        } catch (Exception e) {
+            log.debug("checkValidity failed", e);
+            Calendar calendar = Calendar.getInstance();
+            Date notBefore = calendar.getTime();
+            calendar.add(Calendar.YEAR, 1);
+            Date notAfter = calendar.getTime();
+            builder = new JcaX509v3CertificateBuilder(
+                    issuer, serial, notBefore, notAfter, subject,
+                    keyPair.getPublic());
+        }
 
         builder.addExtension(Extension.subjectKeyIdentifier, false, createSubjectKeyIdentifier(keyPair.getPublic()));
         builder.addExtension(Extension.basicConstraints, false, new BasicConstraints(false));
@@ -168,7 +190,7 @@ public class ServerCertificate {
 
         X509Certificate cert = signCertificate(caCert.getSigAlgName(), builder, caPrivateKey);
 
-        cert.checkValidity(new Date());
+        cert.checkValidity();
         cert.verify(caCert.getPublicKey());
 
         KeyStore result = KeyStore.getInstance(KeyStore.getDefaultType());

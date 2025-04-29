@@ -234,7 +234,7 @@
         </dependency>
         <dependency>
             <groupId>com.github.zhkl0228</groupId>
-            <artifactId>impersonator-bctls</artifactId>
+            <artifactId>impersonator-okhttp</artifactId>
             <version>1.0.8</version>
             <scope>test</scope>
         </dependency>

@@ -34,7 +34,7 @@ public class StreamForward implements Runnable {
     protected final InetSocketAddress clientSocketAddress;
     protected final InetSocketAddress serverSocketAddress;
     private final CountDownLatch countDownLatch;
-    private final Socket socket;
+    protected final Socket socket;
     private final InspectorVpn vpn;
     protected final IPacketCapture packetCapture;
     protected final String hostName;
@@ -57,7 +57,7 @@ public class StreamForward implements Runnable {
         this.packet = packet;
     }
 
-    final void startThread(byte[] prologue) {
+    protected final void startThread(byte[] prologue) {
         if (packetCapture != null && prologue != null && prologue.length > 0) {
             if (server) {
                 if (isSSL) {
