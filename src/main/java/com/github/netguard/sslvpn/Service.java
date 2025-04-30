@@ -21,8 +21,15 @@ class Service {
     }
 
     public final Service setServicePort(int port, AccessType accessType) {
-        servicePort = port;
+        this.servicePort = port;
         this.accessType = accessType;
+        return this;
+    }
+
+    private boolean hide;
+
+    public Service setHide() {
+        this.hide = true;
         return this;
     }
 
@@ -31,13 +38,13 @@ class Service {
         NC, // VPN_PRD_DATA
     }
 
-    private AccessType accessType = AccessType.NC;
+    private AccessType accessType = AccessType.PROXY;
 
     final JSONObject toJSON(int id) {
         boolean isService = servicePort > 0;
         JSONObject service = new JSONObject(true);
         service.put("accesstype", accessType.ordinal());
-        service.put("client_hide", isService ? 0 : 3); // 2, 3 means hide
+        service.put("client_hide", hide ? 2 : 1); // 2, 3 means hide
         service.put("groupid", 0);
         service.put("id", id);
         service.put("index_page", "");

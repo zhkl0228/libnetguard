@@ -245,7 +245,7 @@ class SSLVpnServer implements Runnable, Closeable {
                         byte[] msg = new byte[length];
                         dataInput.readFully(msg);
                         if (log.isDebugEnabled()) {
-                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes prd data server", msg.length)));
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes prd data server, socket=%s", msg.length, socket)));
                         }
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 8)) {
                             DataOutput dataOutput = new DataOutputStream(baos);
@@ -314,7 +314,7 @@ class SSLVpnServer implements Runnable, Closeable {
                         byte[] msg = new byte[length - 4];
                         dataInput.readFully(msg);
                         if (log.isDebugEnabled()) {
-                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes prd data client error=0x%x", msg.length, error)));
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes prd data client error=0x%x, socket=%s", msg.length, error, socket)));
                         }
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
                             DataOutput dataOutput = new DataOutputStream(baos);

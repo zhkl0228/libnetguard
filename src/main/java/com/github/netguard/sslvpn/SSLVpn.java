@@ -52,6 +52,7 @@ public class SSLVpn extends ProxyVpn {
         this.inputStream = inputStream;
         this.serverPort = serverPort;
         try {
+            socket.setSoTimeout(60000);
             SSLContext serverContext = SSL_VPN_SERVER_CERTIFICATE.getServerContext(RootCert.load()).newSSLContext();
             factory = serverContext.getSocketFactory();
         } catch(Exception e) {
@@ -96,6 +97,9 @@ public class SSLVpn extends ProxyVpn {
                         int read = inputStream.read(proxyBuffer);
                         if (read == -1) {
                             throw new EOFException();
+                        }
+                        if (log.isDebugEnabled()) {
+                            log.debug("{}", Inspector.inspectString(Arrays.copyOf(proxyBuffer, read), "forward proxy: " + socket));
                         }
                         proxyOutputStream.write(proxyBuffer, 0, read);
                         proxyOutputStream.flush();
@@ -187,30 +191,9 @@ public class SSLVpn extends ProxyVpn {
                                 HttpRequest request = ClientHelloRecord.detectHttp(baos, dataInput);
                                 if (request != null) {
                                     HttpResponse response = handleHttpRequest(request);
-                                    log.debug("Handle httpResponse: {}, proxy={}", response, proxyOutputStream != null && proxyBuffer != null);
+                                    log.debug("Handle httpResponse: {}", response);
                                     if (response != null) {
-                                        StringWriter buffer = new StringWriter();
-                                        PrintWriter writer = new PrintWriter(buffer);
-                                        writer.write(response.protocolVersion().toString());
-                                        writer.write(" ");
-                                        writer.write(response.status().toString());
-                                        writer.write("\r\n");
-                                        response.headers().entries().forEach(entry -> {
-                                            writer.write(entry.getKey());
-                                            writer.write(": ");
-                                            writer.write(entry.getValue());
-                                            writer.write("\r\n");
-                                        });
-                                        writer.write("\r\n");
-                                        log.debug("Response: {}", buffer);
-                                        outputStream.write(buffer.toString().getBytes(StandardCharsets.UTF_8));
-                                        if (response instanceof HttpContent) {
-                                            HttpContent httpContent = (HttpContent) response;
-                                            try(InputStream in = new ByteBufInputStream(httpContent.content())) {
-                                                IoUtil.copy(in, outputStream);
-                                            }
-                                        }
-                                        outputStream.flush();
+                                        writeResponse(outputStream, response);
                                     }
                                 }
                             }
@@ -233,6 +216,30 @@ public class SSLVpn extends ProxyVpn {
             log.debug("Finish socket: {}", socket);
             clients.remove(this);
         }
+    }
+
+    private void writeResponse(OutputStream outputStream, HttpResponse response) throws IOException {
+        StringWriter buffer = new StringWriter();
+        PrintWriter writer = new PrintWriter(buffer);
+        writer.write(response.protocolVersion().toString());
+        writer.write(" ");
+        writer.write(response.status().toString());
+        writer.write("\r\n");
+        response.headers().entries().forEach(entry -> {
+            writer.write(entry.getKey());
+            writer.write(": ");
+            writer.write(entry.getValue());
+            writer.write("\r\n");
+        });
+        writer.write("\r\n");
+        outputStream.write(buffer.toString().getBytes(StandardCharsets.UTF_8));
+        if (response instanceof HttpContent) {
+            HttpContent httpContent = (HttpContent) response;
+            try(InputStream in = new ByteBufInputStream(httpContent.content())) {
+                IoUtil.copy(in, outputStream);
+            }
+        }
+        outputStream.flush();
     }
 
     private HttpResponse notFound() {
@@ -322,9 +329,9 @@ public class SSLVpn extends ProxyVpn {
         response.put("rdpgroup_list", Collections.emptyList());
         response.put("servicegrouplist", Arrays.asList(new Group("1", "默认组"), new Group("2", "自定义组")));
         List<Service> services = Arrays.asList(
-                new Service("Test", "8.216.132.229", "8.216.132.229").setServicePort(8088, Service.AccessType.PROXY),
-                new Service("172.18网段", "192.18.0.0-192.18.255.255", "192.18.0.0/255.255.0.0"),
-                new Service("威固报价系统", "10.163.51.119", "10.163.51.119").setServicePort(8080),
+                new Service("Test", "183.6.211.61", "2025.ip138.com"),
+                new Service("172.18网段", "192.18.0.0-192.18.255.255", "192.18.0.0/255.255.0.0").setHide(),
+                new Service("威固报价系统", "10.163.51.119", "10.163.51.119").setServicePort(8080, Service.AccessType.NC),
                 new Service("视频监控", "192.168.88.66", "192.168.88.66").setServicePort(8096),
                 new Service("IP138", "120.39.215.140", "120.39.215.140").setServicePort(80)
         );
@@ -377,7 +384,7 @@ public class SSLVpn extends ProxyVpn {
         log.debug("{}", Inspector.inspectString(msg, String.format("handleProxyAccess username=%s, version=%d, extFlag=0x%x, svcId=%d, svr_name=%s, svr_ip=%s, svr_port=%s, compress=%d, count=%d, remaining=%d", username,
                 version, extFlag, svcId, svr_name, svr_ip, svr_port, compress, count, buffer.remaining())));
         try {
-            InetSocketAddress server = new InetSocketAddress("8.216.132.229", 8088);
+            InetSocketAddress server = new InetSocketAddress("183.6.211.61", 80);
             Socket proxySocket = new Socket();
             proxySocket.connect(server, 10000);
 
