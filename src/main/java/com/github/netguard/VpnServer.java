@@ -187,7 +187,8 @@ public class VpnServer {
                     }
                     ProxyVpn vpn = null;
                     if (magic == 0x16) { // SSL
-                        vpn = new SSLVpn(clients, rootCert, socket, inputStream);
+                        vpn = new SSLVpn(clients, rootCert, socket, inputStream,
+                                getPort());
                     } else if (useNetGuardCore) {
                         try {
                             vpn = new ServiceSinkhole(socket, clients, rootCert, magic);

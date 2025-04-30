@@ -16,23 +16,27 @@ class Service {
 
     private int servicePort;
 
-    final Service setServicePort(int port) {
+    public final Service setServicePort(int port) {
+        return setServicePort(port, AccessType.PROXY);
+    }
+
+    public final Service setServicePort(int port, AccessType accessType) {
         servicePort = port;
+        this.accessType = accessType;
         return this;
     }
 
     enum AccessType {
-        PROXY, // 应用级代理模式
-        NC, // netcat
-        RAP,
-        WEB,
-        RDP
+        PROXY, // 应用级代理模式: VPN_PROXY_ACCESS
+        NC, // VPN_PRD_DATA
     }
+
+    private AccessType accessType = AccessType.NC;
 
     final JSONObject toJSON(int id) {
         boolean isService = servicePort > 0;
         JSONObject service = new JSONObject(true);
-        service.put("accesstype", isService ? AccessType.PROXY.ordinal() : AccessType.NC.ordinal());
+        service.put("accesstype", accessType.ordinal());
         service.put("client_hide", isService ? 0 : 3); // 2, 3 means hide
         service.put("groupid", 0);
         service.put("id", id);
@@ -43,7 +47,7 @@ class Service {
         service.put("serverip", serverIp);
         service.put("servername", serverName);
         service.put("service_from", 0);
-        service.put("servicetype", isService ? 1 : 23);
+        service.put("servicetype", isService ? 1 : 23); // 1, 5, 23
         service.put("sort", id);
         service.put("throughput", 0);
         service.put("throughput_yn", 0);

@@ -41,7 +41,7 @@ public class StreamForward implements Runnable {
     private final boolean isSSL;
     private final Packet packet;
 
-    protected StreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
+    public StreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
                             InspectorVpn vpn, String hostName, boolean isSSL, Packet packet) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
@@ -57,7 +57,7 @@ public class StreamForward implements Runnable {
         this.packet = packet;
     }
 
-    protected final void startThread(byte[] prologue) {
+    public final void startThread(byte[] prologue) {
         if (packetCapture != null && prologue != null && prologue.length > 0) {
             if (server) {
                 if (isSSL) {
@@ -143,7 +143,9 @@ public class StreamForward implements Runnable {
         } finally {
             IoUtil.close(inputStream);
             IoUtil.close(outputStream);
-            countDownLatch.countDown();
+            if (countDownLatch != null) {
+                countDownLatch.countDown();
+            }
         }
     }
 }

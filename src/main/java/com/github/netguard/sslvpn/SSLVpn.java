@@ -2,6 +2,7 @@ package com.github.netguard.sslvpn;
 
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.HexUtil;
+import cn.hutool.crypto.digest.DigestUtil;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
@@ -11,6 +12,7 @@ import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
+import com.github.netguard.vpn.tcp.StreamForward;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.*;
@@ -41,11 +43,14 @@ public class SSLVpn extends ProxyVpn {
     private final Socket socket;
     private final InputStream inputStream;
     private final SSLSocketFactory factory;
+    private final int serverPort;
 
-    public SSLVpn(List<ProxyVpn> clients, RootCert rootCert, Socket socket, InputStream inputStream) {
+    public SSLVpn(List<ProxyVpn> clients, RootCert rootCert, Socket socket,
+                  InputStream inputStream, int serverPort) {
         super(clients, rootCert);
         this.socket = socket;
         this.inputStream = inputStream;
+        this.serverPort = serverPort;
         try {
             SSLContext serverContext = SSL_VPN_SERVER_CERTIFICATE.getServerContext(RootCert.load()).newSSLContext();
             factory = serverContext.getSocketFactory();
@@ -87,8 +92,20 @@ public class SSLVpn extends ProxyVpn {
                 DataInputStream dataInput = new DataInputStream(inputStream);
 
                 while (!canStop) {
+                    if (proxyOutputStream != null && proxyBuffer != null) {
+                        int read = inputStream.read(proxyBuffer);
+                        if (read == -1) {
+                            throw new EOFException();
+                        }
+                        proxyOutputStream.write(proxyBuffer, 0, read);
+                        proxyOutputStream.flush();
+                        continue;
+                    }
+
                     int tag = dataInput.readInt();
-                    log.debug("tag=0x{}", Integer.toHexString(tag));
+                    if (log.isDebugEnabled()) {
+                        log.debug("tag=0x{}, socket={}", Integer.toHexString(tag), socket);
+                    }
 
                     switch (tag) {
                         case GatewayAgent.VPN_PRD_DATA: {
@@ -98,20 +115,9 @@ public class SSLVpn extends ProxyVpn {
                         }
                         case GatewayAgent.VPN_PROXY_ACCESS: {
                             byte[] msg = readMsg(dataInput);
-                            ByteBuffer buffer = ByteBuffer.wrap(msg);
-                            byte[] ticket = new byte[32];
-                            buffer.get(ticket);
-                            String username = readStr(buffer);
-                            int version = buffer.getInt();
-                            int extFlag = buffer.getInt();
-                            int svcId = buffer.getInt();
-                            String svr_name = readStr(buffer);
-                            String svr_ip = readStr(buffer);
-                            String svr_port = readStr(buffer);
-                            int compress = buffer.getInt();
-                            int count = buffer.getInt();
-                            log.debug("{}", Inspector.inspectString(msg, String.format("ncProxy username=%s, version=%d, extFlag=0x%x, svcId=%d, svr_name=%s, svr_ip=%s, svr_port=%s, compress=%d, count=%d, remaining=%d", username,
-                                    version, extFlag, svcId, svr_name, svr_ip, svr_port, compress, count, buffer.remaining())));
+                            byte[] data = handleProxyAccess(tag, msg, outputStream);
+                            outputStream.write(data);
+                            outputStream.flush();
                             break;
                         }
                         case GatewayAgent.VPN_NC_ACCESS: {
@@ -181,7 +187,7 @@ public class SSLVpn extends ProxyVpn {
                                 HttpRequest request = ClientHelloRecord.detectHttp(baos, dataInput);
                                 if (request != null) {
                                     HttpResponse response = handleHttpRequest(request);
-                                    log.debug("Handle httpResponse: {}", response);
+                                    log.debug("Handle httpResponse: {}, proxy={}", response, proxyOutputStream != null && proxyBuffer != null);
                                     if (response != null) {
                                         StringWriter buffer = new StringWriter();
                                         PrintWriter writer = new PrintWriter(buffer);
@@ -223,6 +229,7 @@ public class SSLVpn extends ProxyVpn {
         } catch(Exception e) {
             log.warn("SSL VPN failed", e);
         } finally {
+            IoUtil.close(proxyOutputStream);
             log.debug("Finish socket: {}", socket);
             clients.remove(this);
         }
@@ -249,7 +256,8 @@ public class SSLVpn extends ProxyVpn {
 
     private HttpResponse handleHttpRequest(HttpRequest request) throws IOException {
         log.debug("handleHttpRequest: {}", request);
-        if ("/client/custom_lang.json".equals(request.uri())) {
+        if ("/client/custom_lang.json".equals(request.uri()) ||
+                "/download/mobile/software/sslvpn-version.xml".equals(request.uri())) {
             return notFound();
         }
         if ((request.uri().startsWith("/download/mobile/resource/ios/pic/") || request.uri().startsWith("/download/mobile/resource/android/pic/")) &&
@@ -284,6 +292,9 @@ public class SSLVpn extends ProxyVpn {
         ByteBuffer buffer = ByteBuffer.wrap(msg);
         JSONObject obj = readJSON(buffer);
         final String ticket = obj.getString("ticket");
+        if (ticket == null || ticket.length() != 64) {
+            return buildErrorResponse(tag | 0x80000000, 0x200043d); // 验证失败，请重试
+        }
         JSONObject response = new JSONObject(true);
         response.put("authserid", USER_ID);
         response.put("compress", 0);
@@ -299,7 +310,8 @@ public class SSLVpn extends ProxyVpn {
         }
         response.put("ios_mdm_status", "ios_setup_ok");
         response.put("iphost_list", Collections.emptyList());
-        response.put("machineid", "0022461CA2EF0003");
+        String machineId = DigestUtil.md5Hex16(String.format("%s_%s", getClass().getSimpleName(), GATEWAY_VERSION));
+        response.put("machineid", machineId.toUpperCase());
         JSONObject mpolicy = buildMPolicy();
         response.put("mpolicy", mpolicy);
         response.put("need_bind", 0);
@@ -308,13 +320,13 @@ public class SSLVpn extends ProxyVpn {
         response.put("proto_version", "2");
         response.put("rdp_optimize", 0);
         response.put("rdpgroup_list", Collections.emptyList());
-        response.put("servicegrouplist", Arrays.asList(new Group("2", "默认组"), new Group("1", "自定义组")));
+        response.put("servicegrouplist", Arrays.asList(new Group("1", "默认组"), new Group("2", "自定义组")));
         List<Service> services = Arrays.asList(
+                new Service("Test", "8.216.132.229", "8.216.132.229").setServicePort(8088, Service.AccessType.PROXY),
                 new Service("172.18网段", "192.18.0.0-192.18.255.255", "192.18.0.0/255.255.0.0"),
                 new Service("威固报价系统", "10.163.51.119", "10.163.51.119").setServicePort(8080),
                 new Service("视频监控", "192.168.88.66", "192.168.88.66").setServicePort(8096),
-                new Service("IP138", "120.39.215.140", "120.39.215.140").setServicePort(80),
-                new Service("Test", "120.39.22.140", "120.39.22.140").setServicePort(443)
+                new Service("IP138", "120.39.215.140", "120.39.215.140").setServicePort(80)
         );
         JSONArray array = new JSONArray(services.size());
         int id = 1;
@@ -344,6 +356,50 @@ public class SSLVpn extends ProxyVpn {
         return buildResponse(tag, response);
     }
 
+    private static final int ERR_PROXY_CONNECT = 0x4000410;
+
+    private OutputStream proxyOutputStream;
+    private byte[] proxyBuffer;
+
+    private byte[] handleProxyAccess(int tag, byte[] msg, OutputStream outputStream) throws IOException {
+        ByteBuffer buffer = ByteBuffer.wrap(msg);
+        byte[] ticket = new byte[32];
+        buffer.get(ticket);
+        String username = readStr(buffer);
+        int version = buffer.getInt();
+        int extFlag = buffer.getInt();
+        int svcId = buffer.getInt();
+        String svr_name = readStr(buffer);
+        String svr_ip = readStr(buffer);
+        String svr_port = readStr(buffer);
+        int compress = buffer.getInt();
+        int count = buffer.getInt();
+        log.debug("{}", Inspector.inspectString(msg, String.format("handleProxyAccess username=%s, version=%d, extFlag=0x%x, svcId=%d, svr_name=%s, svr_ip=%s, svr_port=%s, compress=%d, count=%d, remaining=%d", username,
+                version, extFlag, svcId, svr_name, svr_ip, svr_port, compress, count, buffer.remaining())));
+        try {
+            InetSocketAddress server = new InetSocketAddress("8.216.132.229", 8088);
+            Socket proxySocket = new Socket();
+            proxySocket.connect(server, 10000);
+
+            proxyOutputStream = proxySocket.getOutputStream();
+            proxyBuffer = new byte[4096];
+            StreamForward outbound;
+            outbound = new StreamForward(proxySocket.getInputStream(), outputStream, false, getRemoteSocketAddress(), server, null, proxySocket, null, server.getHostName(), false, null);
+            outbound.startThread(null);
+
+            InetSocketAddress address = (InetSocketAddress) proxySocket.getLocalSocketAddress();
+            try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                DataOutput dataOutput = new DataOutputStream(baos);
+                writeStr(dataOutput, address.getHostString());
+                dataOutput.writeInt(address.getPort());
+                return buildResponse(tag, baos.toByteArray());
+            }
+        } catch (IOException e) {
+            log.debug("connect failed", e);
+            return buildErrorResponse(tag, ERR_PROXY_CONNECT);
+        }
+    }
+
     private byte[] handleVpnNcAccess(int tag, byte[] msg) throws IOException {
         ByteBuffer buffer = ByteBuffer.wrap(msg);
         byte[] ticket = new byte[32];
@@ -362,7 +418,7 @@ public class SSLVpn extends ProxyVpn {
         log.debug("handleVpnNcAccess username={}, password={}, version={}, compress={}, ip={}, remaining={}", username, password, version, compress, ip, buffer.remaining());
         try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             DataOutput dataOutput = new DataOutputStream(baos);
-            writeStr(dataOutput, "172.16.254.10");
+            writeStr(dataOutput, "10.1.10.1");
             List<String> dnsList = Arrays.asList("114.114.114.114", "8.8.8.8");
             dataOutput.writeInt(dnsList.size());
             for (String dns : dnsList) {
@@ -411,7 +467,8 @@ public class SSLVpn extends ProxyVpn {
         JSONObject obj = new JSONObject(true);
         JSONArray list = buildAuthList();
         obj.put("AuthList", list);
-        obj.put("PasswdPolicy", "{\"pass_min\":6,\"pass_max\":32,\"pass_change\":0,\"pass_warning\":0,\"first_login\":1,\"same_pass\":0,\"number\":1,\"number_size\":2,\"up_letter\":1,\"up_size\":2,\"low_letter\":1,\"low_size\":2,\"spe_letter\":0,\"spe_size\":0}");
+        JSONObject passwdPolicy = buildPasswdPolicy();
+        obj.put("PasswdPolicy", passwdPolicy.toJSONString());
         obj.put("antivirus", 0);
         obj.put("cert_flag", 0);
         obj.put("dns_resolve_once", 1);
@@ -425,11 +482,30 @@ public class SSLVpn extends ProxyVpn {
         obj.put("sm_cert", 0);
         obj.put("sm_enc_algo", "");
         obj.put("sm_enc_algo_id", 0);
-        obj.put("standard_port", 443);
+        obj.put("standard_port", serverPort);
         obj.put("terminal_line_type", 31);
         obj.put("use_gm_ssl", 0);
         obj.put("user_reg", 1);
         return buildResponse(tag, obj);
+    }
+
+    private static JSONObject buildPasswdPolicy() {
+        JSONObject passwdPolicy = new JSONObject(true);
+        passwdPolicy.put("pass_min", 6);
+        passwdPolicy.put("pass_max", 32);
+        passwdPolicy.put("pass_change", 1);
+        passwdPolicy.put("pass_warning", 0);
+        passwdPolicy.put("first_login", 1);
+        passwdPolicy.put("same_pass", 1);
+        passwdPolicy.put("number", 1);
+        passwdPolicy.put("number_size", 2);
+        passwdPolicy.put("up_letter", 1);
+        passwdPolicy.put("up_size", 2);
+        passwdPolicy.put("low_letter", 1);
+        passwdPolicy.put("low_size", 2);
+        passwdPolicy.put("spe_letter", 0);
+        passwdPolicy.put("spe_size", 0);
+        return passwdPolicy;
     }
 
     private byte[] handleVpnLogin(int tag, byte[] msg) throws IOException {
@@ -514,15 +590,28 @@ public class SSLVpn extends ProxyVpn {
         }
     }
 
+    private byte[] buildErrorResponse(int tag, int error) throws IOException {
+        if (error == 0) {
+            throw new IllegalArgumentException("Invalid error");
+        }
+        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(12)) {
+            DataOutput dataOutput = new DataOutputStream(baos);
+            dataOutput.writeInt(tag);
+            dataOutput.writeInt(4);
+            dataOutput.writeInt(error);
+            return baos.toByteArray();
+        }
+    }
+
     private static JSONArray buildAuthList() {
         JSONObject auth = new JSONObject(true);
         auth.put("AuthID", 1);
-        auth.put("AuthName", "任意认证");
+        auth.put("AuthName", "Any");
         auth.put("IamFlag", 0);
         auth.put("PushFlag", 0);
         auth.put("QrFlag", 0);
         auth.put("SubAuthID", 1);
-        auth.put("SubAuthName", "任意认证");
+        auth.put("SubAuthName", "Any");
         auth.put("SubAuthType", 0);
         JSONArray array = new JSONArray(1);
         array.add(auth);
@@ -558,7 +647,7 @@ public class SSLVpn extends ProxyVpn {
             if (tmp.length > 32) {
                 tmp = Arrays.copyOf(tmp, 32);
             }
-            log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes", msg.length)));
+            log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes, socket=%s", msg.length, socket)));
         }
         return msg;
     }

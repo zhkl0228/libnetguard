@@ -172,6 +172,7 @@ class SSLVpnServer implements Runnable, Closeable {
         @Override
         protected boolean forward(byte[] buf) throws IOException {
             if (isSSL) {
+                log.debug("forward server={} SSL stream: socket={}", server, socket);
                 return super.forward(buf);
             }
             final DataInput dataInput = new DataInputStream(inputStream);
@@ -195,8 +196,8 @@ class SSLVpnServer implements Runnable, Closeable {
                         int compress = buffer.getInt();
                         int count = buffer.getInt();
                         if (log.isDebugEnabled()) {
-                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes proxy server: username=%s, version=%d, extFlag=0x%x, svcId=%d, svr_name=%s, svr_ip=%s, svr_port=%s, compress=%d, count=%d, remaining=%d", msg.length, username,
-                                    version, extFlag, svcId, svr_name, svr_ip, svr_port, compress, count, buffer.remaining())));
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes proxy server: username=%s, version=%d, extFlag=0x%x, svcId=%d, svr_name=%s, svr_ip=%s, svr_port=%s, compress=%d, count=%d, remaining=%d, socket=%s", msg.length, username,
+                                    version, extFlag, svcId, svr_name, svr_ip, svr_port, compress, count, buffer.remaining(), socket)));
                         }
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 8)) {
                             DataOutput dataOutput = new DataOutputStream(baos);
@@ -335,7 +336,7 @@ class SSLVpnServer implements Runnable, Closeable {
                         String ip = readStr(buffer);
                         int port = buffer.getInt();
                         if (log.isDebugEnabled()) {
-                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes proxy client error=0x%x, proxy=%s:%d", msg.length, error, ip, port)));
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes proxy client error=0x%x, proxy=%s:%d, socket=%s", msg.length, error, ip, port, socket)));
                         }
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
                             DataOutput dataOutput = new DataOutputStream(baos);
