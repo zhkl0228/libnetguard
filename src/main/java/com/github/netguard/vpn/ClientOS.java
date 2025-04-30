@@ -5,6 +5,9 @@ public enum ClientOS {
     Android,
     iOS,
     MacOS,
-    Windows
+    Windows,
+
+    SSLVpn,
+    QianxinVPN, // 奇安信 VPN
 
 }

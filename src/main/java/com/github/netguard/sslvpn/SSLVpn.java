@@ -9,10 +9,12 @@ import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.Inspector;
 import com.github.netguard.ProxyVpn;
+import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import com.github.netguard.vpn.tcp.StreamForward;
+import eu.faircode.netguard.ServiceSinkhole;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.*;
@@ -58,6 +60,11 @@ public class SSLVpn extends ProxyVpn {
         } catch(Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    @Override
+    public ClientOS getClientOS() {
+        return ClientOS.SSLVpn;
     }
 
     @Override
@@ -114,7 +121,16 @@ public class SSLVpn extends ProxyVpn {
                     switch (tag) {
                         case GatewayAgent.VPN_PRD_DATA: {
                             byte[] msg = readMsg(dataInput);
-                            log.warn("{}", Inspector.inspectString(msg, "tag=0x" + Integer.toHexString(tag)));
+                            byte[] ip = Arrays.copyOfRange(msg, 4, msg.length);
+                            if (log.isTraceEnabled()) {
+                                log.trace("{}", Inspector.inspectString(ip, String.format("tag=0x%x, socket=%s, vpnOutputStream=%s", tag, socket, vpnOutputStream)));
+                            }
+                            DataOutput dataOutput = new DataOutputStream(vpnOutputStream);
+                            for (int i = 0; i < ip.length; i++) {
+                                ip[i] ^= ServiceSinkhole.VPN_MAGIC;
+                            }
+                            dataOutput.writeShort(ip.length);
+                            dataOutput.write(ip);
                             break;
                         }
                         case GatewayAgent.VPN_PROXY_ACCESS: {
@@ -126,7 +142,7 @@ public class SSLVpn extends ProxyVpn {
                         }
                         case GatewayAgent.VPN_NC_ACCESS: {
                             byte[] msg = readMsg(dataInput);
-                            byte[] data = handleVpnNcAccess(tag, msg);
+                            byte[] data = handleVpnNcAccess(tag, msg, outputStream);
                             outputStream.write(data);
                             outputStream.flush();
                             break;
@@ -333,7 +349,7 @@ public class SSLVpn extends ProxyVpn {
                 new Service("172.18网段", "192.18.0.0-192.18.255.255", "192.18.0.0/255.255.0.0").setHide(),
                 new Service("威固报价系统", "10.163.51.119", "10.163.51.119").setServicePort(8080, Service.AccessType.NC),
                 new Service("视频监控", "192.168.88.66", "192.168.88.66").setServicePort(8096),
-                new Service("IP138", "120.39.215.140", "120.39.215.140").setServicePort(80)
+                new Service("Socks", "8.217.195.104", "8.217.195.104").setServicePort(80, Service.AccessType.NC)
         );
         JSONArray array = new JSONArray(services.size());
         int id = 1;
@@ -390,8 +406,7 @@ public class SSLVpn extends ProxyVpn {
 
             proxyOutputStream = proxySocket.getOutputStream();
             proxyBuffer = new byte[4096];
-            StreamForward outbound;
-            outbound = new StreamForward(proxySocket.getInputStream(), outputStream, false, getRemoteSocketAddress(), server, null, proxySocket, null, server.getHostName(), false, null);
+            StreamForward outbound = new StreamForward(proxySocket.getInputStream(), outputStream, false, getRemoteSocketAddress(), server, null, proxySocket, null, server.getHostName(), false, null);
             outbound.startThread(null);
 
             InetSocketAddress address = (InetSocketAddress) proxySocket.getLocalSocketAddress();
@@ -407,7 +422,32 @@ public class SSLVpn extends ProxyVpn {
         }
     }
 
-    private byte[] handleVpnNcAccess(int tag, byte[] msg) throws IOException {
+    private OutputStream vpnOutputStream;
+
+    private class VpnStreamForward extends StreamForward {
+        public VpnStreamForward(Socket vpnSocket, OutputStream outputStream, InetSocketAddress server) throws IOException {
+            super(vpnSocket.getInputStream(), outputStream, false, SSLVpn.this.getRemoteSocketAddress(), server, null, vpnSocket, null, server.getHostName(), false, null);
+        }
+        @Override
+        protected boolean forward(byte[] buf) throws IOException {
+            DataInput dataInput = new DataInputStream(inputStream);
+            int size = dataInput.readUnsignedShort();
+            if (size > buf.length) {
+                throw new IllegalStateException("VPN stream buffer too long");
+            }
+            dataInput.readFully(buf, 0, size);
+            log.debug("forward vpn ip packet: size={}, buf.length={}", size, buf.length);
+            for(int i = 0; i < size; i++) {
+                buf[i] ^= ServiceSinkhole.VPN_MAGIC;
+            }
+            byte[] data = buildResponse(GatewayAgent.VPN_PRD_DATA, buf, size);
+            outputStream.write(data);
+            outputStream.flush();
+            return false;
+        }
+    }
+
+    private byte[] handleVpnNcAccess(int tag, byte[] msg, OutputStream outputStream) throws IOException {
         ByteBuffer buffer = ByteBuffer.wrap(msg);
         byte[] ticket = new byte[32];
         buffer.get(ticket);
@@ -422,6 +462,16 @@ public class SSLVpn extends ProxyVpn {
         if (version > 1) {
             password = readStr(buffer);
         }
+
+        InetSocketAddress server = new InetSocketAddress("127.0.0.1", serverPort);
+        Socket vpnSocket = new Socket();
+        vpnSocket.connect(server, 2000);
+        vpnOutputStream = vpnSocket.getOutputStream();
+        vpnOutputStream.write(ClientOS.QianxinVPN.ordinal());
+
+        StreamForward outbound = new VpnStreamForward(vpnSocket, outputStream, server);
+        outbound.startThread(null);
+
         log.debug("handleVpnNcAccess username={}, password={}, version={}, compress={}, ip={}, remaining={}", username, password, version, compress, ip, buffer.remaining());
         try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             DataOutput dataOutput = new DataOutputStream(baos);
@@ -564,7 +614,7 @@ public class SSLVpn extends ProxyVpn {
 
     private static final byte[] ALIGN_BYTES = new byte[4];
 
-    private static void writeStr(DataOutput dataOutput, String str) throws IOException {
+    public static void writeStr(DataOutput dataOutput, String str) throws IOException {
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
         dataOutput.writeInt(bytes.length);
         dataOutput.write(bytes);
@@ -587,12 +637,16 @@ public class SSLVpn extends ProxyVpn {
     }
 
     private byte[] buildResponse(int tag, byte[] msg) throws IOException {
+        return buildResponse(tag, msg, msg.length);
+    }
+
+    private byte[] buildResponse(int tag, byte[] msg, int length) throws IOException {
         try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             DataOutput dataOutput = new DataOutputStream(baos);
             dataOutput.writeInt(tag);
-            dataOutput.writeInt(msg.length + 4);
+            dataOutput.writeInt(length + 4);
             dataOutput.writeInt(0);
-            dataOutput.write(msg);
+            dataOutput.write(msg, 0, length);
             return baos.toByteArray();
         }
     }

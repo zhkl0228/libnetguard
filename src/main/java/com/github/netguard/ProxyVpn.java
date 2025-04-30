@@ -39,6 +39,10 @@ public abstract class ProxyVpn implements Runnable, InspectorVpn {
                 return ClientOS.MacOS;
             case 3:
                 return ClientOS.Windows;
+            case 4:
+                return ClientOS.SSLVpn;
+            case 5:
+                return ClientOS.QianxinVPN;
             default:
                 throw new IOException("Invalid os=" + os);
         }

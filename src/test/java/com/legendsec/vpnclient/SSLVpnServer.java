@@ -9,7 +9,9 @@ import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.Inspector;
+import com.github.netguard.handler.PcapFileOutputStream;
 import com.github.netguard.sslvpn.GatewayAgent;
+import com.github.netguard.sslvpn.SSLVpn;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import com.github.netguard.vpn.tcp.StreamForward;
@@ -29,7 +31,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
-class SSLVpnServer implements Runnable, Closeable {
+class SSLVpnServer implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(SSLVpnServer.class);
 
@@ -139,11 +141,12 @@ class SSLVpnServer implements Runnable, Closeable {
         }
 
         try (InputStream localIn = socket.getInputStream(); OutputStream localOut = socket.getOutputStream();
-             InputStream socketIn = clientSocket.getInputStream(); OutputStream socketOut = clientSocket.getOutputStream()) {
+             InputStream socketIn = clientSocket.getInputStream(); OutputStream socketOut = clientSocket.getOutputStream();
+             PcapFileOutputStream pcap = new PcapFileOutputStream(new File(String.format("target/ssl_vpn_%d.pcap", System.currentTimeMillis())))) {
             CountDownLatch countDownLatch = new CountDownLatch(2);
             SacMsgStreamForward inbound, outbound;
-            inbound = new SacMsgStreamForward(localIn, socketOut, true, client, server, countDownLatch, socket, server.getHostName());
-            outbound = new SacMsgStreamForward(socketIn, localOut, false, client, server, countDownLatch, clientSocket, server.getHostName());
+            inbound = new SacMsgStreamForward(localIn, socketOut, true, client, server, countDownLatch, socket, server.getHostName(), pcap);
+            outbound = new SacMsgStreamForward(socketIn, localOut, false, client, server, countDownLatch, clientSocket, server.getHostName(), pcap);
             inbound.startThread();
             outbound.startThread();
             countDownLatch.await();
@@ -151,9 +154,11 @@ class SSLVpnServer implements Runnable, Closeable {
     }
 
     private static class SacMsgStreamForward extends StreamForward {
+        private final PcapFileOutputStream pcap;
         public SacMsgStreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
-                                   String hostName) {
+                                   String hostName, PcapFileOutputStream pcap) {
             super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, null, hostName, true, null);
+            this.pcap = pcap;
         }
         public void startThread() {
             startThread(null);
@@ -247,6 +252,7 @@ class SSLVpnServer implements Runnable, Closeable {
                         if (log.isDebugEnabled()) {
                             log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes prd data server, socket=%s", msg.length, socket)));
                         }
+                        pcap.writePacket(Arrays.copyOfRange(msg, 4, msg.length));
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 8)) {
                             DataOutput dataOutput = new DataOutputStream(baos);
                             dataOutput.writeInt(tag);
@@ -316,6 +322,7 @@ class SSLVpnServer implements Runnable, Closeable {
                         if (log.isDebugEnabled()) {
                             log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes prd data client error=0x%x, socket=%s", msg.length, error, socket)));
                         }
+                        pcap.writePacket(msg);
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
                             DataOutput dataOutput = new DataOutputStream(baos);
                             dataOutput.writeInt(tag);
@@ -420,7 +427,14 @@ class SSLVpnServer implements Runnable, Closeable {
                             JSONArray array = obj == null ? null : obj.getJSONArray("servicelist");
                             if (array != null) {
                                 System.out.println("servicelist: " + array.toJSONString());
+//                                array.add(0, new Service("Socks", "8.217.195.104", "8.217.195.104").setServicePort(80, Service.AccessType.NC).toJSON(1));
+                                obj.put("servicelist", array);
                                 System.out.println("userData: " + obj.toJSONString());
+                                try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                                    DataOutput dataOutput = new DataOutputStream(baos);
+                                    SSLVpn.writeStr(dataOutput, obj.toJSONString());
+                                    msg = baos.toByteArray();
+                                }
                             }
                         }
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
@@ -452,8 +466,7 @@ class SSLVpnServer implements Runnable, Closeable {
         }
     }
 
-    @Override
-    public void close() {
+    final void close() {
         IoUtil.close(serverSocket);
     }
 }

@@ -1,6 +1,5 @@
 package com.legendsec.vpnclient;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.VpnServer;
 import com.github.netguard.VpnServerBuilder;
 import com.github.netguard.vpn.IPacketCapture;
@@ -22,7 +21,7 @@ public class SSLVpnMain {
         VpnServer vpnServer = builder.startServer();
         System.out.println("Start vpn server on port: " + vpnServer.getPort());
         vpnServer.waitShutdown();
-        IoUtil.close(server);
+        server.close();
     }
 
 }

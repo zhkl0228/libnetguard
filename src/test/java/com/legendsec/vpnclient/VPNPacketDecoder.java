@@ -52,7 +52,7 @@ class VPNPacketDecoder extends PacketDecoder {
             System.out.printf("acceptVpn serverIp=%s, port=%d, hostName=%s, applicationLayerProtocols=%s%n", connectRequest.serverIp, connectRequest.port, connectRequest.hostName, connectRequest.applicationLayerProtocols);
             return AcceptTcpResult.builder(AllowRule.CONNECT_SSL).build();
         }
-        return super.acceptTcp(connectRequest);
+        return connectRequest.connectTcpDirect().build();
     }
 
     @Override
