@@ -77,10 +77,10 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
     }
 
-    public ServiceSinkhole(Socket socket, List<ProxyVpn> clients, RootCert rootCert) throws IOException {
+    public ServiceSinkhole(Socket socket, List<ProxyVpn> clients, RootCert rootCert, int os) throws IOException {
         super(clients, rootCert);
         InputStream inputStream = socket.getInputStream();
-        this.clientOS = readOS(this, new DataInputStream(inputStream));
+        this.clientOS = readOS(this, new DataInputStream(inputStream), os);
 
         int mtu = jni_get_mtu();
 

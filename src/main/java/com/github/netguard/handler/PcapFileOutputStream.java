@@ -7,11 +7,11 @@ import org.krakenapps.pcap.util.ChainBuffer;
 import java.io.File;
 import java.io.IOException;
 
-class PcapFileOutputStream extends org.krakenapps.pcap.file.PcapFileOutputStream {
+public class PcapFileOutputStream extends org.krakenapps.pcap.file.PcapFileOutputStream {
 
     private final static int CONST_RAW_IP = 101;
 
-    PcapFileOutputStream(File file) throws IOException {
+    public PcapFileOutputStream(File file) throws IOException {
         super(file, CONST_RAW_IP);
     }
 
@@ -23,7 +23,7 @@ class PcapFileOutputStream extends org.krakenapps.pcap.file.PcapFileOutputStream
         return new PcapPacket(header, new ChainBuffer(packet)).setDatalink(CONST_RAW_IP);
     }
 
-    final void writePacket(byte[] data) throws IOException {
+    public final void writePacket(byte[] data) throws IOException {
         write(createPcapPacket(data));
     }
 

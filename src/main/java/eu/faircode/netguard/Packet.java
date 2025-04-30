@@ -61,8 +61,11 @@ public class Packet {
         super();
     }
 
+    public static final String INSTALL_ROOT_CERT_IP = "88.88.88.88";
+    public static final int INSTALL_ROOT_CERT_PORT = 88;
+
     public boolean isInstallRootCert() {
-        return "88.88.88.88".equals(daddr) && dport == 88;
+        return INSTALL_ROOT_CERT_IP.equals(daddr) && dport == INSTALL_ROOT_CERT_PORT;
     }
 
     public InetSocketAddress createClientAddress() {

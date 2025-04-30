@@ -42,7 +42,7 @@ public class ClientHelloRecord {
         return new ClientHelloRecord(baos.toByteArray(), httpRequest, ja3);
     }
 
-    private static HttpRequest detectHttp(ByteArrayOutputStream baos, DataInputStream dataInput) throws IOException {
+    public static HttpRequest detectHttp(ByteArrayOutputStream baos, DataInputStream dataInput) throws IOException {
         byte[] data = baos.toByteArray();
         Buffer buffer = new ChainBuffer(data);
         if (!buffer.isEOB()) {
