@@ -89,16 +89,13 @@ public class QianxinVPN extends SSLVpn {
 
                     switch (tag) {
                         case GatewayAgent.VPN_PRD_DATA: {
-                            byte[] msg = readMsg(dataInput);
-                            if (log.isTraceEnabled()) {
-                                log.trace("{}", Inspector.inspectString(msg, String.format("tag=0x%x, socket=%s, vpnOutputStream=%s", tag, socket, vpnOutputStream)));
-                            }
-                            for (int i = 4; i < msg.length; i++) {
-                                msg[i] ^= ServiceSinkhole.VPN_MAGIC;
+                            int length = readMsg(dataInput, vpnBuffer);
+                            for (int i = 4; i < length; i++) {
+                                vpnBuffer[i] ^= ServiceSinkhole.VPN_MAGIC;
                             }
                             DataOutput dataOutput = new DataOutputStream(vpnOutputStream);
-                            dataOutput.writeShort(msg.length - 4);
-                            dataOutput.write(msg, 4, msg.length - 4);
+                            dataOutput.writeShort(length - 4);
+                            dataOutput.write(vpnBuffer, 4, length - 4);
                             break;
                         }
                         case GatewayAgent.VPN_PROXY_ACCESS: {
@@ -166,7 +163,7 @@ public class QianxinVPN extends SSLVpn {
                         case 0x504f5354: // POST
                         case 0x47455420: // GET
                         {
-                            try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                            try(ByteArrayOutputStream baos = new ByteArrayOutputStream(0x10)) {
                                 DataOutput dataOutput = new DataOutputStream(baos);
                                 dataOutput.writeInt(tag);
                                 byte[] header = new byte[12];
@@ -224,8 +221,9 @@ public class QianxinVPN extends SSLVpn {
             JSONObject obj = new JSONObject(true);
             obj.put("service_change", 4);
             obj.put("version", 1);
-            JSONArray array = new JSONArray();
-            for (PicDef def : PicDef.values()) {
+            PicDef[] defs = PicDef.values();
+            JSONArray array = new JSONArray(defs.length);
+            for (PicDef def : defs) {
                 JSONObject item = new JSONObject(2, true);
                 item.put("id", def.ordinal() + 1);
                 item.put("name", def.name());
@@ -375,25 +373,32 @@ public class QianxinVPN extends SSLVpn {
         int version = buffer.getInt();
         int extFlag = buffer.getInt();
         int svcId = buffer.getInt();
-        String svr_name = readStr(buffer);
-        String svr_ip = readStr(buffer);
-        String svr_port = readStr(buffer);
+        String svrName = readStr(buffer);
+        String svrIp = readStr(buffer);
+        String svrPort = readStr(buffer);
         int compress = buffer.getInt();
         int count = buffer.getInt();
-        log.debug("{}", Inspector.inspectString(msg, String.format("handleProxyAccess username=%s, version=%d, extFlag=0x%x, svcId=%d, svr_name=%s, svr_ip=%s, svr_port=%s, compress=%d, count=%d, remaining=%d", username,
-                version, extFlag, svcId, svr_name, svr_ip, svr_port, compress, count, buffer.remaining())));
+        if (log.isDebugEnabled()) {
+            log.debug("{}", Inspector.inspectString(msg, String.format("handleProxyAccess username=%s, version=%d, extFlag=0x%x, svcId=%d, svrName=%s, svrIp=%s, svrPort=%s, compress=%d, count=%d, remaining=%d", username,
+                    version, extFlag, svcId, svrName, svrIp, svrPort, compress, count, buffer.remaining())));
+        }
         try {
             InetSocketAddress server = new InetSocketAddress("183.6.211.61", 80);
             Socket proxySocket = new Socket();
             proxySocket.connect(server, 10000);
 
             proxyOutputStream = proxySocket.getOutputStream();
-            proxyBuffer = new byte[4096];
-            StreamForward outbound = new StreamForward(proxySocket.getInputStream(), outputStream, false, getRemoteSocketAddress(), server, null, proxySocket, null, server.getHostName(), false, null);
+            proxyBuffer = new byte[VPN_BUFFER_SIZE];
+            StreamForward outbound = new StreamForward(proxySocket.getInputStream(), outputStream, false, getRemoteSocketAddress(), server, null, proxySocket, null, server.getHostName(), false, null) {
+                @Override
+                protected int getReceiveBufferSize() {
+                    return VPN_BUFFER_SIZE;
+                }
+            };
             outbound.startThread(null);
 
             InetSocketAddress address = (InetSocketAddress) proxySocket.getLocalSocketAddress();
-            try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            try(ByteArrayOutputStream baos = new ByteArrayOutputStream(32)) {
                 DataOutput dataOutput = new DataOutputStream(baos);
                 writeStr(dataOutput, address.getHostString());
                 dataOutput.writeInt(address.getPort());
@@ -406,10 +411,16 @@ public class QianxinVPN extends SSLVpn {
     }
 
     private OutputStream vpnOutputStream;
+    private byte[] vpnBuffer;
+    private static final int VPN_BUFFER_SIZE = 0x3000;
 
     private class VpnStreamForward extends StreamForward {
         public VpnStreamForward(Socket vpnSocket, OutputStream outputStream, InetSocketAddress server) throws IOException {
             super(vpnSocket.getInputStream(), outputStream, false, QianxinVPN.this.getRemoteSocketAddress(), server, null, vpnSocket, null, server.getHostName(), false, null);
+        }
+        @Override
+        protected int getReceiveBufferSize() {
+            return VPN_BUFFER_SIZE;
         }
         @Override
         protected boolean forward(byte[] buf) throws IOException {
@@ -418,13 +429,16 @@ public class QianxinVPN extends SSLVpn {
             if (size > buf.length) {
                 throw new IllegalStateException("VPN stream buffer too long");
             }
-            dataInput.readFully(buf, 0, size);
+            dataInput.readFully(buf, 12, size);
             log.debug("forward vpn ip packet: size={}, buf.length={}", size, buf.length);
             for(int i = 0; i < size; i++) {
-                buf[i] ^= ServiceSinkhole.VPN_MAGIC;
+                buf[i + 12] ^= ServiceSinkhole.VPN_MAGIC;
             }
-            byte[] data = buildResponse(GatewayAgent.VPN_PRD_DATA, buf, size);
-            outputStream.write(data);
+            ByteBuffer buffer = ByteBuffer.wrap(buf);
+            buffer.putInt(GatewayAgent.VPN_PRD_DATA);
+            buffer.putInt(size + 4);
+            buffer.putInt(0);
+            outputStream.write(buf, 0, size + 12);
             outputStream.flush();
             return false;
         }
@@ -453,6 +467,7 @@ public class QianxinVPN extends SSLVpn {
         vpnSocket.connect(server, 1000);
         vpnOutputStream = vpnSocket.getOutputStream();
         vpnOutputStream.write(ClientOS.QianxinVPN.ordinal());
+        vpnBuffer = new byte[VPN_BUFFER_SIZE];
 
         StreamForward outbound = new VpnStreamForward(vpnSocket, outputStream, server);
         outbound.startThread(null);
@@ -621,16 +636,12 @@ public class QianxinVPN extends SSLVpn {
     }
 
     private byte[] buildResponse(int tag, byte[] msg) throws IOException {
-        return buildResponse(tag, msg, msg.length);
-    }
-
-    private byte[] buildResponse(int tag, byte[] msg, int length) throws IOException {
-        try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
             DataOutput dataOutput = new DataOutputStream(baos);
             dataOutput.writeInt(tag);
-            dataOutput.writeInt(length + 4);
+            dataOutput.writeInt(msg.length + 4);
             dataOutput.writeInt(0);
-            dataOutput.write(msg, 0, length);
+            dataOutput.write(msg);
             return baos.toByteArray();
         }
     }
@@ -695,6 +706,19 @@ public class QianxinVPN extends SSLVpn {
             log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes, socket=%s", msg.length, socket)));
         }
         return msg;
+    }
+
+    private int readMsg(DataInput dataInput, byte[] buf) throws IOException {
+        int length = dataInput.readInt();
+        dataInput.readFully(buf, 0, length);
+        if (log.isDebugEnabled()) {
+            byte[] tmp = buf;
+            if (length > 32) {
+                tmp = Arrays.copyOf(tmp, 32);
+            }
+            log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes, socket=%s", length, socket)));
+        }
+        return length;
     }
 
     @Override

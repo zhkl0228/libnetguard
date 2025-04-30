@@ -118,9 +118,13 @@ public class StreamForward implements Runnable {
         }
     }
 
+    protected int getReceiveBufferSize() throws IOException {
+        return socket.getReceiveBufferSize();
+    }
+
     private void doForward() {
         try {
-            byte[] buf = new byte[socket.getReceiveBufferSize()];
+            byte[] buf = new byte[getReceiveBufferSize()];
             while (socketException == null) {
                 if (forward(buf)) {
                     break;

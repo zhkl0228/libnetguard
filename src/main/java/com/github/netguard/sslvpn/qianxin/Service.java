@@ -32,6 +32,9 @@ class Service {
     enum AccessType {
         PROXY, // 应用级代理模式: VPN_PROXY_ACCESS
         NC, // VPN_PRD_DATA
+        RAP,
+        WEB,
+        RDP
     }
 
     private AccessType accessType = AccessType.PROXY;
