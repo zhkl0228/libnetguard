@@ -1,4 +1,4 @@
-package com.github.netguard.sslvpn;
+package com.github.netguard.sslvpn.qianxin;
 
 public interface GatewayAgent {
 

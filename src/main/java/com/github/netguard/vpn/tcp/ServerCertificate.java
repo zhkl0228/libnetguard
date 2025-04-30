@@ -61,18 +61,14 @@ public class ServerCertificate {
 
     public ServerCertificate(X509Certificate peerCertificate) {
         this.peerCertificate = peerCertificate;
-        this.commonName = null;
-    }
-
-    private final String commonName;
-
-    public ServerCertificate(String commonName) {
-        this.commonName = commonName;
-        this.peerCertificate = null;
     }
 
     public ServerContext getServerContext(RootCert rootCert) throws Exception {
-        String commonName = getCommonName(peerCertificate);
+        return getServerContext(rootCert, null);
+    }
+
+    public ServerContext getServerContext(RootCert rootCert, String commonName) throws Exception {
+        commonName = getCommonName(peerCertificate, commonName);
         ServerContext serverContext = proxyCertMap.get(commonName);
         if (serverContext == null) {
             SubjectAlternativeNameHolder subjectAlternativeNames = new SubjectAlternativeNameHolder();
@@ -86,7 +82,7 @@ public class ServerCertificate {
         return serverContext;
     }
 
-    private String getCommonName(X509Certificate certificate) {
+    private static String getCommonName(X509Certificate certificate, String commonName) {
         if (certificate == null) {
             if (commonName == null) {
                 throw new IllegalStateException("Invalid commonName");

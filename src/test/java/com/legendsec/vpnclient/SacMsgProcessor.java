@@ -5,7 +5,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.Inspector;
-import com.github.netguard.sslvpn.GatewayAgent;
+import com.github.netguard.sslvpn.qianxin.GatewayAgent;
 import org.krakenapps.pcap.decoder.tcp.DefaultTcpProcessor;
 import org.krakenapps.pcap.decoder.tcp.TcpProcessor;
 import org.krakenapps.pcap.decoder.tcp.TcpSessionKey;

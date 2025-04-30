@@ -4,7 +4,7 @@ import cn.hutool.core.io.IoUtil;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.handler.replay.FileReplay;
 import com.github.netguard.handler.replay.Replay;
-import com.github.netguard.sslvpn.SSLVpn;
+import com.github.netguard.sslvpn.qianxin.QianxinVPN;
 import com.github.netguard.transparent.TransparentSocketProxying;
 import com.github.netguard.vpn.BaseVpnListener;
 import com.github.netguard.vpn.IPacketCapture;
@@ -187,7 +187,7 @@ public class VpnServer {
                     }
                     ProxyVpn vpn = null;
                     if (magic == 0x16) { // SSL
-                        vpn = new SSLVpn(clients, rootCert, socket, inputStream,
+                        vpn = new QianxinVPN(clients, rootCert, socket, inputStream,
                                 getPort());
                     } else if (useNetGuardCore) {
                         try {

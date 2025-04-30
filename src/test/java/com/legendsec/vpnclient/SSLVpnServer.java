@@ -10,8 +10,8 @@ import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.Inspector;
 import com.github.netguard.handler.PcapFileOutputStream;
-import com.github.netguard.sslvpn.GatewayAgent;
-import com.github.netguard.sslvpn.SSLVpn;
+import com.github.netguard.sslvpn.qianxin.GatewayAgent;
+import com.github.netguard.sslvpn.qianxin.QianxinVPN;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import com.github.netguard.vpn.tcp.StreamForward;
@@ -45,8 +45,8 @@ class SSLVpnServer implements Runnable {
         this.server = new InetSocketAddress(hostName, serverPort);
         this.applicationProtocols = applicationProtocols;
         try {
-            ServerCertificate serverCertificate = new ServerCertificate(getClass().getSimpleName());
-            SSLContext serverContext = serverCertificate.getServerContext(RootCert.load()).newSSLContext();
+            ServerCertificate serverCertificate = new ServerCertificate(null);
+            SSLContext serverContext = serverCertificate.getServerContext(RootCert.load(), getClass().getSimpleName()).newSSLContext();
             this.serverSocket = serverContext.getServerSocketFactory().createServerSocket(port, 0);
         } catch (IOException e) {
             throw e;
@@ -432,7 +432,7 @@ class SSLVpnServer implements Runnable {
                                 System.out.println("userData: " + obj.toJSONString());
                                 try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
                                     DataOutput dataOutput = new DataOutputStream(baos);
-                                    SSLVpn.writeStr(dataOutput, obj.toJSONString());
+                                    QianxinVPN.writeStr(dataOutput, obj.toJSONString());
                                     msg = baos.toByteArray();
                                 }
                             }
