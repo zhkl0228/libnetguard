@@ -66,7 +66,7 @@ public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
 
     @Override
     public AcceptUdpResult disconnect() {
-        System.err.printf("discardUdpCall: packetRequest=%s%n", this);
+        System.err.printf("discardUdp: packetRequest=%s%n", this);
         return AcceptUdpResult.rule(AcceptRule.Discard);
     }
 

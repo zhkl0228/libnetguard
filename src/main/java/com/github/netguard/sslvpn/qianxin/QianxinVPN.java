@@ -7,6 +7,7 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
+import com.github.netguard.IPUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.sslvpn.SSLVpn;
@@ -24,15 +25,11 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import java.io.*;
-import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 
 public class QianxinVPN extends SSLVpn {
@@ -93,16 +90,15 @@ public class QianxinVPN extends SSLVpn {
                     switch (tag) {
                         case GatewayAgent.VPN_PRD_DATA: {
                             byte[] msg = readMsg(dataInput);
-                            byte[] ip = Arrays.copyOfRange(msg, 4, msg.length);
                             if (log.isTraceEnabled()) {
-                                log.trace("{}", Inspector.inspectString(ip, String.format("tag=0x%x, socket=%s, vpnOutputStream=%s", tag, socket, vpnOutputStream)));
+                                log.trace("{}", Inspector.inspectString(msg, String.format("tag=0x%x, socket=%s, vpnOutputStream=%s", tag, socket, vpnOutputStream)));
+                            }
+                            for (int i = 4; i < msg.length; i++) {
+                                msg[i] ^= ServiceSinkhole.VPN_MAGIC;
                             }
                             DataOutput dataOutput = new DataOutputStream(vpnOutputStream);
-                            for (int i = 0; i < ip.length; i++) {
-                                ip[i] ^= ServiceSinkhole.VPN_MAGIC;
-                            }
-                            dataOutput.writeShort(ip.length);
-                            dataOutput.write(ip);
+                            dataOutput.writeShort(msg.length - 4);
+                            dataOutput.write(msg, 4, msg.length - 4);
                             break;
                         }
                         case GatewayAgent.VPN_PROXY_ACCESS: {
@@ -274,18 +270,12 @@ public class QianxinVPN extends SSLVpn {
         response.put("rdp_optimize", 0);
         response.put("rdpgroup_list", Collections.emptyList());
         response.put("servicegrouplist", Arrays.asList(new Group("1", "默认组"), new Group("2", "自定义组")));
-        List<Service> services = Arrays.asList(
-                new Service("RootCert", Packet.INSTALL_ROOT_CERT_IP, Packet.INSTALL_ROOT_CERT_IP).setServicePort(Packet.INSTALL_ROOT_CERT_PORT, Service.AccessType.NC),
-                new Service("Test", "183.6.211.61", "2025.ip138.com"),
-                new Service("172.18网段", "192.18.0.0-192.18.255.255", "192.18.0.0/255.255.0.0").setHide(),
-                new Service("威固报价系统", "10.163.51.119", "10.163.51.119").setServicePort(8080, Service.AccessType.NC),
-                new Service("视频监控", "192.168.88.66", "192.168.88.66").setServicePort(8096),
-                new Service("Socks", "8.217.195.104", "8.217.195.104").setServicePort(80, Service.AccessType.NC)
-        );
+        List<Service> services = new ArrayList<>();
+        services.add(new Service("RootCert", Packet.INSTALL_ROOT_CERT_IP, Packet.INSTALL_ROOT_CERT_IP).setServicePort(Packet.INSTALL_ROOT_CERT_PORT, Service.AccessType.NC));
+        configServices(services);
         JSONArray array = new JSONArray(services.size());
-        int id = 1;
         for (Service service : services) {
-            array.add(service.toJSON(id++));
+            array.add(service.toJSON(1));
         }
         response.put("servicelist", array);
         response.put("sm_enc_algo", "");
@@ -308,6 +298,68 @@ public class QianxinVPN extends SSLVpn {
         response.put("version", "1.0");
         response.put("wol_list", "");
         return buildResponse(tag, response);
+    }
+
+    private void configServices(List<Service> services) {
+        // Exclude IP ranges
+        List<IPUtil.CIDR> listExclude = new ArrayList<>();
+
+        // DNS address
+        for (String ip : DNS_LIST) {
+            try {
+                Inet4Address dns = (Inet4Address) Inet4Address.getByName(ip);
+                listExclude.add(new IPUtil.CIDR(dns.getHostAddress(), 24));
+            } catch(UnknownHostException ignored) {}
+        }
+
+        listExclude.add(new IPUtil.CIDR("127.0.0.0", 8)); // localhost
+
+        // USB tethering 192.168.42.x
+        // Wi-Fi tethering 192.168.43.x
+        listExclude.add(new IPUtil.CIDR("192.168.42.0", 23));
+        // Wi-Fi direct 192.168.49.x
+        listExclude.add(new IPUtil.CIDR("192.168.49.0", 24));
+
+        // Broadcast
+        listExclude.add(new IPUtil.CIDR("224.0.0.0", 3));
+
+        Collections.sort(listExclude);
+
+        try {
+            InetAddress start = InetAddress.getByName("0.0.0.0");
+            for (IPUtil.CIDR exclude : listExclude) {
+                for (IPUtil.CIDR include : IPUtil.toCIDR(start, IPUtil.minus1(exclude.getStart()))) {
+                    Service service = createService(include);
+                    if (log.isDebugEnabled()) {
+                        log.debug("addExcludeRoute address={}, prefix={}, include={}, service={}", include.address, include.prefix, include, service.toJSON(0));
+                    }
+                    services.add(service);
+                }
+                start = IPUtil.plus1(exclude.getEnd());
+            }
+            for (IPUtil.CIDR include : IPUtil.toCIDR("224.0.0.0", "255.255.255.255")) {
+                Service service = createService(include);
+                if (log.isDebugEnabled()) {
+                    log.debug("addRoute address={}, prefix={}, include={}, service={}", include.address, include.prefix, include, service.toJSON(0));
+                }
+                services.add(service);
+            }
+        } catch (UnknownHostException ignored) {
+        }
+    }
+
+    private Service createService(IPUtil.CIDR include) {
+        String startIp = include.getStart().getHostAddress();
+        String ip = String.format("%s-%s", startIp, include.getEnd().getHostAddress());
+        long addr = IPUtil.prefix2mask(include.prefix);
+        InetAddress address = IPUtil.long2inet(addr);
+        if (address == null) {
+            throw new IllegalStateException("Invalid include: " + include);
+        }
+        String name = String.format("%s/%s", startIp, address.getHostAddress());
+        Service service = new Service(startIp, ip, name).setHide();
+        service.setServicePort(0, Service.AccessType.NC);
+        return service;
     }
 
     private static final int ERR_PROXY_CONNECT = 0x4000410;
@@ -378,6 +430,8 @@ public class QianxinVPN extends SSLVpn {
         }
     }
 
+    private static final List<String> DNS_LIST = Arrays.asList("8.8.8.8", "8.8.4.4");
+
     private byte[] handleVpnNcAccess(int tag, byte[] msg, OutputStream outputStream) throws IOException {
         ByteBuffer buffer = ByteBuffer.wrap(msg);
         byte[] ticket = new byte[32];
@@ -407,9 +461,8 @@ public class QianxinVPN extends SSLVpn {
         try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             DataOutput dataOutput = new DataOutputStream(baos);
             writeStr(dataOutput, "10.1.10.1");
-            List<String> dnsList = Arrays.asList("114.114.114.114", "8.8.8.8");
-            dataOutput.writeInt(dnsList.size());
-            for (String dns : dnsList) {
+            dataOutput.writeInt(DNS_LIST.size());
+            for (String dns : DNS_LIST) {
                 writeStr(dataOutput, dns);
             }
             dataOutput.writeInt(0); // wins
@@ -460,7 +513,7 @@ public class QianxinVPN extends SSLVpn {
         obj.put("antivirus", 0);
         obj.put("cert_flag", 0);
         obj.put("dns_resolve_once", 1);
-        obj.put("find_pwd", 1);
+        obj.put("find_pwd", 0);
         obj.put("gateway_version", GATEWAY_VERSION);
         obj.put("gm_port", 0);
         obj.put("prd_port2", 0);
@@ -473,7 +526,7 @@ public class QianxinVPN extends SSLVpn {
         obj.put("standard_port", serverPort);
         obj.put("terminal_line_type", 31);
         obj.put("use_gm_ssl", 0);
-        obj.put("user_reg", 1);
+        obj.put("user_reg", 0);
         return buildResponse(tag, obj);
     }
 
@@ -508,7 +561,7 @@ public class QianxinVPN extends SSLVpn {
         response.put("AuthNextFlag", 0);
         response.put("AuthTime", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
         response.put("ClientIP", getRemoteSocketAddress().getAddress().getHostAddress());
-        response.put("EnableChangePwd", 1);
+        response.put("EnableChangePwd", 0);
         response.put("RepeatFlag", 0);
         response.put("SMSAuzFlag", 0);
         response.put("ThisUserID", USER_ID);
@@ -598,12 +651,12 @@ public class QianxinVPN extends SSLVpn {
     private static JSONArray buildAuthList() {
         JSONObject auth = new JSONObject(true);
         auth.put("AuthID", 1);
-        auth.put("AuthName", "Any");
+        auth.put("AuthName", "VPN");
         auth.put("IamFlag", 0);
         auth.put("PushFlag", 0);
         auth.put("QrFlag", 0);
         auth.put("SubAuthID", 1);
-        auth.put("SubAuthName", "Any");
+        auth.put("SubAuthName", "NetGuard");
         auth.put("SubAuthType", 0);
         JSONArray array = new JSONArray(1);
         array.add(auth);

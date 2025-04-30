@@ -16,10 +16,6 @@ class Service {
 
     private int servicePort;
 
-    public final Service setServicePort(int port) {
-        return setServicePort(port, AccessType.PROXY);
-    }
-
     public final Service setServicePort(int port, AccessType accessType) {
         this.servicePort = port;
         this.accessType = accessType;
@@ -44,7 +40,7 @@ class Service {
         boolean isService = servicePort > 0;
         JSONObject service = new JSONObject(true);
         service.put("accesstype", accessType.ordinal());
-        service.put("client_hide", hide ? 2 : 1); // 2, 3 means hide
+        service.put("client_hide", hide ? 3 : 1); // 2, 3 means hide
         service.put("groupid", 0);
         service.put("id", id);
         service.put("index_page", "");
