@@ -4,10 +4,12 @@ import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.net.DefaultTrustManager;
 import cn.hutool.core.util.HexUtil;
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.Inspector;
+import com.github.netguard.sslvpn.GatewayAgent;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import com.github.netguard.vpn.tcp.StreamForward;
@@ -22,11 +24,12 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
-class SSLVpnServer implements Runnable {
+class SSLVpnServer implements Runnable, Closeable {
 
     private static final Logger log = LoggerFactory.getLogger(SSLVpnServer.class);
 
@@ -40,7 +43,7 @@ class SSLVpnServer implements Runnable {
         this.server = new InetSocketAddress(hostName, serverPort);
         this.applicationProtocols = applicationProtocols;
         try {
-            ServerCertificate serverCertificate = new ServerCertificate(null);
+            ServerCertificate serverCertificate = new ServerCertificate(getClass().getSimpleName());
             SSLContext serverContext = serverCertificate.getServerContext(RootCert.load()).newSSLContext();
             this.serverSocket = serverContext.getServerSocketFactory().createServerSocket(port, 0);
         } catch (IOException e) {
@@ -155,6 +158,16 @@ class SSLVpnServer implements Runnable {
         public void startThread() {
             startThread(null);
         }
+        private static String readStr(ByteBuffer buffer) {
+            int length = buffer.getInt();
+            byte[] bytes = new byte[length];
+            buffer.get(bytes);
+            int off = length % 4;
+            if (off > 0) {
+                buffer.position(buffer.position() - off + 4);
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
         private boolean isSSL;
         @Override
         protected boolean forward(byte[] buf) throws IOException {
@@ -165,6 +178,84 @@ class SSLVpnServer implements Runnable {
             int tag = dataInput.readInt();
             if (server) {
                 switch (tag) {
+                    case GatewayAgent.VPN_PROXY_ACCESS: {
+                        final int length = dataInput.readInt();
+                        byte[] msg = new byte[length];
+                        dataInput.readFully(msg);
+                        ByteBuffer buffer = ByteBuffer.wrap(msg);
+                        byte[] ticket = new byte[32];
+                        buffer.get(ticket);
+                        String username = readStr(buffer);
+                        int version = buffer.getInt();
+                        int extFlag = buffer.getInt();
+                        int svcId = buffer.getInt();
+                        String svr_name = readStr(buffer);
+                        String svr_ip = readStr(buffer);
+                        String svr_port = readStr(buffer);
+                        int compress = buffer.getInt();
+                        int count = buffer.getInt();
+                        if (log.isDebugEnabled()) {
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes proxy server: username=%s, version=%d, extFlag=0x%x, svcId=%d, svr_name=%s, svr_ip=%s, svr_port=%s, compress=%d, count=%d, remaining=%d", msg.length, username,
+                                    version, extFlag, svcId, svr_name, svr_ip, svr_port, compress, count, buffer.remaining())));
+                        }
+                        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 8)) {
+                            DataOutput dataOutput = new DataOutputStream(baos);
+                            dataOutput.writeInt(tag);
+                            dataOutput.writeInt(length);
+                            dataOutput.write(msg);
+                            outputStream.write(baos.toByteArray());
+                            outputStream.flush();
+                        }
+                        break;
+                    }
+                    case GatewayAgent.VPN_NC_ACCESS: {
+                        final int length = dataInput.readInt();
+                        byte[] msg = new byte[length];
+                        dataInput.readFully(msg);
+                        ByteBuffer buffer = ByteBuffer.wrap(msg);
+                        byte[] ticket = new byte[32];
+                        buffer.get(ticket);
+                        String username = readStr(buffer);
+                        String password = null;
+                        int version = buffer.getInt();
+                        int compress = buffer.getInt();
+                        String ip = null;
+                        if (version > 0) {
+                            ip = readStr(buffer);
+                        }
+                        if (version > 1) {
+                            password = readStr(buffer);
+                        }
+                        if (log.isDebugEnabled()) {
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes NC server: username=%s, password=%s, version=%d, compress=%s, ip=%s, socket=%s", msg.length, username, password, version, compress, ip, socket)));
+                        }
+                        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 8)) {
+                            DataOutput dataOutput = new DataOutputStream(baos);
+                            dataOutput.writeInt(tag);
+                            dataOutput.writeInt(length);
+                            dataOutput.write(msg);
+                            outputStream.write(baos.toByteArray());
+                            outputStream.flush();
+                        }
+                        break;
+                    }
+                    case GatewayAgent.VPN_PRD_DATA: {
+                        final int length = dataInput.readInt();
+                        byte[] msg = new byte[length];
+                        dataInput.readFully(msg);
+                        if (log.isDebugEnabled()) {
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes prd data server", msg.length)));
+                        }
+                        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 8)) {
+                            DataOutput dataOutput = new DataOutputStream(baos);
+                            dataOutput.writeInt(tag);
+                            dataOutput.writeInt(length);
+                            dataOutput.write(msg);
+                            outputStream.write(baos.toByteArray());
+                            outputStream.flush();
+                        }
+                        break;
+                    }
                     case GatewayAgent.VPN_GET_PORTAL:
                     case GatewayAgent.VPN_LOGIN:
                     case GatewayAgent.VPN_GET_USERDATA:
@@ -187,15 +278,9 @@ class SSLVpnServer implements Runnable {
                         }
 
                         ByteBuffer buffer = ByteBuffer.wrap(msg);
-                        int jsonSize = buffer.getInt();
-                        if (jsonSize <= buffer.remaining()) {
-                            byte[] json = new byte[jsonSize];
-                            buffer.get(json);
-                            JSONObject obj = JSON.parseObject(new String(json, StandardCharsets.UTF_8).trim(), Feature.OrderedField);
-                            log.info("handleMsgReq: tag=0x{}, {}", Integer.toHexString(tag), obj == null ? "json=" + HexUtil.encodeHexStr(json) : obj.toString(SerializerFeature.PrettyFormat));
-                        } else {
-                            log.warn("Received wrong buffer length: {}, remaining={}", jsonSize, buffer.remaining());
-                        }
+                        String json = readStr(buffer);
+                        JSONObject obj = JSON.parseObject(json, Feature.OrderedField);
+                        log.info("handleMsgReq: tag=0x{}, {}", Integer.toHexString(tag), obj == null ? "json=" + HexUtil.encodeHexStr(json) : obj.toString(SerializerFeature.PrettyFormat));
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 8)) {
                             DataOutput dataOutput = new DataOutputStream(baos);
                             dataOutput.writeInt(tag);
@@ -206,6 +291,7 @@ class SSLVpnServer implements Runnable {
                         }
                         break;
                     }
+                    case 0x504f5354:
                     case 0x47455420: {
                         log.debug("Received SSL tag: 0x{}, socket={}", Integer.toHexString(tag), socket);
                         isSSL = true;
@@ -221,6 +307,87 @@ class SSLVpnServer implements Runnable {
                 }
             } else {
                 switch (tag & Integer.MAX_VALUE) {
+                    case GatewayAgent.VPN_PRD_DATA: {
+                        final int length = dataInput.readInt();
+                        final int error = dataInput.readInt();
+                        byte[] msg = new byte[length - 4];
+                        dataInput.readFully(msg);
+                        if (log.isDebugEnabled()) {
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes prd data client error=0x%x", msg.length, error)));
+                        }
+                        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
+                            DataOutput dataOutput = new DataOutputStream(baos);
+                            dataOutput.writeInt(tag);
+                            dataOutput.writeInt(msg.length + 4);
+                            dataOutput.writeInt(error);
+                            dataOutput.write(msg);
+                            outputStream.write(baos.toByteArray());
+                            outputStream.flush();
+                            break;
+                        }
+                    }
+                    case GatewayAgent.VPN_PROXY_ACCESS: {
+                        final int length = dataInput.readInt();
+                        final int error = dataInput.readInt();
+                        byte[] msg = new byte[length - 4];
+                        dataInput.readFully(msg);
+                        ByteBuffer buffer = ByteBuffer.wrap(msg);
+                        String ip = readStr(buffer);
+                        int port = buffer.getInt();
+                        if (log.isDebugEnabled()) {
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes proxy client error=0x%x, proxy=%s:%d", msg.length, error, ip, port)));
+                        }
+                        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
+                            DataOutput dataOutput = new DataOutputStream(baos);
+                            dataOutput.writeInt(tag);
+                            dataOutput.writeInt(msg.length + 4);
+                            dataOutput.writeInt(error);
+                            dataOutput.write(msg);
+                            outputStream.write(baos.toByteArray());
+                            outputStream.flush();
+                            break;
+                        }
+                    }
+                    case GatewayAgent.VPN_NC_ACCESS: {
+                        final int length = dataInput.readInt();
+                        final int error = dataInput.readInt();
+                        byte[] msg = new byte[length - 4];
+                        dataInput.readFully(msg);
+                        ByteBuffer buffer = ByteBuffer.wrap(msg);
+                        String ipv4 = readStr(buffer);
+                        int count = buffer.getInt();
+                        List<String> dns4 = new ArrayList<>(count);
+                        for (int i = 0; i < count; i++) {
+                            dns4.add(readStr(buffer));
+                        }
+                        count = buffer.getInt();
+                        List<String> wins = new ArrayList<>(count);
+                        for(int i = 0; i < count; i++) {
+                            wins.add(readStr(buffer));
+                        }
+                        count = buffer.getInt();
+                        for(int i = 0; i < count; i++) { // route_assign
+                            readStr(buffer);
+                            readStr(buffer);
+                        }
+                        int routeOpt = buffer.getInt();
+                        boolean routeAuto = buffer.getInt() != 0;
+                        String dnsSuffix = readStr(buffer);
+                        if (log.isDebugEnabled()) {
+                            log.debug("{}", Inspector.inspectString(msg, String.format("forward %d bytes NC client tag=0x%x, error=0x%x, ipv4=%s, dns4=%s, wins=%s, routeOpt=%d, routeAuto=%s, dnsSuffix=%s, socket=%s, remaining=%d", msg.length, tag, error, ipv4, dns4, wins,
+                                    routeOpt, routeAuto, dnsSuffix, socket, buffer.remaining())));
+                        }
+                        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
+                            DataOutput dataOutput = new DataOutputStream(baos);
+                            dataOutput.writeInt(tag);
+                            dataOutput.writeInt(msg.length + 4);
+                            dataOutput.writeInt(error);
+                            dataOutput.write(msg);
+                            outputStream.write(baos.toByteArray());
+                            outputStream.flush();
+                            break;
+                        }
+                    }
                     case GatewayAgent.VPN_GET_PORTAL:
                     case GatewayAgent.VPN_LOGIN:
                     case GatewayAgent.VPN_GET_USERDATA:
@@ -245,14 +412,14 @@ class SSLVpnServer implements Runnable {
 
                         if (error == 0) {
                             ByteBuffer buffer = ByteBuffer.wrap(msg);
-                            int jsonSize;
-                            if (buffer.remaining() >= 4 && (jsonSize = buffer.getInt()) > 0 && jsonSize <= buffer.remaining()) {
-                                byte[] json = new byte[jsonSize];
-                                buffer.get(json);
-                                JSONObject obj = JSON.parseObject(new String(json, StandardCharsets.UTF_8).trim(), Feature.OrderedField);
-                                log.info("handleMsgResp: tag=0x{}, {}", Integer.toHexString(tag), obj == null ? "json=" + HexUtil.encodeHexStr(json) : obj.toString(SerializerFeature.PrettyFormat));
-                            } else {
-                                log.info("handleMsgResp: tag=0x{}", Integer.toHexString(tag));
+                            String json = readStr(buffer);
+                            JSONObject obj = JSON.parseObject(json, Feature.OrderedField);
+                            log.info("handleMsgResp: tag=0x{}, {}\n{}", Integer.toHexString(tag), obj == null ? "json=" + HexUtil.encodeHexStr(json) : obj.toString(SerializerFeature.PrettyFormat),
+                                    obj == null ? "json=" + json : obj.toJSONString());
+                            JSONArray array = obj == null ? null : obj.getJSONArray("servicelist");
+                            if (array != null) {
+                                System.out.println("servicelist: " + array.toJSONString());
+                                System.out.println("userData: " + obj.toJSONString());
                             }
                         }
                         try(ByteArrayOutputStream baos = new ByteArrayOutputStream(msg.length + 12)) {
@@ -282,5 +449,10 @@ class SSLVpnServer implements Runnable {
             }
             return false;
         }
+    }
+
+    @Override
+    public void close() {
+        IoUtil.close(serverSocket);
     }
 }

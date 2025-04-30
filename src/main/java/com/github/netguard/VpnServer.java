@@ -4,6 +4,7 @@ import cn.hutool.core.io.IoUtil;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.handler.replay.FileReplay;
 import com.github.netguard.handler.replay.Replay;
+import com.github.netguard.sslvpn.SSLVpn;
 import com.github.netguard.transparent.TransparentSocketProxying;
 import com.github.netguard.vpn.BaseVpnListener;
 import com.github.netguard.vpn.IPacketCapture;
@@ -170,10 +171,26 @@ public class VpnServer {
                         serverSocket.setSoTimeout(NO_CLIENT_BROADCAST_DELAY_MILLIS);
                     }
                     Socket socket = serverSocket.accept();
+                    final InputStream inputStream;
+                    final int magic;
+                    try {
+                        PushbackInputStream pushbackInputStream = new PushbackInputStream(socket.getInputStream());
+                        inputStream = pushbackInputStream;
+                        magic = new DataInputStream(pushbackInputStream).readUnsignedByte();
+                        if (magic == 0x16) {
+                            pushbackInputStream.unread(magic);
+                        }
+                        log.debug("Accept client magic: 0x{}", Integer.toHexString(magic));
+                    } catch (IOException e) {
+                        IOUtils.closeQuietly(socket);
+                        continue;
+                    }
                     ProxyVpn vpn = null;
-                    if (useNetGuardCore) {
+                    if (magic == 0x16) { // SSL
+                        vpn = new SSLVpn(clients, rootCert, socket, inputStream);
+                    } else if (useNetGuardCore) {
                         try {
-                            vpn = new ServiceSinkhole(socket, clients, rootCert);
+                            vpn = new ServiceSinkhole(socket, clients, rootCert, magic);
                         } catch (UnsatisfiedLinkError e) {
                             log.debug("init ServiceSinkhole", e);
                             useNetGuardCore = false;
@@ -184,7 +201,7 @@ public class VpnServer {
                     }
                     if (vpn == null) {
                         try {
-                            vpn = new ProxyVpnRunnable(socket, clients, rootCert);
+                            vpn = new ProxyVpnRunnable(socket, clients, rootCert, magic);
                         } catch (IOException e) {
                             IOUtils.closeQuietly(socket);
                             continue;

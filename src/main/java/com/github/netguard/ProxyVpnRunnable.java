@@ -47,11 +47,11 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
 
     private final ExecutorService pingThreadPool;
 
-    ProxyVpnRunnable(Socket socket, List<ProxyVpn> clients, RootCert rootCert) throws IOException {
+    ProxyVpnRunnable(Socket socket, List<ProxyVpn> clients, RootCert rootCert, int os) throws IOException {
         super(clients, rootCert);
         this.socket = socket;
         this.vpnReadStream = new DataInputStream(socket.getInputStream());
-        this.clientOS = readOS(this, vpnReadStream);
+        this.clientOS = readOS(this, vpnReadStream, os);
 
         // Packets from upstream servers, received by this VPN
         OutputStream vpnWriteStream = socket.getOutputStream();

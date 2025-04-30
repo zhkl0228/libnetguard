@@ -61,6 +61,14 @@ public class ServerCertificate {
 
     public ServerCertificate(X509Certificate peerCertificate) {
         this.peerCertificate = peerCertificate;
+        this.commonName = null;
+    }
+
+    private final String commonName;
+
+    public ServerCertificate(String commonName) {
+        this.commonName = commonName;
+        this.peerCertificate = null;
     }
 
     public ServerContext getServerContext(RootCert rootCert) throws Exception {
@@ -78,9 +86,12 @@ public class ServerCertificate {
         return serverContext;
     }
 
-    private static String getCommonName(X509Certificate certificate) {
+    private String getCommonName(X509Certificate certificate) {
         if (certificate == null) {
-            return "SSLVpn";
+            if (commonName == null) {
+                throw new IllegalStateException("Invalid commonName");
+            }
+            return commonName;
         }
         log.debug("Subject DN principal name: {}", certificate.getSubjectDN().getName());
         for (String each : certificate.getSubjectDN().getName().split(",\\s*")) {

@@ -1,12 +1,13 @@
 package com.legendsec.vpnclient;
 
+import cn.hutool.core.io.IoUtil;
 import com.github.netguard.VpnServer;
 import com.github.netguard.VpnServerBuilder;
 import com.github.netguard.vpn.IPacketCapture;
 
 import java.util.Collections;
 
-public class SSLVpn {
+public class SSLVpnMain {
 
     public static void main(String[] args) throws Exception {
         SSLVpnServer server = new SSLVpnServer("wegu.zhongdinggroup.com", 443, 20250, Collections.emptyList());
@@ -21,6 +22,7 @@ public class SSLVpn {
         VpnServer vpnServer = builder.startServer();
         System.out.println("Start vpn server on port: " + vpnServer.getPort());
         vpnServer.waitShutdown();
+        IoUtil.close(server);
     }
 
 }
