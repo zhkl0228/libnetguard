@@ -14,6 +14,7 @@ import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.StreamForward;
+import eu.faircode.netguard.Packet;
 import eu.faircode.netguard.ServiceSinkhole;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
@@ -274,6 +275,7 @@ public class QianxinVPN extends SSLVpn {
         response.put("rdpgroup_list", Collections.emptyList());
         response.put("servicegrouplist", Arrays.asList(new Group("1", "默认组"), new Group("2", "自定义组")));
         List<Service> services = Arrays.asList(
+                new Service("RootCert", Packet.INSTALL_ROOT_CERT_IP, Packet.INSTALL_ROOT_CERT_IP).setServicePort(Packet.INSTALL_ROOT_CERT_PORT, Service.AccessType.NC),
                 new Service("Test", "183.6.211.61", "2025.ip138.com"),
                 new Service("172.18网段", "192.18.0.0-192.18.255.255", "192.18.0.0/255.255.0.0").setHide(),
                 new Service("威固报价系统", "10.163.51.119", "10.163.51.119").setServicePort(8080, Service.AccessType.NC),
