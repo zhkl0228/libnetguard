@@ -478,7 +478,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         obj.put("sm_enc_algo", "");
         obj.put("sm_enc_algo_id", 0);
         obj.put("standard_port", serverPort);
-        obj.put("terminal_line_type", 31);
+        obj.put("terminal_line_type", 0); // 控制是否允许电信网络访问
         obj.put("use_gm_ssl", 0);
         obj.put("user_reg", 0);
         return buildResponse(tag, obj);
