@@ -55,7 +55,6 @@ public abstract class SSLVpn extends ProxyVpn {
         this.inputStream = inputStream;
         this.serverPort = serverPort;
         try {
-            socket.setSoTimeout(60000);
             SSLContext serverContext = SSL_VPN_SERVER_CERTIFICATE.getServerContext(RootCert.load(), getClass().getSimpleName()).newSSLContext();
             factory = serverContext.getSocketFactory();
         } catch(Exception e) {

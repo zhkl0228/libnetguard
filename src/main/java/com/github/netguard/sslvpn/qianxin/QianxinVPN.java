@@ -107,7 +107,7 @@ public class QianxinVPN extends SSLVpn {
                         }
                         case GatewayAgent.VPN_NC_ACCESS: {
                             byte[] msg = readMsg(dataInput);
-                            byte[] data = handleVpnNcAccess(tag, msg, outputStream);
+                            byte[] data = handleNcAuthorize(tag, msg, outputStream);
                             outputStream.write(data);
                             outputStream.flush();
                             break;
@@ -446,7 +446,7 @@ public class QianxinVPN extends SSLVpn {
 
     private static final List<String> DNS_LIST = Arrays.asList("8.8.8.8", "8.8.4.4");
 
-    private byte[] handleVpnNcAccess(int tag, byte[] msg, OutputStream outputStream) throws IOException {
+    private byte[] handleNcAuthorize(int tag, byte[] msg, OutputStream outputStream) throws IOException {
         ByteBuffer buffer = ByteBuffer.wrap(msg);
         byte[] ticket = new byte[32];
         buffer.get(ticket);
@@ -472,8 +472,8 @@ public class QianxinVPN extends SSLVpn {
         StreamForward outbound = new VpnStreamForward(vpnSocket, outputStream, server);
         outbound.startThread(null);
 
-        log.debug("handleVpnNcAccess username={}, password={}, version={}, compress={}, ip={}, remaining={}", username, password, version, compress, ip, buffer.remaining());
-        try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+        log.debug("handleNcAuthorize username={}, password={}, version={}, compress={}, ip={}, remaining={}", username, password, version, compress, ip, buffer.remaining());
+        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(128)) {
             DataOutput dataOutput = new DataOutputStream(baos);
             writeStr(dataOutput, "10.1.10.1");
             dataOutput.writeInt(DNS_LIST.size());
@@ -481,16 +481,25 @@ public class QianxinVPN extends SSLVpn {
                 writeStr(dataOutput, dns);
             }
             dataOutput.writeInt(0); // wins
-            dataOutput.writeInt(0); // route_assign
-            int routeOpt = 0;
+            if (log.isDebugEnabled()) { // unused route_assign
+                dataOutput.writeInt(1);
+                writeStr(dataOutput, "192.168.1.12"); // start
+                writeStr(dataOutput, "192.168.1.18"); // end
+            } else {
+                dataOutput.writeInt(0); // route_assign
+            }
+            final int routeOpt = 0;
             dataOutput.writeInt(routeOpt);
-            int routeAuto = 1;
+            final int routeAuto = log.isDebugEnabled() ? 0 : 1;
             dataOutput.writeInt(routeAuto);
-            String dnsSuffix = "";
-            writeStr(dataOutput, dnsSuffix);
-            dataOutput.writeInt(0);
-            dataOutput.writeInt(0);
-            return buildResponse(tag, baos.toByteArray());
+            writeStr(dataOutput, ""); // dnsSuffix
+            writeStr(dataOutput, "");
+            writeStr(dataOutput, log.isDebugEnabled() ? "fd00:1:fd00:1:fd00:1:fd00:1" : ""); // ipv6
+            byte[] data = buildResponse(tag, baos.toByteArray());
+            if (log.isDebugEnabled()) {
+                log.debug("{}", Inspector.inspectString(data, "handleNcAuthorize"));
+            }
+            return data;
         }
     }
 
@@ -712,7 +721,7 @@ public class QianxinVPN extends SSLVpn {
         int length = dataInput.readInt();
         dataInput.readFully(buf, 0, length);
         if (log.isDebugEnabled()) {
-            byte[] tmp = buf;
+            byte[] tmp = Arrays.copyOf(buf, length);
             if (length > 32) {
                 tmp = Arrays.copyOf(tmp, 32);
             }
