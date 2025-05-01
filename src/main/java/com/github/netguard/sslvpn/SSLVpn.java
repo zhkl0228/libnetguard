@@ -2,6 +2,7 @@ package com.github.netguard.sslvpn;
 
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.crypto.digest.DigestUtil;
+import com.github.netguard.IPUtil;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.sslvpn.qianxin.QianxinVPN;
 import com.github.netguard.vpn.ClientOS;
@@ -20,9 +21,14 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import java.io.*;
+import java.net.Inet4Address;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -30,6 +36,8 @@ import java.util.concurrent.TimeUnit;
 public abstract class SSLVpn extends ProxyVpn {
 
     private static final Logger log = LoggerFactory.getLogger(SSLVpn.class);
+
+    protected static final List<String> DNS_LIST = Arrays.asList("8.8.8.8", "8.8.4.4");
 
     private static final ServerCertificate SSL_VPN_SERVER_CERTIFICATE = new ServerCertificate(null);
 
@@ -65,8 +73,6 @@ public abstract class SSLVpn extends ProxyVpn {
             throw new IllegalStateException(e);
         }
     }
-
-
 
     @Override
     protected final void doRunVpn() {
@@ -113,7 +119,7 @@ public abstract class SSLVpn extends ProxyVpn {
             headers.add("Content-Type", contentType);
         }
         headers.add("Content-Length", String.valueOf(data.length));
-        headers.add("Connection", "close");
+        headers.add("Connection", "keep-alive");
         headers.add("Server", getHttpServerName());
         return new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.wrappedBuffer(data), headers,
                 DefaultHttpHeadersFactory.trailersFactory().newEmptyHeaders());
@@ -127,6 +133,7 @@ public abstract class SSLVpn extends ProxyVpn {
             dataInput.readFully(header);
             dataOutput.write(header);
             HttpRequest request = ClientHelloRecord.detectHttp(baos, dataInput);
+            log.debug("handleHttp socket={}, request={}", socket, request);
             if (request != null) {
                 HttpResponse response = handleHttpRequest(request);
                 log.debug("Handle httpResponse: {}", response);
@@ -144,8 +151,7 @@ public abstract class SSLVpn extends ProxyVpn {
     }
 
     protected final void writeResponse(OutputStream outputStream, HttpResponse response) throws IOException {
-        StringWriter buffer = new StringWriter();
-        PrintWriter writer = new PrintWriter(buffer);
+        PrintWriter writer = new PrintWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8), false);
         writer.write(response.protocolVersion().toString());
         writer.write(" ");
         writer.write(response.status().toString());
@@ -157,7 +163,6 @@ public abstract class SSLVpn extends ProxyVpn {
             writer.write("\r\n");
         });
         writer.write("\r\n");
-        outputStream.write(buffer.toString().getBytes(StandardCharsets.UTF_8));
         if (response instanceof HttpContent) {
             HttpContent httpContent = (HttpContent) response;
             try(InputStream in = new ByteBufInputStream(httpContent.content())) {
@@ -184,6 +189,35 @@ public abstract class SSLVpn extends ProxyVpn {
     @Override
     public final InetSocketAddress getRemoteSocketAddress() {
         return (InetSocketAddress) socket.getRemoteSocketAddress();
+    }
+
+    protected static List<IPUtil.CIDR> getExcludeIPRanges() {
+        // Exclude IP ranges
+        List<IPUtil.CIDR> listExclude = new ArrayList<>();
+
+        // DNS address
+        for (String ip : DNS_LIST) {
+            try {
+                Inet4Address dns = (Inet4Address) Inet4Address.getByName(ip);
+                listExclude.add(new IPUtil.CIDR(dns.getHostAddress(), 24));
+            } catch(UnknownHostException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        listExclude.add(new IPUtil.CIDR("127.0.0.0", 8)); // localhost
+
+        // USB tethering 192.168.42.x
+        // Wi-Fi tethering 192.168.43.x
+        listExclude.add(new IPUtil.CIDR("192.168.42.0", 23));
+        // Wi-Fi direct 192.168.49.x
+        listExclude.add(new IPUtil.CIDR("192.168.49.0", 24));
+
+        // Broadcast
+        listExclude.add(new IPUtil.CIDR("224.0.0.0", 3));
+
+        Collections.sort(listExclude);
+        return listExclude;
     }
 
 }

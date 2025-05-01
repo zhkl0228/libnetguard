@@ -43,7 +43,7 @@ class Service {
         boolean isService = servicePort > 0;
         JSONObject service = new JSONObject(true);
         service.put("accesstype", accessType.ordinal());
-        service.put("client_hide", hide ? 3 : 1); // 2, 3 means hide
+        service.put("client_hide", hide ? 3 : 0); // 2, 3 means hide
         service.put("groupid", 0);
         service.put("id", id);
         service.put("index_page", "");

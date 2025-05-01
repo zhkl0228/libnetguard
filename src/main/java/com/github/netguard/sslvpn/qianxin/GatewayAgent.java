@@ -2,6 +2,9 @@ package com.github.netguard.sslvpn.qianxin;
 
 public interface GatewayAgent {
 
+    int USER_ID = 1;
+    String GATEWAY_VERSION = "V 5.0 ( 6.2.150.51945 )";
+
     // req: {"hostname":"vpn.bonc.com.cn","AccessMethod":21,"port":443,"package_name":"com.legendsec.vpnclient","client_type":"ios","client_version":"6.0.11"}
     // resp: {"terminal_line_type":0,"user_reg":1,"dns_resolve_once":0,"PasswdPolicy":"{\"pass_min\":12,\"pass_max\":32,\"pass_change\":90,\"pass_warning\":10,\"first_login\":1,\"same_pass\":0,\"number\":1,\"number_size\":1,\"up_letter\":1,\"up_size\":1,\"low_letter\":1,\"low_size\":1,\"spe_letter\":1,\"spe_size\":1}","antivirus":0,"gm_port":444,"sm2_application":"SSLVPN","use_gm_ssl":0,"AuthList":[{"SubAuthType":0,"AuthID":8,"AuthName":"手机短信认证","PushFlag":0,"SubAuthName":"本地认证","QrFlag":0,"SubAuthID":1,"IamFlag":0}],"sm_enc_algo_id":0,"prd_port2":0,"show_authen":0,"sm2_container":"Client","cert_flag":1,"gateway_version":"V 5.0 ( 6.2.124.40141 )","find_pwd":1,"sm_enc_algo":"","sm_cert":0}
     // req: {"hostname":"vpn.sues.edu.cn","AccessMethod":21,"port":443,"package_name":"com.legendsec.vpnclient","client_type":"ios","client_version":"6.0.11"}
@@ -61,13 +64,14 @@ public interface GatewayAgent {
     // resp: {"applist":[]}
     int VPN_QUERY_APP_LIST = 0x200020f;
 
-    int VPN_DOWNLOAD_USER_CERT = 0x130011;
-    int VPN_DOWNLOAD_USER_CERT_STATUS = 0x130020;
     int VPN_PASSWORD_INIT = 0x200041a;
     int VPN_PASSWORD_UPDATE = 0x200041e;
 
     int VPN_PROXY_ACCESS = 0x1000001;
     int VPN_NC_ACCESS = 0x1000002;
     int VPN_PRD_DATA = 0x100000a;
+
+    int ERR_PROXY_CONNECT = 0x4000410;
+    int ERR_INVALID_USER = 0x200043d; // 验证失败，请重试
 
 }
