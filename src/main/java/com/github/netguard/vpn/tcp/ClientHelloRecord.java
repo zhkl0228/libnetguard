@@ -164,25 +164,32 @@ public class ClientHelloRecord {
     }
 
     ConnectRequest newConnectRequest(InspectorVpn vpn, Packet packet) {
-        return new ConnectRequest(vpn, packet, this.hostName, this.applicationLayerProtocols, this.prologue, this.httpRequest, this.ja3);
+        return new ConnectRequest(vpn, packet, this.hostName, this.applicationLayerProtocols, this.prologue, this.httpRequest, this.ja3, this.ssl);
     }
 
-    public final byte[] prologue;
-    public final String hostName;
-    public final List<String> applicationLayerProtocols;
+    final byte[] prologue;
+    final String hostName;
+    final List<String> applicationLayerProtocols;
     private final HttpRequest httpRequest;
     private final JA3Signature ja3;
+    private final boolean ssl;
 
     private ClientHelloRecord(byte[] prologue, HttpRequest httpRequest, JA3Signature ja3) {
-        this(prologue, null, new ArrayList<>(0), httpRequest, ja3);
+        this(prologue, null, new ArrayList<>(0), httpRequest, ja3, false);
     }
 
-    ClientHelloRecord(byte[] prologue, String hostName, List<String> applicationLayerProtocols, HttpRequest httpRequest, JA3Signature ja3) {
+    ClientHelloRecord(byte[] prologue, String hostName, List<String> applicationLayerProtocols, HttpRequest httpRequest, JA3Signature ja3,
+                      boolean ssl) {
         this.prologue = prologue;
         this.hostName = hostName;
         this.applicationLayerProtocols = applicationLayerProtocols;
         this.httpRequest = httpRequest;
         this.ja3 = ja3;
+        this.ssl = ssl;
+    }
+
+    final boolean isSSL() {
+        return ssl;
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.legendsec.vpnclient;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.handler.PacketDecoder;
@@ -12,18 +13,28 @@ import org.krakenapps.pcap.decoder.http.impl.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 class VPNPacketDecoder extends PacketDecoder {
 
     private static final Logger log = LoggerFactory.getLogger(VPNPacketDecoder.class);
 
     public VPNPacketDecoder() {
+        super(new File("target/ssl_vpn.pcap"), true);
 //        setUnknownTcpProtocolProcessor(new SacMsgProcessor());
     }
 
     @Override
     public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
+        if ("218.19.163.102".equals(connectRequest.serverIp)) {
+            if (connectRequest.port == 443 || connectRequest.port == 80) {
+                System.out.printf("acceptEasyConnect serverIp=%s, port=%d, hostName=%s, applicationLayerProtocols=%s%n", connectRequest.serverIp, connectRequest.port, connectRequest.hostName, connectRequest.applicationLayerProtocols);
+                return AcceptTcpResult.builder(connectRequest.port == 443 ? AllowRule.CONNECT_SSL : AllowRule.CONNECT_TCP).build();
+            }
+            return connectRequest.disconnect();
+        }
         if("vpn.xzit.edu.cn".equals(connectRequest.hostName)) {
             System.out.printf("acceptVpn serverIp=%s, port=%d, hostName=%s, applicationLayerProtocols=%s%n", connectRequest.serverIp, connectRequest.port, connectRequest.hostName, connectRequest.applicationLayerProtocols);
             return AcceptTcpResult.builder(AllowRule.CONNECT_SSL).redirectAddress("211.65.116.119", 4433).build();
@@ -65,6 +76,10 @@ class VPNPacketDecoder extends PacketDecoder {
             JSONObject obj = JSONObject.parseObject(json);
             System.out.println(obj.toString(SerializerFeature.PrettyFormat));
         }
+        if (data != null && request.getRequestUri().startsWith("/por/login_psw.csp")) {
+            Map<String, String> params = parseParameters(new String(data, StandardCharsets.UTF_8));
+            System.out.println(JSON.toJSONString(params, SerializerFeature.PrettyFormat));
+        }
     }
 
     @Override
@@ -77,7 +92,8 @@ class VPNPacketDecoder extends PacketDecoder {
             JSONObject obj = JSONObject.parseObject(json);
             System.out.println(obj.toString(SerializerFeature.PrettyFormat));
         }
-        if(data != null && contentType != null && contentType.contains("text/xml")) {
+        if(data != null && contentType != null &&
+                (contentType.contains("text/xml") || contentType.contains("application/xml") || contentType.contains("text/html"))) {
             String xml = new String(data, StandardCharsets.UTF_8);
             System.out.println(xml);
         }

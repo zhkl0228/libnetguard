@@ -352,20 +352,7 @@ public class SSLProxyV2 implements Runnable {
         if (allowRule == AllowRule.DISCONNECT) {
             throw new IOException(packet.daddr + ":" + packet.dport + " is not allowed connect: hostName=" + record.hostName);
         }
-        if (record.hostName == null || allowRule == AllowRule.CONNECT_TCP) {
-            try (Socket socket = new Socket(socketProxy)) {
-                InetSocketAddress address = createSocketAddress(socketProxy, redirectAddress, redirectPort, redirectHost);
-                socket.connect(address, timeout);
-                try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
-                    if (record.prologue.length > 0) {
-                        socketOut.write(record.prologue);
-                        socketOut.flush();
-                    }
-                    doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, null, false, null, null, false, packet,
-                            record.prologue);
-                }
-            }
-        } else {
+        if (record.isSSL() && allowRule != AllowRule.CONNECT_TCP) {
             SSLContext context = AcceptTcpResult.newSSLContext(result);
             SSLSocketFactory factory = context.getSocketFactory();
             Socket app = null;
@@ -374,7 +361,7 @@ public class SSLProxyV2 implements Runnable {
                 app = new Socket(socketProxy);
                 InetSocketAddress address = createSocketAddress(socketProxy, redirectAddress, redirectPort, redirectHost);
                 app.connect(address, timeout);
-                secureSocket = (SSLSocket) factory.createSocket(app, record.hostName, redirectPort, true);
+                secureSocket = (SSLSocket) factory.createSocket(app, record.hostName == null ? remote.getAddress().getHostAddress() : record.hostName, redirectPort, true);
                 if (!record.applicationLayerProtocols.isEmpty()) {
                     setApplicationProtocols(secureSocket, record.applicationLayerProtocols.toArray(new String[0]));
                 }
@@ -424,6 +411,19 @@ public class SSLProxyV2 implements Runnable {
                 IoUtil.close(app);
                 IoUtil.close(secureSocket);
                 throw e;
+            }
+        } else {
+            try (Socket socket = new Socket(socketProxy)) {
+                InetSocketAddress address = createSocketAddress(socketProxy, redirectAddress, redirectPort, redirectHost);
+                socket.connect(address, timeout);
+                try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
+                    if (record.prologue.length > 0) {
+                        socketOut.write(record.prologue);
+                        socketOut.flush();
+                    }
+                    doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, null, false, null, null, false, packet,
+                            record.prologue);
+                }
             }
         }
     }

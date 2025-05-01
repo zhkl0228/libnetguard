@@ -22,6 +22,7 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest<Ac
     private final byte[] prologue;
     public final HttpRequest httpRequest;
     private final TlsSignature tlsSignature;
+    private final boolean ssl;
 
     @Override
     public byte[] getPrologue() {
@@ -42,7 +43,7 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest<Ac
     private final Packet packet;
 
     ConnectRequest(InspectorVpn vpn, Packet packet, String hostName, List<String> applicationLayerProtocols, byte[] prologue,
-                   HttpRequest httpRequest, TlsSignature tlsSignature) {
+                   HttpRequest httpRequest, TlsSignature tlsSignature, boolean ssl) {
         this.vpn = vpn;
         this.packet = packet;
         this.serverIp = packet.daddr;
@@ -52,6 +53,7 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest<Ac
         this.prologue = prologue;
         this.httpRequest = httpRequest;
         this.tlsSignature = tlsSignature;
+        this.ssl = ssl;
     }
 
     @Override
@@ -123,7 +125,7 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest<Ac
     }
 
     public boolean isSSL() {
-        return hostName != null;
+        return ssl;
     }
 
     /**

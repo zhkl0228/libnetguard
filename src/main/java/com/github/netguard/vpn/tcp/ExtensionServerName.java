@@ -81,7 +81,8 @@ public class ExtensionServerName {
         }
         buffer.get(new byte[32]); // clientRandom
         buffer.get(new byte[buffer.get() & 0xff]); // sessionId
-        buffer.get(new byte[buffer.getShort() & 0xffff]); // skip cipher suites
+        int cipherSuiteCount = buffer.getShort() & 0xffff;
+        buffer.get(new byte[cipherSuiteCount]); // skip cipher suites
         buffer.get(new byte[buffer.get() & 0xff]); // compression methods
         if (buffer.remaining() < 2) {
             log.debug("Not tls: extension data is empty: server={}", server);
@@ -94,6 +95,7 @@ public class ExtensionServerName {
         buffer = ByteBuffer.wrap(extensionData); // extensionData
         List<String> serverNames = new ArrayList<>(2);
         List<String> applicationLayerProtocols = new ArrayList<>(2);
+        boolean hasSignatureAlgorithms = false;
         while (buffer.remaining() > 0) {
             short type = buffer.getShort();
             length = buffer.getShort() & 0xffff;
@@ -123,6 +125,8 @@ public class ExtensionServerName {
                     String alpn = new String(alpnData, StandardCharsets.UTF_8);
                     applicationLayerProtocols.add(alpn);
                 }
+            } else if (type == 0xd) {
+                hasSignatureAlgorithms = true;
             }
             if (log.isDebugEnabled()) {
                 log.trace(Inspector.inspectString(data, "parseExtensions type=0x" + Integer.toHexString(type) + ", length=" + length));
@@ -131,13 +135,13 @@ public class ExtensionServerName {
         byte[] prologue = baos.toByteArray();
         String hostName = serverNames.isEmpty() ? null : serverNames.get(0);
         JA3Signature ja3 = JA3Signature.parse(ByteBuffer.wrap(prologue), hostName, applicationLayerProtocols);
-        log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}, ja3={}", serverNames, server, applicationLayerProtocols, ja3);
+        log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}, hasSignatureAlgorithms={}, ja3={}", serverNames, server, applicationLayerProtocols, hasSignatureAlgorithms, ja3);
 
-        if (hostName == null) {
+        if (hostName != null || (hasSignatureAlgorithms || cipherSuiteCount >= 5)) {
+            return new ClientHelloRecord(prologue, hostName, applicationLayerProtocols, null, ja3, true);
+        } else {
             log.debug("Not tls: extension name is empty: server={}", server);
             return ClientHelloRecord.prologue(baos, dataInput, ja3);
-        } else {
-            return new ClientHelloRecord(prologue, hostName, applicationLayerProtocols, null, ja3);
         }
     }
 
