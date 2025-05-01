@@ -12,7 +12,6 @@ import com.github.netguard.Inspector;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.sslvpn.SSLVpn;
 import com.github.netguard.vpn.ClientOS;
-import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.StreamForward;
 import eu.faircode.netguard.Packet;
@@ -22,7 +21,6 @@ import io.netty.handler.codec.http.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import java.io.*;
 import java.net.*;
@@ -30,7 +28,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
 
 public class QianxinVPN extends SSLVpn {
 
@@ -47,160 +44,124 @@ public class QianxinVPN extends SSLVpn {
     private boolean canStop;
 
     @Override
-    protected void doRunVpn() {
-        try (SSLSocket secureSocket = (SSLSocket) factory.createSocket(socket, inputStream, true)) {
-            secureSocket.setUseClientMode(false);
+    protected void doSSL(SSLSocket secureSocket) throws IOException {
+        try (InputStream inputStream = secureSocket.getInputStream();
+             OutputStream outputStream = secureSocket.getOutputStream()) {
+            DataInputStream dataInput = new DataInputStream(inputStream);
 
-            final CountDownLatch countDownLatch = new CountDownLatch(1);
-            secureSocket.addHandshakeCompletedListener(event -> {
-                try {
-                    SSLSession session = event.getSession();
-                    log.debug("handshakeCompleted event={}, peerHost={}", event, session.getPeerHost());
-                } finally {
-                    countDownLatch.countDown();
-                }
-            });
-            secureSocket.startHandshake();
-            countDownLatch.await();
-            log.debug("handshake completed");
-
-            try (InputStream inputStream = secureSocket.getInputStream();
-                 OutputStream outputStream = secureSocket.getOutputStream()) {
-                DataInputStream dataInput = new DataInputStream(inputStream);
-
-                while (!canStop) {
-                    if (proxyOutputStream != null && proxyBuffer != null) {
-                        int read = inputStream.read(proxyBuffer);
-                        if (read == -1) {
-                            throw new EOFException();
-                        }
-                        if (log.isDebugEnabled()) {
-                            log.debug("{}", Inspector.inspectString(Arrays.copyOf(proxyBuffer, read), "forward proxy: " + socket));
-                        }
-                        proxyOutputStream.write(proxyBuffer, 0, read);
-                        proxyOutputStream.flush();
-                        continue;
+            while (!canStop) {
+                if (proxyOutputStream != null && proxyBuffer != null) {
+                    int read = inputStream.read(proxyBuffer);
+                    if (read == -1) {
+                        throw new EOFException();
                     }
-
-                    int tag = dataInput.readInt();
                     if (log.isDebugEnabled()) {
-                        log.debug("tag=0x{}, socket={}", Integer.toHexString(tag), socket);
+                        log.debug("{}", Inspector.inspectString(Arrays.copyOf(proxyBuffer, read), "forward proxy: " + secureSocket));
                     }
+                    proxyOutputStream.write(proxyBuffer, 0, read);
+                    proxyOutputStream.flush();
+                    continue;
+                }
 
-                    switch (tag) {
-                        case GatewayAgent.VPN_PRD_DATA: {
-                            int length = readMsg(dataInput, vpnBuffer);
-                            for (int i = 4; i < length; i++) {
-                                vpnBuffer[i] ^= ServiceSinkhole.VPN_MAGIC;
-                            }
-                            DataOutput dataOutput = new DataOutputStream(vpnOutputStream);
-                            dataOutput.writeShort(length - 4);
-                            dataOutput.write(vpnBuffer, 4, length - 4);
-                            break;
+                int tag = dataInput.readInt();
+                if (log.isDebugEnabled()) {
+                    log.debug("tag=0x{}, socket={}", Integer.toHexString(tag), secureSocket);
+                }
+
+                switch (tag) {
+                    case GatewayAgent.VPN_PRD_DATA: {
+                        int length = readMsg(dataInput, vpnBuffer);
+                        for (int i = 4; i < length; i++) {
+                            vpnBuffer[i] ^= ServiceSinkhole.VPN_MAGIC;
                         }
-                        case GatewayAgent.VPN_PROXY_ACCESS: {
-                            byte[] msg = readMsg(dataInput);
-                            byte[] data = handleProxyAccess(tag, msg, outputStream);
-                            outputStream.write(data);
-                            outputStream.flush();
-                            break;
-                        }
-                        case GatewayAgent.VPN_NC_ACCESS: {
-                            byte[] msg = readMsg(dataInput);
-                            byte[] data = handleNcAuthorize(tag, msg, outputStream);
-                            outputStream.write(data);
-                            outputStream.flush();
-                            break;
-                        }
-                        case GatewayAgent.VPN_HEARTBEAT: {
-                            byte[] msg = readMsg(dataInput);
-                            byte[] data = handleHeartbeat(tag, msg);
-                            outputStream.write(data);
-                            outputStream.flush();
-                            break;
-                        }
-                        case GatewayAgent.VPN_UPDATE_PASSWD_JSON: {
-                            byte[] msg = readMsg(dataInput);
-                            ByteBuffer buffer = ByteBuffer.wrap(msg);
-                            readJSON(buffer);
-                            break;
-                        }
-                        case GatewayAgent.VPN_QUERY_APP_LIST: {
-                            byte[] msg = readMsg(dataInput);
-                            byte[] data = handleQueryAppList(tag, msg);
-                            outputStream.write(data);
-                            outputStream.flush();
-                            break;
-                        }
-                        case GatewayAgent.VPN_LOGOUT: {
-                            byte[] msg = readMsg(dataInput);
-                            byte[] data = handleVpnLogout(tag, msg);
-                            outputStream.write(data);
-                            outputStream.flush();
-                            break;
-                        }
-                        case GatewayAgent.VPN_GET_USERDATA: {
-                            byte[] msg = readMsg(dataInput);
-                            byte[] data = handleGetUserData(tag, msg);
-                            outputStream.write(data);
-                            outputStream.flush();
-                            break;
-                        }
-                        case GatewayAgent.VPN_LOGIN: {
-                            byte[] msg = readMsg(dataInput);
-                            byte[] data = handleVpnLogin(tag, msg);
-                            outputStream.write(data);
-                            outputStream.flush();
-                            break;
-                        }
-                        case GatewayAgent.VPN_GET_PORTAL: {
-                            byte[] msg = readMsg(dataInput);
-                            byte[] data = handleGetPortal(tag, msg);
-                            outputStream.write(data);
-                            outputStream.flush();
-                            break;
-                        }
-                        case 0x504f5354: // POST
-                        case 0x47455420: // GET
-                        {
-                            try(ByteArrayOutputStream baos = new ByteArrayOutputStream(0x10)) {
-                                DataOutput dataOutput = new DataOutputStream(baos);
-                                dataOutput.writeInt(tag);
-                                byte[] header = new byte[12];
-                                dataInput.readFully(header);
-                                dataOutput.write(header);
-                                HttpRequest request = ClientHelloRecord.detectHttp(baos, dataInput);
-                                if (request != null) {
-                                    HttpResponse response = handleHttpRequest(request);
-                                    log.debug("Handle httpResponse: {}", response);
-                                    if (response != null) {
-                                        writeResponse(outputStream, response);
-                                    }
-                                }
-                            }
-                            throw new IOException("NOT support HTTP");
-                        }
-                        default: {
-                            log.warn("unknown tag=0x{}", Integer.toHexString(tag));
-                            canStop = true;
-                            break;
-                        }
+                        DataOutput dataOutput = new DataOutputStream(vpnOutputStream);
+                        dataOutput.writeShort(length - 4);
+                        dataOutput.write(vpnBuffer, 4, length - 4);
+                        break;
+                    }
+                    case GatewayAgent.VPN_PROXY_ACCESS: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleProxyAccess(tag, msg, outputStream);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case GatewayAgent.VPN_NC_ACCESS: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleNcAuthorize(tag, msg, outputStream);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case GatewayAgent.VPN_HEARTBEAT: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleHeartbeat(tag, msg);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case GatewayAgent.VPN_UPDATE_PASSWD_JSON: {
+                        byte[] msg = readMsg(dataInput);
+                        ByteBuffer buffer = ByteBuffer.wrap(msg);
+                        readJSON(buffer);
+                        break;
+                    }
+                    case GatewayAgent.VPN_QUERY_APP_LIST: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleQueryAppList(tag, msg);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case GatewayAgent.VPN_LOGOUT: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleVpnLogout(tag, msg);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case GatewayAgent.VPN_GET_USERDATA: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleGetUserData(tag, msg);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case GatewayAgent.VPN_LOGIN: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleVpnLogin(tag, msg);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case GatewayAgent.VPN_GET_PORTAL: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleGetPortal(tag, msg);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case 0x504f5354: // POST
+                    case 0x47455420: // GET
+                    {
+                        handleHttp(tag, dataInput, outputStream);
+                        break;
+                    }
+                    default: {
+                        log.warn("unknown tag=0x{}", Integer.toHexString(tag));
+                        canStop = true;
+                        break;
                     }
                 }
             }
-        } catch(IOException e) {
-            log.trace("SSL VPN read", e);
-        } catch(Exception e) {
-            log.warn("SSL VPN failed", e);
         } finally {
             IoUtil.close(vpnOutputStream);
             IoUtil.close(proxyOutputStream);
-            log.debug("Finish socket: {}", socket);
-            clients.remove(this);
         }
     }
 
-    private HttpResponse handleHttpRequest(HttpRequest request) throws IOException {
+    @Override
+    protected HttpResponse handleHttpRequest(HttpRequest request) throws IOException {
         log.debug("handleHttpRequest: {}", request);
         if ("/client/custom_lang.json".equals(request.uri()) ||
                 "/download/mobile/software/sslvpn-version.xml".equals(request.uri())) {
@@ -712,7 +673,7 @@ public class QianxinVPN extends SSLVpn {
             if (tmp.length > 32) {
                 tmp = Arrays.copyOf(tmp, 32);
             }
-            log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes, socket=%s", msg.length, socket)));
+            log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes", msg.length)));
         }
         return msg;
     }
@@ -725,7 +686,7 @@ public class QianxinVPN extends SSLVpn {
             if (length > 32) {
                 tmp = Arrays.copyOf(tmp, 32);
             }
-            log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes, socket=%s", length, socket)));
+            log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes", length)));
         }
         return length;
     }

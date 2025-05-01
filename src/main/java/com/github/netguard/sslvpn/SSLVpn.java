@@ -16,12 +16,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public abstract class SSLVpn extends ProxyVpn {
 
@@ -42,9 +46,9 @@ public abstract class SSLVpn extends ProxyVpn {
         return new QianxinVPN(clients, rootCert, socket, inputStream, serverPort);
     }
 
-    protected final Socket socket;
-    protected final InputStream inputStream;
-    protected final SSLSocketFactory factory;
+    private final Socket socket;
+    private final InputStream inputStream;
+    private final SSLSocketFactory factory;
     protected final int serverPort;
 
     public SSLVpn(List<ProxyVpn> clients, RootCert rootCert, Socket socket,
@@ -61,6 +65,40 @@ public abstract class SSLVpn extends ProxyVpn {
             throw new IllegalStateException(e);
         }
     }
+
+
+
+    @Override
+    protected final void doRunVpn() {
+        try (SSLSocket secureSocket = (SSLSocket) factory.createSocket(socket, inputStream, true)) {
+            secureSocket.setUseClientMode(false);
+
+            final CountDownLatch countDownLatch = new CountDownLatch(1);
+            secureSocket.addHandshakeCompletedListener(event -> {
+                try {
+                    SSLSession session = event.getSession();
+                    log.debug("handshakeCompleted event={}, peerHost={}", event, session.getPeerHost());
+                } finally {
+                    countDownLatch.countDown();
+                }
+            });
+            secureSocket.startHandshake();
+            if (!countDownLatch.await(30, TimeUnit.SECONDS)) {
+                throw new IOException("Handshake timed out");
+            }
+
+            doSSL(secureSocket);
+        } catch(IOException e) {
+            log.trace("SSL VPN read", e);
+        } catch(Exception e) {
+            log.warn("SSL VPN failed", e);
+        } finally {
+            log.debug("Finish socket: {}", socket);
+            clients.remove(this);
+        }
+    }
+
+    protected abstract void doSSL(SSLSocket secureSocket) throws IOException;
 
     protected final HttpResponse notFound() {
         HttpHeaders headers = new DefaultHttpHeaders();
@@ -79,6 +117,30 @@ public abstract class SSLVpn extends ProxyVpn {
         headers.add("Server", getHttpServerName());
         return new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.wrappedBuffer(data), headers,
                 DefaultHttpHeadersFactory.trailersFactory().newEmptyHeaders());
+    }
+
+    protected final void handleHttp(int tag, DataInputStream dataInput, OutputStream outputStream) throws IOException {
+        try(ByteArrayOutputStream baos = new ByteArrayOutputStream(0x10)) {
+            DataOutput dataOutput = new DataOutputStream(baos);
+            dataOutput.writeInt(tag);
+            byte[] header = new byte[12];
+            dataInput.readFully(header);
+            dataOutput.write(header);
+            HttpRequest request = ClientHelloRecord.detectHttp(baos, dataInput);
+            if (request != null) {
+                HttpResponse response = handleHttpRequest(request);
+                log.debug("Handle httpResponse: {}", response);
+                if (response != null) {
+                    writeResponse(outputStream, response);
+                    return;
+                }
+            }
+            throw new IOException("NOT support HTTP: request=" + request);
+        }
+    }
+
+    protected HttpResponse handleHttpRequest(HttpRequest request) throws IOException {
+        throw new UnsupportedEncodingException("request=" + request);
     }
 
     protected final void writeResponse(OutputStream outputStream, HttpResponse response) throws IOException {
