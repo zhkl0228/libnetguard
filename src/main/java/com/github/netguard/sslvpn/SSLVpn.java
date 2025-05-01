@@ -1,13 +1,19 @@
 package com.github.netguard.sslvpn;
 
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.ProxyVpn;
+import com.github.netguard.sslvpn.qianxin.QianxinVPN;
 import com.github.netguard.vpn.ClientOS;
+import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
+import com.github.netguard.vpn.tls.TlsSignature;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -19,7 +25,22 @@ import java.util.List;
 
 public abstract class SSLVpn extends ProxyVpn {
 
+    private static final Logger log = LoggerFactory.getLogger(SSLVpn.class);
+
     private static final ServerCertificate SSL_VPN_SERVER_CERTIFICATE = new ServerCertificate(null);
+
+    public static SSLVpn newSSLVpn(List<ProxyVpn> clients, RootCert rootCert, Socket socket,
+                                   PushbackInputStream inputStream, int serverPort, ClientHelloRecord clientHelloRecord) {
+        TlsSignature tlsSignature = clientHelloRecord.getJa3();
+        if (log.isDebugEnabled()) {
+            log.debug("{}", String.format("newSSLVpn ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ScrapflyFP=%s",
+                    DigestUtil.md5Hex(tlsSignature.getJa3nText()),
+                    tlsSignature.getJa4Text(),
+                    DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
+                    DigestUtil.md5Hex(tlsSignature.getScrapflyFP())));
+        }
+        return new QianxinVPN(clients, rootCert, socket, inputStream, serverPort);
+    }
 
     protected final Socket socket;
     protected final InputStream inputStream;

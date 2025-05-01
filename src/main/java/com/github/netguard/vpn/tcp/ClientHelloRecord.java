@@ -2,6 +2,7 @@ package com.github.netguard.vpn.tcp;
 
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tls.JA3Signature;
+import com.github.netguard.vpn.tls.TlsSignature;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -167,12 +168,16 @@ public class ClientHelloRecord {
         return new ConnectRequest(vpn, packet, this.hostName, this.applicationLayerProtocols, this.prologue, this.httpRequest, this.ja3, this.ssl);
     }
 
-    final byte[] prologue;
+    public final byte[] prologue;
     final String hostName;
     final List<String> applicationLayerProtocols;
     private final HttpRequest httpRequest;
     private final JA3Signature ja3;
     private final boolean ssl;
+
+    public TlsSignature getJa3() {
+        return ja3;
+    }
 
     private ClientHelloRecord(byte[] prologue, HttpRequest httpRequest, JA3Signature ja3) {
         this(prologue, null, new ArrayList<>(0), httpRequest, ja3, false);
@@ -188,7 +193,7 @@ public class ClientHelloRecord {
         this.ssl = ssl;
     }
 
-    final boolean isSSL() {
+    public final boolean isSSL() {
         return ssl;
     }
 

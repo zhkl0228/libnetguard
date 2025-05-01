@@ -4,11 +4,13 @@ import cn.hutool.core.io.IoUtil;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.handler.replay.FileReplay;
 import com.github.netguard.handler.replay.Replay;
-import com.github.netguard.sslvpn.qianxin.QianxinVPN;
+import com.github.netguard.sslvpn.SSLVpn;
 import com.github.netguard.transparent.TransparentSocketProxying;
 import com.github.netguard.vpn.BaseVpnListener;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.VpnListener;
+import com.github.netguard.vpn.tcp.ClientHelloRecord;
+import com.github.netguard.vpn.tcp.ExtensionServerName;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.udp.UDPRelay;
 import eu.faircode.netguard.ServiceSinkhole;
@@ -171,27 +173,35 @@ public class VpnServer {
                         serverSocket.setSoTimeout(NO_CLIENT_BROADCAST_DELAY_MILLIS);
                     }
                     Socket socket = serverSocket.accept();
-                    final InputStream inputStream;
-                    final int magic;
+                    final PushbackInputStream inputStream;
+                    final ClientHelloRecord clientHelloRecord;
+                    final int os;
                     try {
-                        PushbackInputStream pushbackInputStream = new PushbackInputStream(socket.getInputStream());
-                        inputStream = pushbackInputStream;
-                        magic = new DataInputStream(pushbackInputStream).readUnsignedByte();
-                        if (magic == 0x16) {
-                            pushbackInputStream.unread(magic);
+                        inputStream = new PushbackInputStream(socket.getInputStream(), 2048);
+                        DataInputStream dataInput = new DataInputStream(inputStream);
+                        os = dataInput.readUnsignedByte();
+                        if (os == 0x16) {
+                            inputStream.unread(os);
+                            clientHelloRecord = ExtensionServerName.parseServerNames(dataInput, (InetSocketAddress) socket.getRemoteSocketAddress());
+                            log.debug("Accept client clientHelloRecord={}", clientHelloRecord);
+                            if (clientHelloRecord.isSSL()) {
+                                inputStream.unread(clientHelloRecord.prologue);
+                            } else {
+                                throw new EOFException("NOT SSL: " + clientHelloRecord);
+                            }
+                        } else {
+                            clientHelloRecord = null;
                         }
-                        log.debug("Accept client magic: 0x{}", Integer.toHexString(magic));
                     } catch (IOException e) {
                         IOUtils.closeQuietly(socket);
                         continue;
                     }
                     ProxyVpn vpn = null;
-                    if (magic == 0x16) { // SSL
-                        vpn = new QianxinVPN(clients, rootCert, socket, inputStream,
-                                getPort());
+                    if (clientHelloRecord != null) { // SSL
+                        vpn = SSLVpn.newSSLVpn(clients, rootCert, socket, inputStream, getPort(), clientHelloRecord);
                     } else if (useNetGuardCore) {
                         try {
-                            vpn = new ServiceSinkhole(socket, clients, rootCert, magic);
+                            vpn = new ServiceSinkhole(socket, clients, rootCert, os);
                         } catch (UnsatisfiedLinkError e) {
                             log.debug("init ServiceSinkhole", e);
                             useNetGuardCore = false;
@@ -202,7 +212,7 @@ public class VpnServer {
                     }
                     if (vpn == null) {
                         try {
-                            vpn = new ProxyVpnRunnable(socket, clients, rootCert, magic);
+                            vpn = new ProxyVpnRunnable(socket, clients, rootCert, os);
                         } catch (IOException e) {
                             IOUtils.closeQuietly(socket);
                             continue;
