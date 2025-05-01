@@ -42,7 +42,7 @@ public abstract class SSLVpn extends ProxyVpn {
     private static final ServerCertificate SSL_VPN_SERVER_CERTIFICATE = new ServerCertificate(null);
 
     public static SSLVpn newSSLVpn(List<ProxyVpn> clients, RootCert rootCert, Socket socket,
-                                   PushbackInputStream inputStream, int serverPort, ClientHelloRecord clientHelloRecord) {
+                                   InputStream inputStream, int serverPort, ClientHelloRecord clientHelloRecord) {
         TlsSignature tlsSignature = clientHelloRecord.getJa3();
         if (log.isDebugEnabled()) {
             log.debug("{}", String.format("newSSLVpn ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ScrapflyFP=%s",
@@ -68,7 +68,7 @@ public abstract class SSLVpn extends ProxyVpn {
         this.serverPort = serverPort;
         try {
             SSLContext serverContext = SSL_VPN_SERVER_CERTIFICATE.getServerContext(RootCert.load(), getClass().getSimpleName()).newSSLContext();
-            factory = serverContext.getSocketFactory();
+            this.factory = serverContext.getSocketFactory();
         } catch(Exception e) {
             throw new IllegalStateException(e);
         }
@@ -76,11 +76,11 @@ public abstract class SSLVpn extends ProxyVpn {
 
     @Override
     protected final void doRunVpn() {
-        try (SSLSocket secureSocket = (SSLSocket) factory.createSocket(socket, inputStream, true)) {
-            secureSocket.setUseClientMode(false);
+        try (SSLSocket socket = (SSLSocket) factory.createSocket(this.socket, this.inputStream, true)) {
+            socket.setUseClientMode(false);
 
             final CountDownLatch countDownLatch = new CountDownLatch(1);
-            secureSocket.addHandshakeCompletedListener(event -> {
+            socket.addHandshakeCompletedListener(event -> {
                 try {
                     SSLSession session = event.getSession();
                     log.debug("handshakeCompleted event={}, peerHost={}", event, session.getPeerHost());
@@ -88,12 +88,12 @@ public abstract class SSLVpn extends ProxyVpn {
                     countDownLatch.countDown();
                 }
             });
-            secureSocket.startHandshake();
+            socket.startHandshake();
             if (!countDownLatch.await(30, TimeUnit.SECONDS)) {
                 throw new IOException("Handshake timed out");
             }
 
-            doSSL(secureSocket);
+            doSSL(socket);
         } catch(IOException e) {
             log.trace("SSL VPN read", e);
         } catch(Exception e) {
@@ -104,7 +104,7 @@ public abstract class SSLVpn extends ProxyVpn {
         }
     }
 
-    protected abstract void doSSL(SSLSocket secureSocket) throws IOException;
+    protected abstract void doSSL(SSLSocket socket) throws IOException;
 
     protected final HttpResponse notFound() {
         HttpHeaders headers = new DefaultHttpHeaders();

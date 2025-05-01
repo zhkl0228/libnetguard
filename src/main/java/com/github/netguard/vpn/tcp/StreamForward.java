@@ -82,25 +82,29 @@ public class StreamForward implements Runnable {
 
     private Throwable socketException;
 
+    protected void notifyForward(byte[] buf, int read) {
+        if (packetCapture != null) {
+            if (server) {
+                if (isSSL) {
+                    packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
+                } else {
+                    packetCapture.onSocketTx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
+                }
+            } else {
+                if (isSSL) {
+                    packetCapture.onSSLProxyRx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
+                } else {
+                    packetCapture.onSocketRx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
+                }
+            }
+        }
+    }
+
     protected boolean forward(byte[] buf) throws IOException {
         int read;
         try {
             while ((read = inputStream.read(buf)) != -1) {
-                if (packetCapture != null) {
-                    if (server) {
-                        if (isSSL) {
-                            packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
-                        } else {
-                            packetCapture.onSocketTx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
-                        }
-                    } else {
-                        if (isSSL) {
-                            packetCapture.onSSLProxyRx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
-                        } else {
-                            packetCapture.onSocketRx(clientSocketAddress, serverSocketAddress, Arrays.copyOf(buf, read));
-                        }
-                    }
-                }
+                notifyForward(buf, read);
                 outputStream.write(buf, 0, read);
                 outputStream.flush();
             }

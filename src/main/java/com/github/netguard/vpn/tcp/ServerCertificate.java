@@ -108,8 +108,11 @@ public class ServerCertificate {
             this.keyStore = keyStore;
         }
         public SSLContext newSSLContext() throws UnrecoverableKeyException, NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
+            return newSSLContext("TLSv1.3", null);
+        }
+        public SSLContext newSSLContext(String protocol, String provider) throws UnrecoverableKeyException, NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
             KeyManager[] keyManagers = newKeyManagerFactory().getKeyManagers();
-            return newServerContext(keyManagers);
+            return newServerContext(keyManagers, protocol, provider);
         }
         public void configServerConnector(ServerConnector.Builder builder) {
             builder.withKeyStore(keyStore, authority.alias(), authority.password());
@@ -136,17 +139,20 @@ public class ServerCertificate {
         return new ServerContext(authority, keyStore);
     }
 
-    private static SSLContext newServerContext(KeyManager[] keyManagers)
+    private static SSLContext newServerContext(KeyManager[] keyManagers, String protocol, String provider)
             throws KeyManagementException {
-        SSLContext result = newSSLContext();
+        SSLContext result = newSSLContext(protocol, provider);
         result.init(keyManagers, null, null);
         return result;
     }
 
-    public static SSLContext newSSLContext() {
+    public static SSLContext newSSLContext(String protocol, String provider) {
         try {
-            return SSLContext.getInstance("TLSv1.3");
-        } catch (NoSuchAlgorithmException e) {
+            if (protocol == null) {
+                protocol = "TLS";
+            }
+            return provider == null ? SSLContext.getInstance(protocol) : SSLContext.getInstance(protocol, provider);
+        } catch (NoSuchAlgorithmException | NoSuchProviderException e) {
             throw new IllegalStateException("Protocol not available", e);
         }
     }

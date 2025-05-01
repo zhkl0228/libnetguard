@@ -5,6 +5,10 @@ import com.github.netguard.IPUtil;
 import com.github.netguard.Inspector;
 import junit.framework.TestCase;
 
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLServerSocketFactory;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import java.net.InetAddress;
 
 public class Base64Test extends TestCase {
@@ -18,6 +22,39 @@ public class Base64Test extends TestCase {
         long addr = IPUtil.prefix2mask(8);
         InetAddress address = IPUtil.long2inet(addr);
         System.out.println(address);
+    }
+
+    public void testSSL() throws Exception {
+        System.out.println(System.getProperty("jdk.tls.disabledAlgorithms"));
+        try (SSLServerSocket serverSocket = (SSLServerSocket) SSLServerSocketFactory
+                .getDefault().createServerSocket()) {
+
+            System.out.println("##### Server supported protocols #####");
+            for (String protocol : serverSocket.getSupportedProtocols()) {
+                System.out.println(protocol);
+            }
+
+            System.out.println("##### Server enabled protocols #####");
+            for (String protocol : serverSocket.getEnabledProtocols()) {
+                System.out.println(protocol);
+            }
+        }
+
+        System.out.println();
+
+        try (SSLSocket socket = (SSLSocket) SSLSocketFactory
+                .getDefault().createSocket()) {
+
+            System.out.println("##### Client supported protocols #####");
+            for (String protocol : socket.getSupportedProtocols()) {
+                System.out.println(protocol);
+            }
+
+            System.out.println("##### Client enabled protocols #####");
+            for (String protocol : socket.getEnabledProtocols()) {
+                System.out.println(protocol);
+            }
+        }
     }
 
 }

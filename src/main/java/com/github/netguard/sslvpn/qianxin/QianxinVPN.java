@@ -50,7 +50,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
 
             while (!canStop) {
                 if (proxyOutputStream != null && proxyBuffer != null) {
-                    int read = inputStream.read(proxyBuffer);
+                    final int read = inputStream.read(proxyBuffer);
                     if (read == -1) {
                         throw new EOFException();
                     }
@@ -62,14 +62,14 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
                     continue;
                 }
 
-                int tag = dataInput.readInt();
+                final int tag = dataInput.readInt();
                 if (log.isDebugEnabled()) {
                     log.debug("tag=0x{}, socket={}", Integer.toHexString(tag), socket);
                 }
 
                 switch (tag) {
                     case VPN_PRD_DATA: {
-                        int length = readMsg(dataInput, vpnBuffer);
+                        final int length = readMsg(dataInput, vpnBuffer);
                         for (int i = 4; i < length; i++) {
                             vpnBuffer[i] ^= ServiceSinkhole.VPN_MAGIC;
                         }
@@ -181,7 +181,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         }
         if("/download/mobile/resource/ios/pic/def.json".equals(request.uri()) ||
                 "/download/mobile/resource/android/pic/def.json".equals(request.uri())) {
-            JSONObject obj = new JSONObject(true);
+            JSONObject obj = new JSONObject(3, true);
             obj.put("service_change", 4);
             obj.put("version", 1);
             PicDef[] defs = PicDef.values();
@@ -357,7 +357,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         @Override
         protected boolean forward(byte[] buf) throws IOException {
             DataInput dataInput = new DataInputStream(inputStream);
-            int size = dataInput.readUnsignedShort();
+            final int size = dataInput.readUnsignedShort();
             if (size > buf.length) {
                 throw new IllegalStateException("VPN stream buffer too long");
             }
@@ -485,22 +485,22 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
     }
 
     private static JSONObject buildPasswdPolicy() {
-        JSONObject passwdPolicy = new JSONObject(true);
-        passwdPolicy.put("pass_min", 6);
-        passwdPolicy.put("pass_max", 32);
-        passwdPolicy.put("pass_change", 1);
-        passwdPolicy.put("pass_warning", 0);
-        passwdPolicy.put("first_login", 1);
-        passwdPolicy.put("same_pass", 1);
-        passwdPolicy.put("number", 1);
-        passwdPolicy.put("number_size", 2);
-        passwdPolicy.put("up_letter", 1);
-        passwdPolicy.put("up_size", 2);
-        passwdPolicy.put("low_letter", 1);
-        passwdPolicy.put("low_size", 2);
-        passwdPolicy.put("spe_letter", 0);
-        passwdPolicy.put("spe_size", 0);
-        return passwdPolicy;
+        JSONObject policy = new JSONObject(true);
+        policy.put("pass_min", 6);
+        policy.put("pass_max", 32);
+        policy.put("pass_change", 1);
+        policy.put("pass_warning", 0);
+        policy.put("first_login", 1);
+        policy.put("same_pass", 1);
+        policy.put("number", 1);
+        policy.put("number_size", 2);
+        policy.put("up_letter", 1);
+        policy.put("up_size", 2);
+        policy.put("low_letter", 1);
+        policy.put("low_size", 2);
+        policy.put("spe_letter", 0);
+        policy.put("spe_size", 0);
+        return policy;
     }
 
     private byte[] handleVpnLogin(int tag, byte[] msg) throws IOException {

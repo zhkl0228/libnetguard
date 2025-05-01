@@ -137,7 +137,7 @@ public class ExtensionServerName {
         JA3Signature ja3 = JA3Signature.parse(ByteBuffer.wrap(prologue), hostName, applicationLayerProtocols);
         log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}, hasSignatureAlgorithms={}, ja3={}", serverNames, server, applicationLayerProtocols, hasSignatureAlgorithms, ja3);
 
-        if (hostName != null || (hasSignatureAlgorithms && cipherSuiteCount >= 5)) {
+        if (hostName != null || (hasSignatureAlgorithms && cipherSuiteCount > 0)) {
             return new ClientHelloRecord(prologue, hostName, applicationLayerProtocols, null, ja3, true);
         } else {
             log.debug("Not tls: extension name is empty: server={}", server);
