@@ -232,11 +232,14 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         response.put("rdpgroup_list", Collections.emptyList());
         response.put("servicegrouplist", Collections.emptyList());
         List<Service> services = new ArrayList<>();
-        services.add(new Service("RootCert", Packet.INSTALL_ROOT_CERT_IP, Packet.INSTALL_ROOT_CERT_IP).setServicePort(Packet.INSTALL_ROOT_CERT_PORT, Service.AccessType.NC));
+        Service installRootCert = new Service("RootCert", Packet.INSTALL_ROOT_CERT_IP, Packet.INSTALL_ROOT_CERT_IP).setServicePort(Packet.INSTALL_ROOT_CERT_PORT, Service.ServiceType.http);
+        installRootCert.setAccessType(Service.AccessType.NC);
+        services.add(installRootCert);
         configServices(services);
         JSONArray array = new JSONArray(services.size());
+        int id = 1;
         for (Service service : services) {
-            array.add(service.toJSON(1));
+            array.add(service.toJSON(id++));
         }
         response.put("servicelist", array);
         response.put("sm_enc_algo", "");
@@ -288,7 +291,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         }
         String name = String.format("%s/%s", startIp, address.getHostAddress());
         Service service = new Service(startIp, ip, name).setHide();
-        service.setServicePort(0, Service.AccessType.NC);
+        service.setAccessType(Service.AccessType.NC);
         if (log.isDebugEnabled()) {
             log.debug("createService address={}, prefix={}, include={}, service={}", include.address, include.prefix, include, service.toJSON(0));
         }
@@ -658,11 +661,6 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
             log.debug("{}", Inspector.inspectString(tmp, String.format("readMsg %d bytes", length)));
         }
         return length;
-    }
-
-    @Override
-    protected String getHttpServerName() {
-        return String.format("%s_%s", getClass().getSimpleName(), GATEWAY_VERSION);
     }
 
 }

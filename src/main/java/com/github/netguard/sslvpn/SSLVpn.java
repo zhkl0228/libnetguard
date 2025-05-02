@@ -163,6 +163,7 @@ public abstract class SSLVpn extends ProxyVpn {
             writer.write("\r\n");
         });
         writer.write("\r\n");
+        writer.flush();
         if (response instanceof HttpContent) {
             HttpContent httpContent = (HttpContent) response;
             try(InputStream in = new ByteBufInputStream(httpContent.content())) {
@@ -173,7 +174,7 @@ public abstract class SSLVpn extends ProxyVpn {
     }
 
     protected String getHttpServerName() {
-        return getClass().getName();
+        return getClass().getSimpleName();
     }
 
     @Override

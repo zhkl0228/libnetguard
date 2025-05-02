@@ -16,9 +16,9 @@ class Service {
 
     private int servicePort;
 
-    public final Service setServicePort(int port, AccessType accessType) {
+    public final Service setServicePort(int port, ServiceType serviceType) {
         this.servicePort = port;
-        this.accessType = accessType;
+        this.serviceType = serviceType;
         return this;
     }
 
@@ -37,7 +37,36 @@ class Service {
         RDP
     }
 
+    enum ServiceType {
+        none,
+        http,
+        https,
+        ftp,
+        telnet,
+        ssh,
+        ldap,
+        mysql,
+        imap,
+        oracle,
+        smtp,
+        pop3,
+        sqlserver,
+        terminal,
+        tftp,
+        vnc,
+        fileshare,
+        exchange,
+        fixedTCP,
+        fixedUDP,
+    }
+
     private AccessType accessType = AccessType.PROXY;
+
+    public void setAccessType(AccessType accessType) {
+        this.accessType = accessType;
+    }
+
+    private ServiceType serviceType = ServiceType.none;
 
     final JSONObject toJSON(int id) {
         boolean isService = servicePort > 0;
@@ -53,7 +82,7 @@ class Service {
         service.put("serverip", serverIp);
         service.put("servername", serverName);
         service.put("service_from", 0);
-        service.put("servicetype", isService ? 1 : 23); // 1, 5, 23
+        service.put("servicetype", serviceType.ordinal());
         service.put("sort", id);
         service.put("throughput", 0);
         service.put("throughput_yn", 0);
