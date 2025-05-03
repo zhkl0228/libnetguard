@@ -4,9 +4,8 @@ import cn.hutool.core.codec.Base64;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.net.DefaultTrustManager;
 import com.github.netguard.Inspector;
-import com.github.netguard.vpn.tcp.RootCert;
-import com.github.netguard.vpn.tcp.ServerCertificate;
-import com.github.netguard.vpn.tcp.StreamForward;
+import com.github.netguard.vpn.tcp.*;
+import com.github.netguard.vpn.tls.CipherSuite;
 import com.google.protobuf.ByteString;
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.slf4j.Logger;
@@ -68,24 +67,41 @@ class SSLVpnServer implements Runnable {
         try {
             while (true) {
                 try {
-                    String lanIP = Inspector.detectLanIP();
                     final Socket socket = this.serverSocket.accept();
                     Thread thread = new Thread(() -> {
                         try {
                             final InputStream inputStream;
                             final OutputStream outputStream;
-                            PushbackInputStream pushbackInputStream = new PushbackInputStream(socket.getInputStream());
-                            int magic = pushbackInputStream.read();
-                            if (magic == -1) {
-                                throw new EOFException();
-                            }
-                            log.debug("Accepted connection from {}, lanIP={}, magic=0x{}", socket.getRemoteSocketAddress(), lanIP, Integer.toHexString(magic));
+                            PushbackInputStream pushbackInputStream = new PushbackInputStream(socket.getInputStream(), 1024);
+                            DataInputStream dataInput = new DataInputStream(pushbackInputStream);
+                            int magic = dataInput.readUnsignedByte();
                             pushbackInputStream.unread(magic);
-                            boolean ssl = magic == 0x16;
+                            ClientHelloRecord clientHelloRecord;
+                            byte[] prologue;
+                            if (magic == 0x16) {
+                                clientHelloRecord = ExtensionServerName.parseServerNames(dataInput, (InetSocketAddress) socket.getRemoteSocketAddress());
+                                log.debug("{}", Inspector.inspectString(clientHelloRecord.prologue, String.format("Accept client socket=%s clientHelloRecord=%s", socket, clientHelloRecord)));
+                                if (clientHelloRecord.isSSL()) {
+                                    if (clientHelloRecord.cipherSuites.size() == 2 || clientHelloRecord.cipherSuites.contains(CipherSuite.TLS_ECDHE_SM1_SM3)) {
+                                        prologue = clientHelloRecord.prologue;
+                                        clientHelloRecord = null;
+                                    } else {
+                                        pushbackInputStream.unread(clientHelloRecord.prologue);
+                                        prologue = new byte[0];
+                                    }
+                                } else {
+                                    prologue = clientHelloRecord.prologue;
+                                    clientHelloRecord = null;
+                                }
+                            } else {
+                                clientHelloRecord = null;
+                                prologue = new byte[0];
+                            }
+                            log.debug("Accepted connection from {}, magic=0x{}, clientHelloRecord={}", socket.getRemoteSocketAddress(), Integer.toHexString(magic), clientHelloRecord);
+                            boolean ssl = clientHelloRecord != null;
                             if (ssl) {
                                 SSLSocket sslSocket = (SSLSocket) factory.createSocket(socket, pushbackInputStream, true);
                                 sslSocket.setUseClientMode(false);
-                                log.debug("enabledCipherSuites={}", (Object) sslSocket.getEnabledCipherSuites());
 
                                 final CountDownLatch countDownLatch = new CountDownLatch(1);
                                 sslSocket.addHandshakeCompletedListener(event -> {
@@ -106,9 +122,9 @@ class SSLVpnServer implements Runnable {
                                 inputStream = pushbackInputStream;
                                 outputStream = socket.getOutputStream();
                             }
-                            handleSocket(socket, inputStream, outputStream, ssl);
+                            handleSocket(socket, inputStream, outputStream, ssl, prologue);
                         } catch (Exception e) {
-                            log.warn("handle socket", e);
+                            log.warn("handle socket: {}", socket, e);
                         }
                     });
                     thread.start();
@@ -123,7 +139,8 @@ class SSLVpnServer implements Runnable {
         }
     }
 
-    private void handleSocket(Socket socket, InputStream inputStream, OutputStream outputStream, boolean ssl) throws Exception {
+    private void handleSocket(Socket socket, InputStream inputStream, OutputStream outputStream, boolean ssl,
+                              byte[] prologue) throws Exception {
         final InetSocketAddress client = (InetSocketAddress) socket.getRemoteSocketAddress();
         final Socket clientSocket;
         if (ssl) {
@@ -176,24 +193,30 @@ class SSLVpnServer implements Runnable {
         } else {
             clientSocket = new Socket();
             clientSocket.connect(server, 10000);
+            log.debug("connected to {}, socket={}", clientSocket, socket);
         }
 
         try (InputStream localIn = inputStream; OutputStream localOut = outputStream;
              InputStream socketIn = clientSocket.getInputStream(); OutputStream socketOut = clientSocket.getOutputStream()) {
+            if (prologue.length > 0) {
+                socketOut.write(prologue);
+                socketOut.flush();
+            }
             CountDownLatch countDownLatch = new CountDownLatch(2);
             SacMsgStreamForward inbound, outbound;
-            inbound = new SacMsgStreamForward(localIn, socketOut, true, client, server, countDownLatch, socket, server.getHostName());
-            outbound = new SacMsgStreamForward(socketIn, localOut, false, client, server, countDownLatch, clientSocket, server.getHostName());
+            inbound = new SacMsgStreamForward(localIn, socketOut, true, client, server, countDownLatch, socket, server.getHostName(), ssl);
+            outbound = new SacMsgStreamForward(socketIn, localOut, false, client, server, countDownLatch, clientSocket, server.getHostName(), ssl);
             inbound.startThread();
             outbound.startThread();
             countDownLatch.await();
+            log.debug("finish socket: {}", socket);
         }
     }
 
     private static class SacMsgStreamForward extends StreamForward {
         public SacMsgStreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
-                                   String hostName) {
-            super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, null, hostName, true, null);
+                                   String hostName, boolean ssl) {
+            super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, null, hostName, ssl, null);
         }
         public void startThread() {
             startThread(null);
@@ -201,7 +224,7 @@ class SSLVpnServer implements Runnable {
         @Override
         protected void notifyForward(byte[] buf, int read) {
             byte[] data = Arrays.copyOf(buf, read);
-            log.debug("{}", Inspector.inspectString(data, String.format("notifyForward server=%s, base64=%s", server, Base64.encode(data))));
+            log.debug("{}", Inspector.inspectString(data, String.format("notifyForward socket=%s, server=%s, base64=%s", socket, server, Base64.encode(data))));
             ByteString bs = ByteString.copyFrom(data);
             if (bs.isValidUtf8()) {
                 log.debug("notifyForward {}", bs.toStringUtf8());

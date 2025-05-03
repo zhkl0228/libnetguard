@@ -173,7 +173,7 @@ public class ClientHelloRecord {
     final List<String> applicationLayerProtocols;
     private final HttpRequest httpRequest;
     private final JA3Signature ja3;
-    private final List<CipherSuite> cipherSuites;
+    public final List<CipherSuite> cipherSuites;
     private final boolean ssl;
 
     public TlsSignature getJa3() {

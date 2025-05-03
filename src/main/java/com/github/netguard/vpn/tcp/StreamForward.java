@@ -101,9 +101,13 @@ public class StreamForward implements Runnable {
     }
 
     protected boolean forward(byte[] buf) throws IOException {
-        int read;
         try {
-            while ((read = inputStream.read(buf)) != -1) {
+            while (true) {
+                int read = inputStream.read(buf);
+                log.trace("forward read {} bytes, server={}, isSSL={}, socket={}", read, server, isSSL, socket);
+                if (read == -1) {
+                    break;
+                }
                 notifyForward(buf, read);
                 outputStream.write(buf, 0, read);
                 outputStream.flush();
@@ -149,6 +153,7 @@ public class StreamForward implements Runnable {
         } catch (RuntimeException e) {
             log.warn("stream forward exception: socket={}", socket, e);
         } finally {
+            log.trace("finish stream forward: socket={}", socket);
             IoUtil.close(inputStream);
             IoUtil.close(outputStream);
             if (countDownLatch != null) {
