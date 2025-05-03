@@ -1,6 +1,7 @@
 package com.github.netguard.vpn.tcp;
 
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.tls.CipherSuite;
 import com.github.netguard.vpn.tls.JA3Signature;
 import com.github.netguard.vpn.tls.TlsSignature;
 import eu.faircode.netguard.Packet;
@@ -18,8 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class ClientHelloRecord {
 
@@ -173,6 +173,7 @@ public class ClientHelloRecord {
     final List<String> applicationLayerProtocols;
     private final HttpRequest httpRequest;
     private final JA3Signature ja3;
+    private final List<CipherSuite> cipherSuites;
     private final boolean ssl;
 
     public TlsSignature getJa3() {
@@ -180,16 +181,18 @@ public class ClientHelloRecord {
     }
 
     private ClientHelloRecord(byte[] prologue, HttpRequest httpRequest, JA3Signature ja3) {
-        this(prologue, null, new ArrayList<>(0), httpRequest, ja3, false);
+        this(prologue, null, new ArrayList<>(0), httpRequest, ja3, Collections.emptyList(), false);
     }
 
     ClientHelloRecord(byte[] prologue, String hostName, List<String> applicationLayerProtocols, HttpRequest httpRequest, JA3Signature ja3,
+                      List<CipherSuite> cipherSuites,
                       boolean ssl) {
         this.prologue = prologue;
         this.hostName = hostName;
         this.applicationLayerProtocols = applicationLayerProtocols;
         this.httpRequest = httpRequest;
         this.ja3 = ja3;
+        this.cipherSuites = cipherSuites;
         this.ssl = ssl;
     }
 
@@ -202,6 +205,7 @@ public class ClientHelloRecord {
         return "ClientHelloRecord{" +
                 "hostName='" + hostName + '\'' +
                 ", applicationLayerProtocols='" + applicationLayerProtocols + '\'' +
+                ", cipherSuites=" + cipherSuites +
                 '}';
     }
 }

@@ -45,6 +45,7 @@ public abstract class SSLVpn extends ProxyVpn {
                                    InputStream inputStream, int serverPort, ClientHelloRecord clientHelloRecord) {
         TlsSignature tlsSignature = clientHelloRecord.getJa3();
         if (log.isDebugEnabled()) {
+            log.debug("New SSLVpn client: clientHelloRecord={}", clientHelloRecord);
             log.debug("{}", String.format("newSSLVpn ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ScrapflyFP=%s",
                     DigestUtil.md5Hex(tlsSignature.getJa3nText()),
                     tlsSignature.getJa4Text(),

@@ -238,6 +238,12 @@
             <version>1.0.8</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.25.4</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <distributionManagement>
         <snapshotRepository>

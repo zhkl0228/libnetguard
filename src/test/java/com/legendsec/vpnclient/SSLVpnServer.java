@@ -7,6 +7,7 @@ import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import com.github.netguard.vpn.tcp.StreamForward;
+import com.google.protobuf.ByteString;
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -201,6 +202,10 @@ class SSLVpnServer implements Runnable {
         protected void notifyForward(byte[] buf, int read) {
             byte[] data = Arrays.copyOf(buf, read);
             log.debug("{}", Inspector.inspectString(data, String.format("notifyForward server=%s, base64=%s", server, Base64.encode(data))));
+            ByteString bs = ByteString.copyFrom(data);
+            if (bs.isValidUtf8()) {
+                log.debug("notifyForward {}", bs.toStringUtf8());
+            }
             super.notifyForward(buf, read);
         }
     }

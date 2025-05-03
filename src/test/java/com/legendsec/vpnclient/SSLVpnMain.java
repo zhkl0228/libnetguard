@@ -9,7 +9,7 @@ import java.util.Collections;
 public class SSLVpnMain {
 
     public static void main(String[] args) throws Exception {
-         SSLVpnServer server = new SSLVpnServer("192.168.31.203", 443, 20250, Collections.emptyList());
+         SSLVpnServer server = new SSLVpnServer("192.168.31.205", 443, 20250, Collections.emptyList());
 //        SSLVpnServer server = new SSLVpnServer("wegu.zhongdinggroup.com", 443, 20250, Collections.emptyList());
         VpnServerBuilder builder = VpnServerBuilder.create()
                 .withPort(20240)

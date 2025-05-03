@@ -2,6 +2,7 @@ package com.github.netguard.vpn.tcp;
 
 import cn.hutool.core.util.HexUtil;
 import com.github.netguard.Inspector;
+import com.github.netguard.vpn.tls.CipherSuite;
 import com.github.netguard.vpn.tls.JA3Signature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,8 +82,17 @@ public class ExtensionServerName {
         }
         buffer.get(new byte[32]); // clientRandom
         buffer.get(new byte[buffer.get() & 0xff]); // sessionId
-        int cipherSuiteCount = buffer.getShort() & 0xffff;
-        buffer.get(new byte[cipherSuiteCount]); // skip cipher suites
+        int cipherSuiteCount = (buffer.getShort() & 0xffff) / 2;
+        List<CipherSuite> cipherSuites = new ArrayList<>(cipherSuiteCount);
+        for(int i = 0; i < cipherSuiteCount; i++) {
+            int value = buffer.getShort() & 0xffff;
+            if(JA3Signature.isNotGrease(value)) {
+                CipherSuite cipherSuite = CipherSuite.valueOf(value);
+                if (cipherSuite != null) {
+                    cipherSuites.add(cipherSuite);
+                }
+            }
+        }
         buffer.get(new byte[buffer.get() & 0xff]); // compression methods
         if (buffer.remaining() < 2) {
             log.debug("Not tls: extension data is empty: server={}", server);
@@ -137,8 +147,8 @@ public class ExtensionServerName {
         JA3Signature ja3 = JA3Signature.parse(ByteBuffer.wrap(prologue), hostName, applicationLayerProtocols);
         log.debug("parseExtensions names={}, server={}, applicationLayerProtocols={}, hasSignatureAlgorithms={}, ja3={}", serverNames, server, applicationLayerProtocols, hasSignatureAlgorithms, ja3);
 
-        if (hostName != null || (hasSignatureAlgorithms && cipherSuiteCount > 0)) {
-            return new ClientHelloRecord(prologue, hostName, applicationLayerProtocols, null, ja3, true);
+        if (hostName != null || (hasSignatureAlgorithms && !cipherSuites.isEmpty())) {
+            return new ClientHelloRecord(prologue, hostName, applicationLayerProtocols, null, ja3, cipherSuites, true);
         } else {
             log.debug("Not tls: extension name is empty: server={}", server);
             return ClientHelloRecord.prologue(baos, dataInput, ja3);

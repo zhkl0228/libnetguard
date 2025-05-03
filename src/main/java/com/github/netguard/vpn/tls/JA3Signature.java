@@ -657,7 +657,7 @@ public final class JA3Signature implements TlsSignature {
      * @return false if value matches GREASE value, true otherwise
      * @see <a href="https://tools.ietf.org/html/draft-ietf-tls-grease">draft-ietf-tls-grease</a>
      */
-    private static boolean isNotGrease(final int value) {
+    public static boolean isNotGrease(final int value) {
         for (int j : GREASE) {
             if (value == j) {
                 return false;

@@ -239,7 +239,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         JSONArray array = new JSONArray(services.size());
         int id = 1;
         for (Service service : services) {
-            array.add(service.toJSON(id++));
+            array.add(service.toJSON(id));
         }
         response.put("servicelist", array);
         response.put("sm_enc_algo", "");
