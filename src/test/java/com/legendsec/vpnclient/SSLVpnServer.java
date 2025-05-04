@@ -5,7 +5,6 @@ import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.net.DefaultTrustManager;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.*;
-import com.github.netguard.vpn.tls.CipherSuite;
 import com.google.protobuf.ByteString;
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.slf4j.Logger;
@@ -17,6 +16,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.security.Security;
 import java.util.Arrays;
 import java.util.List;
@@ -37,8 +37,11 @@ class SSLVpnServer implements Runnable {
 
     private final List<String> applicationProtocols;
     private String applicationProtocol;
+    private final String lanIp = Inspector.detectLanIP();
+    private final int port;
 
     SSLVpnServer(String hostName, int serverPort, int port, List<String> applicationProtocols) throws IOException {
+        this.port = port;
         this.server = new InetSocketAddress(hostName, serverPort);
         this.applicationProtocols = applicationProtocols;
         try {
@@ -80,9 +83,9 @@ class SSLVpnServer implements Runnable {
                             byte[] prologue;
                             if (magic == 0x16) {
                                 clientHelloRecord = ExtensionServerName.parseServerNames(dataInput, (InetSocketAddress) socket.getRemoteSocketAddress());
-                                log.debug("{}", Inspector.inspectString(clientHelloRecord.prologue, String.format("Accept client socket=%s clientHelloRecord=%s", socket, clientHelloRecord)));
+                                log.debug("{}", String.format("Accept client socket=%s clientHelloRecord=%s", socket, clientHelloRecord));
                                 if (clientHelloRecord.isSSL()) {
-                                    if (clientHelloRecord.cipherSuites.size() == 2 || clientHelloRecord.cipherSuites.contains(CipherSuite.TLS_ECDHE_SM1_SM3)) {
+                                    if (clientHelloRecord.cipherSuites.size() == 2) {
                                         prologue = clientHelloRecord.prologue;
                                         clientHelloRecord = null;
                                     } else {
@@ -213,7 +216,7 @@ class SSLVpnServer implements Runnable {
         }
     }
 
-    private static class SacMsgStreamForward extends StreamForward {
+    private class SacMsgStreamForward extends StreamForward {
         public SacMsgStreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
                                    String hostName, boolean ssl) {
             super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, null, hostName, ssl, null);
@@ -222,14 +225,22 @@ class SSLVpnServer implements Runnable {
             startThread(null);
         }
         @Override
-        protected void notifyForward(byte[] buf, int read) {
+        protected int notifyForward(byte[] buf, int read) {
             byte[] data = Arrays.copyOf(buf, read);
             log.debug("{}", Inspector.inspectString(data, String.format("notifyForward socket=%s, server=%s, base64=%s", socket, server, Base64.encode(data))));
             ByteString bs = ByteString.copyFrom(data);
             if (bs.isValidUtf8()) {
-                log.debug("notifyForward {}", bs.toStringUtf8());
+                String str = bs.toStringUtf8();
+                String host = String.format("Host: %s:%d", lanIp, port);
+                if (server && str.contains(host)) {
+                    str = str.replace(host, String.format("Host: %s:%d", SSLVpnServer.this.server.getHostString(), SSLVpnServer.this.server.getPort()));
+                    byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
+                    read = bytes.length;
+                    System.arraycopy(bytes, 0, buf, 0, read);
+                }
+                log.debug("notifyForward {}", str);
             }
-            super.notifyForward(buf, read);
+            return super.notifyForward(buf, read);
         }
     }
 

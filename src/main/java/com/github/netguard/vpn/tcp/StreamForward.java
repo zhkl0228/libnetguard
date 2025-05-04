@@ -82,7 +82,7 @@ public class StreamForward implements Runnable {
 
     private Throwable socketException;
 
-    protected void notifyForward(byte[] buf, int read) {
+    protected int notifyForward(byte[] buf, int read) {
         if (packetCapture != null) {
             if (server) {
                 if (isSSL) {
@@ -98,6 +98,7 @@ public class StreamForward implements Runnable {
                 }
             }
         }
+        return read;
     }
 
     protected boolean forward(byte[] buf) throws IOException {
@@ -108,7 +109,7 @@ public class StreamForward implements Runnable {
                 if (read == -1) {
                     break;
                 }
-                notifyForward(buf, read);
+                read = notifyForward(buf, read);
                 outputStream.write(buf, 0, read);
                 outputStream.flush();
             }

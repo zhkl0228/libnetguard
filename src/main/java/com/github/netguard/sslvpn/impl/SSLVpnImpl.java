@@ -1,4 +1,4 @@
-package com.github.netguard.sslvpn.qianxin;
+package com.github.netguard.sslvpn.impl;
 
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.HexUtil;
@@ -11,6 +11,9 @@ import com.github.netguard.IPUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.sslvpn.SSLVpn;
+import com.github.netguard.sslvpn.qianxin.QianxinVpn;
+import com.github.netguard.sslvpn.qianxin.PicDef;
+import com.github.netguard.sslvpn.qianxin.Service;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.StreamForward;
@@ -29,13 +32,13 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-public class QianxinVPN extends SSLVpn implements GatewayAgent {
+public class SSLVpnImpl extends SSLVpn {
 
-    private static final Logger log = LoggerFactory.getLogger(QianxinVPN.class);
+    private static final Logger log = LoggerFactory.getLogger(SSLVpnImpl.class);
 
     private static final int VPN_BUFFER_SIZE = 0x3000;
 
-    public QianxinVPN(List<ProxyVpn> clients, RootCert rootCert, Socket socket,
+    public SSLVpnImpl(List<ProxyVpn> clients, RootCert rootCert, Socket socket,
                       InputStream inputStream, int serverPort) {
         super(clients, rootCert, socket, inputStream, serverPort);
     }
@@ -68,7 +71,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
                 }
 
                 switch (tag) {
-                    case VPN_PRD_DATA: {
+                    case QianxinVpn.VPN_PRD_DATA: {
                         final int length = readMsg(dataInput, vpnBuffer);
                         for (int i = 4; i < length; i++) {
                             vpnBuffer[i] ^= ServiceSinkhole.VPN_MAGIC;
@@ -78,65 +81,65 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
                         dataOutput.write(vpnBuffer, 4, length - 4);
                         break;
                     }
-                    case VPN_PROXY_ACCESS: {
+                    case QianxinVpn.VPN_PROXY_ACCESS: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleProxyAccess(tag, msg, outputStream);
                         outputStream.write(data);
                         outputStream.flush();
                         break;
                     }
-                    case VPN_NC_ACCESS: {
+                    case QianxinVpn.VPN_NC_ACCESS: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleNcAuthorize(tag, msg, outputStream);
                         outputStream.write(data);
                         outputStream.flush();
                         break;
                     }
-                    case VPN_HEARTBEAT: {
+                    case QianxinVpn.VPN_HEARTBEAT: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleHeartbeat(tag, msg);
                         outputStream.write(data);
                         outputStream.flush();
                         break;
                     }
-                    case VPN_PUT_HOSTBIND:
-                    case VPN_PASSWORD_INIT:
-                    case VPN_PASSWORD_UPDATE:
-                    case VPN_UPDATE_PASSWD_JSON: {
+                    case QianxinVpn.VPN_PUT_HOSTBIND:
+                    case QianxinVpn.VPN_PASSWORD_INIT:
+                    case QianxinVpn.VPN_PASSWORD_UPDATE:
+                    case QianxinVpn.VPN_UPDATE_PASSWD_JSON: {
                         byte[] msg = readMsg(dataInput);
                         ByteBuffer buffer = ByteBuffer.wrap(msg);
                         readJSON(buffer);
                         break;
                     }
-                    case VPN_QUERY_APP_LIST: {
+                    case QianxinVpn.VPN_QUERY_APP_LIST: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleQueryAppList(tag, msg);
                         outputStream.write(data);
                         outputStream.flush();
                         break;
                     }
-                    case VPN_LOGOUT: {
+                    case QianxinVpn.VPN_LOGOUT: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleVpnLogout(tag, msg);
                         outputStream.write(data);
                         outputStream.flush();
                         break;
                     }
-                    case VPN_GET_USERDATA: {
+                    case QianxinVpn.VPN_GET_USERDATA: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleGetUserData(tag, msg);
                         outputStream.write(data);
                         outputStream.flush();
                         break;
                     }
-                    case VPN_LOGIN: {
+                    case QianxinVpn.VPN_LOGIN: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleVpnLogin(tag, msg);
                         outputStream.write(data);
                         outputStream.flush();
                         break;
                     }
-                    case VPN_GET_PORTAL: {
+                    case QianxinVpn.VPN_GET_PORTAL: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleGetPortal(tag, msg);
                         outputStream.write(data);
@@ -163,8 +166,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         }
     }
 
-    @Override
-    protected HttpResponse handleHttpRequest(HttpRequest request) throws IOException {
+    private HttpResponse handleQianxin(HttpRequest request) throws IOException {
         if ("/client/custom_lang.json".equals(request.uri()) ||
                 "/download/mobile/software/sslvpn-version.xml".equals(request.uri())) {
             return notFound();
@@ -198,20 +200,33 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         return null;
     }
 
+    private HttpResponse handleATrust(HttpRequest request) throws IOException {
+        return null;
+    }
+
+    @Override
+    protected HttpResponse handleHttpRequest(HttpRequest request) throws IOException {
+        HttpResponse response = handleQianxin(request);
+        if (response != null) {
+            return response;
+        }
+        return handleATrust(request);
+    }
+
     private byte[] handleGetUserData(int tag, byte[] msg) throws IOException {
         ByteBuffer buffer = ByteBuffer.wrap(msg);
         JSONObject obj = readJSON(buffer);
         final String ticket = obj.getString("ticket");
         if (ticket == null || ticket.length() != 64) {
-            return buildErrorResponse(tag | 0x80000000, ERR_INVALID_USER);
+            return buildErrorResponse(tag | 0x80000000, QianxinVpn.ERR_INVALID_USER);
         }
         JSONObject response = new JSONObject(true);
-        response.put("authserid", USER_ID);
+        response.put("authserid", QianxinVpn.USER_ID);
         response.put("compress", 0);
         response.put("devtime", System.currentTimeMillis() / 1000);
         response.put("domain", "");
         response.put("expires", 0);
-        response.put("gateway_version", GATEWAY_VERSION);
+        response.put("gateway_version", QianxinVpn.GATEWAY_VERSION);
         response.put("gm_port", 0);
         {
             JSONObject hostchecker = new JSONObject(1);
@@ -220,7 +235,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         }
         response.put("ios_mdm_status", "ios_setup_ok");
         response.put("iphost_list", Collections.emptyList());
-        String machineId = DigestUtil.md5Hex16(String.format("%s_%s", getClass().getSimpleName(), GATEWAY_VERSION));
+        String machineId = DigestUtil.md5Hex16(String.format("%s_%s", getClass().getSimpleName(), QianxinVpn.GATEWAY_VERSION));
         response.put("machineid", machineId.toUpperCase());
         JSONObject mpolicy = buildMPolicy();
         response.put("mpolicy", mpolicy);
@@ -248,7 +263,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         response.put("sso_list", Collections.emptyList());
         response.put("subaccount_list", Collections.emptyList());
         response.put("use_gm_ssl", 0);
-        response.put("userid", USER_ID);
+        response.put("userid", QianxinVpn.USER_ID);
         String username;
         String password;
         byte[] ticketData = HexUtil.decodeHex(ticket);
@@ -342,7 +357,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
             }
         } catch (IOException e) {
             log.debug("connect failed", e);
-            return buildErrorResponse(tag, ERR_PROXY_CONNECT);
+            return buildErrorResponse(tag, QianxinVpn.ERR_PROXY_CONNECT);
         }
     }
 
@@ -351,7 +366,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
 
     private class VpnStreamForward extends StreamForward {
         public VpnStreamForward(Socket vpnSocket, OutputStream outputStream, InetSocketAddress server) throws IOException {
-            super(vpnSocket.getInputStream(), outputStream, false, QianxinVPN.this.getRemoteSocketAddress(), server, null, vpnSocket, null, server.getHostName(), false, null);
+            super(vpnSocket.getInputStream(), outputStream, false, SSLVpnImpl.this.getRemoteSocketAddress(), server, null, vpnSocket, null, server.getHostName(), false, null);
         }
         @Override
         protected int getReceiveBufferSize() {
@@ -370,7 +385,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
                 buf[i + 12] ^= ServiceSinkhole.VPN_MAGIC;
             }
             ByteBuffer buffer = ByteBuffer.wrap(buf);
-            buffer.putInt(VPN_PRD_DATA);
+            buffer.putInt(QianxinVpn.VPN_PRD_DATA);
             buffer.putInt(size + 4);
             buffer.putInt(0);
             outputStream.write(buf, 0, size + 12);
@@ -471,7 +486,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         obj.put("cert_flag", 0);
         obj.put("dns_resolve_once", 1);
         obj.put("find_pwd", 0);
-        obj.put("gateway_version", GATEWAY_VERSION);
+        obj.put("gateway_version", QianxinVpn.GATEWAY_VERSION);
         obj.put("gm_port", 0);
         obj.put("prd_port2", 0);
         obj.put("show_authen", 0);
@@ -521,7 +536,7 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
         response.put("EnableChangePwd", 0);
         response.put("RepeatFlag", 0);
         response.put("SMSAuzFlag", 0);
-        response.put("ThisUserID", USER_ID);
+        response.put("ThisUserID", QianxinVpn.USER_ID);
         response.put("ThisUserName", username);
         final byte[] ticket;
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
@@ -531,12 +546,12 @@ public class QianxinVPN extends SSLVpn implements GatewayAgent {
             ticket = baos.toByteArray();
         }
         response.put("Ticket", HexUtil.encodeHexStr(Arrays.copyOf(ticket, 32)).toUpperCase());
-        response.put("UserID", USER_ID);
+        response.put("UserID", QianxinVpn.USER_ID);
         response.put("UserLang", 2);
         response.put("UserName", username);
         response.put("UserTimeout", 0);
         response.put("antivirus", 0);
-        response.put("gateway_version", GATEWAY_VERSION);
+        response.put("gateway_version", QianxinVpn.GATEWAY_VERSION);
         return buildResponse(tag, response);
     }
 

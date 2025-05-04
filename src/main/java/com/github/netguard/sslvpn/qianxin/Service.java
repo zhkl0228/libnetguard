@@ -2,13 +2,13 @@ package com.github.netguard.sslvpn.qianxin;
 
 import com.alibaba.fastjson.JSONObject;
 
-class Service {
+public class Service {
 
     private final String name;
     private final String serverIp;
     private final String serverName;
 
-    Service(String name, String serverIp, String serverName) {
+    public Service(String name, String serverIp, String serverName) {
         this.name = name;
         this.serverIp = serverIp;
         this.serverName = serverName;
@@ -29,7 +29,7 @@ class Service {
         return this;
     }
 
-    enum AccessType {
+    public enum AccessType {
         PROXY, // 应用级代理模式: VPN_PROXY_ACCESS
         NC, // VPN_PRD_DATA
         RAP,
@@ -37,7 +37,7 @@ class Service {
         RDP
     }
 
-    enum ServiceType {
+    public enum ServiceType {
         none,
         http,
         https,
@@ -68,7 +68,7 @@ class Service {
 
     private ServiceType serviceType = ServiceType.none;
 
-    final JSONObject toJSON(int id) {
+    public final JSONObject toJSON(int id) {
         boolean isService = servicePort > 0;
         JSONObject service = new JSONObject(true);
         service.put("accesstype", accessType.ordinal());

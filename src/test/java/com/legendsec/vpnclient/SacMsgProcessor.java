@@ -5,7 +5,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.Inspector;
-import com.github.netguard.sslvpn.qianxin.GatewayAgent;
+import com.github.netguard.sslvpn.qianxin.QianxinVpn;
 import org.krakenapps.pcap.decoder.tcp.DefaultTcpProcessor;
 import org.krakenapps.pcap.decoder.tcp.TcpProcessor;
 import org.krakenapps.pcap.decoder.tcp.TcpSessionKey;
@@ -40,14 +40,14 @@ class SacMsgProcessor extends DefaultTcpProcessor implements TcpProcessor {
         data.mark();
         int tag = data.getInt();
         switch (tag) {
-            case GatewayAgent.VPN_GET_PORTAL:
-            case GatewayAgent.VPN_LOGIN:
-            case GatewayAgent.VPN_GET_USERDATA:
-            case GatewayAgent.VPN_HEARTBEAT:
-            case GatewayAgent.VPN_LOGOUT:
-            case GatewayAgent.VPN_SMS_SEND:
-            case GatewayAgent.VPN_SUB_AUTH:
-            case GatewayAgent.VPN_QUERY_APP_LIST:
+            case QianxinVpn.VPN_GET_PORTAL:
+            case QianxinVpn.VPN_LOGIN:
+            case QianxinVpn.VPN_GET_USERDATA:
+            case QianxinVpn.VPN_HEARTBEAT:
+            case QianxinVpn.VPN_LOGOUT:
+            case QianxinVpn.VPN_SMS_SEND:
+            case QianxinVpn.VPN_SUB_AUTH:
+            case QianxinVpn.VPN_QUERY_APP_LIST:
             {
                 boolean haveData = handleMsgReq(tag, data);
                 if(haveData) {
@@ -74,14 +74,14 @@ class SacMsgProcessor extends DefaultTcpProcessor implements TcpProcessor {
         data.mark();
         int tag = data.getInt();
         switch (tag & Integer.MAX_VALUE) {
-            case GatewayAgent.VPN_GET_PORTAL:
-            case GatewayAgent.VPN_LOGIN:
-            case GatewayAgent.VPN_GET_USERDATA:
-            case GatewayAgent.VPN_HEARTBEAT:
-            case GatewayAgent.VPN_LOGOUT:
-            case GatewayAgent.VPN_SMS_SEND:
-            case GatewayAgent.VPN_SUB_AUTH:
-            case GatewayAgent.VPN_QUERY_APP_LIST:
+            case QianxinVpn.VPN_GET_PORTAL:
+            case QianxinVpn.VPN_LOGIN:
+            case QianxinVpn.VPN_GET_USERDATA:
+            case QianxinVpn.VPN_HEARTBEAT:
+            case QianxinVpn.VPN_LOGOUT:
+            case QianxinVpn.VPN_SMS_SEND:
+            case QianxinVpn.VPN_SUB_AUTH:
+            case QianxinVpn.VPN_QUERY_APP_LIST:
             {
                 boolean haveData = handleMsgResp(tag, data, session);
                 if(haveData) {

@@ -1,6 +1,6 @@
 package com.github.netguard.sslvpn.qianxin;
 
-enum PicDef {
+public enum PicDef {
 
     Default,
     IE,

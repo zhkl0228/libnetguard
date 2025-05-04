@@ -9,8 +9,8 @@ import java.util.Collections;
 public class SSLVpnMain {
 
     public static void main(String[] args) throws Exception {
-         SSLVpnServer server = new SSLVpnServer("192.168.31.205", 443, 20250, Collections.emptyList());
-//        SSLVpnServer server = new SSLVpnServer("wegu.zhongdinggroup.com", 443, 20250, Collections.emptyList());
+        SSLVpnServer easyConnect = new SSLVpnServer("192.168.31.205", 443, 20250, Collections.emptyList());
+        SSLVpnServer aTrust = new SSLVpnServer("192.168.31.206", 443, 20260, Collections.emptyList());
         VpnServerBuilder builder = VpnServerBuilder.create()
                 .withPort(20240)
                 .enableBroadcast(30)
@@ -22,7 +22,8 @@ public class SSLVpnMain {
         VpnServer vpnServer = builder.startServer();
         System.out.println("Start vpn server on port: " + vpnServer.getPort());
         vpnServer.waitShutdown();
-        server.close();
+        easyConnect.close();
+        aTrust.close();
     }
 
 }

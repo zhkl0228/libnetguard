@@ -4,7 +4,7 @@ import cn.hutool.core.io.IoUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.IPUtil;
 import com.github.netguard.ProxyVpn;
-import com.github.netguard.sslvpn.qianxin.QianxinVPN;
+import com.github.netguard.sslvpn.impl.SSLVpnImpl;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.RootCert;
@@ -52,7 +52,7 @@ public abstract class SSLVpn extends ProxyVpn {
                     DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
                     DigestUtil.md5Hex(tlsSignature.getScrapflyFP())));
         }
-        return new QianxinVPN(clients, rootCert, socket, inputStream, serverPort);
+        return new SSLVpnImpl(clients, rootCert, socket, inputStream, serverPort);
     }
 
     private final Socket socket;

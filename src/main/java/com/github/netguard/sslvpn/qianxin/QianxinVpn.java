@@ -1,6 +1,6 @@
 package com.github.netguard.sslvpn.qianxin;
 
-public interface GatewayAgent {
+public interface QianxinVpn {
 
     int USER_ID = 1;
     String GATEWAY_VERSION = "V 5.0 ( 6.2.150.51945 )";
