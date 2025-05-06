@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.*;
 
@@ -158,6 +159,15 @@ public class ClientHelloRecord {
             }
             HttpHeaders headers = new ReadOnlyHttpHeaders(false, nameValuePairs.toArray(new CharSequence[0]));
             HttpRequest httpRequest = new DefaultHttpRequest(version, httpMethod, uri, headers);
+            int contentLength = headers.getInt("Content-Length", 0);
+            byte[] buf = new byte[4096];
+            while (contentLength > 0) {
+                int read = inputStream.read(buf, 0, Math.min(buf.length, contentLength));
+                if (read == -1) {
+                    throw new EOFException();
+                }
+                contentLength -= read;
+            }
             log.debug("decodeHttpRequest httpRequest={}, nameValuePairs={}", httpRequest, nameValuePairs);
             return httpRequest;
         }

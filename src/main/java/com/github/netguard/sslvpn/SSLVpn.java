@@ -120,7 +120,7 @@ public abstract class SSLVpn extends ProxyVpn {
             headers.add("Content-Type", contentType);
         }
         headers.add("Content-Length", String.valueOf(data.length));
-        headers.add("Connection", "keep-alive");
+        headers.add("Connection", "close");
         headers.add("Server", getHttpServerName());
         return new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.wrappedBuffer(data), headers,
                 DefaultHttpHeadersFactory.trailersFactory().newEmptyHeaders());
@@ -137,7 +137,7 @@ public abstract class SSLVpn extends ProxyVpn {
             log.debug("handleHttp socket={}, request={}", socket, request);
             if (request != null) {
                 HttpResponse response = handleHttpRequest(request);
-                log.debug("Handle httpResponse: {}", response);
+                log.debug("Handle uri={}, httpResponse: {}", request.uri(), response);
                 if (response != null) {
                     writeResponse(outputStream, response);
                     return;

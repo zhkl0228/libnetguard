@@ -10,7 +10,7 @@ public class SSLVpnMain {
 
     public static void main(String[] args) throws Exception {
         SSLVpnServer easyConnect = new SSLVpnServer("192.168.31.205", 443, 20250, Collections.emptyList());
-        SSLVpnServer aTrust = new SSLVpnServer("192.168.31.206", 443, 20260, Collections.emptyList());
+        SSLVpnServer aTrust = new SSLVpnServer("192.168.31.209", 443, 20260, Collections.emptyList());
         VpnServerBuilder builder = VpnServerBuilder.create()
                 .withPort(20240)
                 .enableBroadcast(30)
