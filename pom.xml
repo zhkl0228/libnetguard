@@ -6,7 +6,7 @@
 
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.7</version>
+    <version>0.0.8</version>
     <packaging>jar</packaging>
     <name>VPN packet capture server</name>
     <description>VPN packet capture server</description>
@@ -32,7 +32,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.test.skip>true</maven.test.skip>
-        <netty.version>4.1.119.Final</netty.version>
+        <netty.version>4.1.118.Final</netty.version>
         <bc.version>1.78.1</bc.version>
     </properties>
     <build>
@@ -136,7 +136,7 @@
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-crypto</artifactId>
-            <version>5.8.36</version>
+            <version>5.8.38</version>
         </dependency>
         <dependency>
             <groupId>com.github.zhkl0228</groupId>
@@ -241,7 +241,7 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>3.25.4</version>
+            <version>3.25.7</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
