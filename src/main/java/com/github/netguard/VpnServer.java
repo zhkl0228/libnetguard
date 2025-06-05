@@ -177,6 +177,7 @@ public class VpnServer {
                     final ClientHelloRecord clientHelloRecord;
                     final int os;
                     try {
+                        socket.setSoTimeout(500);
                         inputStream = new PushbackInputStream(socket.getInputStream(), 2048);
                         DataInputStream dataInput = new DataInputStream(inputStream);
                         os = dataInput.readUnsignedByte();
@@ -192,6 +193,7 @@ public class VpnServer {
                         } else {
                             clientHelloRecord = null;
                         }
+                        socket.setSoTimeout(0);
                     } catch (IOException e) {
                         IOUtils.closeQuietly(socket);
                         continue;
