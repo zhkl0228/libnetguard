@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.*;
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -193,7 +194,7 @@ public class VpnServer {
                         } else {
                             clientHelloRecord = null;
                         }
-                        socket.setSoTimeout(0);
+                        socket.setSoTimeout((int) Duration.ofHours(1).toMillis());
                     } catch (IOException e) {
                         IOUtils.closeQuietly(socket);
                         continue;
@@ -225,6 +226,7 @@ public class VpnServer {
                     }
                     Thread vpnThread = new Thread(vpn, "socket: " + socket + ": vpn=" + vpn.getClass() + ", clientOS=" + vpn.getClientOS());
                     vpnThread.setPriority(Thread.MAX_PRIORITY);
+                    vpnThread.setDaemon(true);
                     vpnThread.start();
                     clients.add(vpn);
                     serverSocket.setSoTimeout(broadcastSeconds * 1000);

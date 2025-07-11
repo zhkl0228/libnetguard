@@ -136,7 +136,7 @@ public class Main {
                 return AcceptTcpResult.builder(AllowRule.FILTER_H2)
                         .build();
             }
-            if (connectRequest.isSSL()) {
+            if (connectRequest.isSSL() && connectRequest.hostName != null) {
                 return AcceptTcpResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
                         .configClientSSLContext(ImpersonatorFactory.android().newSSLContext(null, new TrustManager[]{DefaultTrustManager.INSTANCE}))
                         .build();

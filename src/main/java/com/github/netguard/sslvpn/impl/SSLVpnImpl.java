@@ -12,8 +12,8 @@ import com.github.netguard.IPUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.sslvpn.SSLVpn;
-import com.github.netguard.sslvpn.qianxin.QianxinVpn;
 import com.github.netguard.sslvpn.qianxin.PicDef;
+import com.github.netguard.sslvpn.qianxin.QianxinVpn;
 import com.github.netguard.sslvpn.qianxin.Service;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.RootCert;
@@ -27,7 +27,10 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLSocket;
 import java.io.*;
-import java.net.*;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -129,6 +132,13 @@ public class SSLVpnImpl extends SSLVpn {
                     case QianxinVpn.VPN_GET_USERDATA: {
                         byte[] msg = readMsg(dataInput);
                         byte[] data = handleGetUserData(tag, msg);
+                        outputStream.write(data);
+                        outputStream.flush();
+                        break;
+                    }
+                    case QianxinVpn.VPN_SECURE_LOGIN: {
+                        byte[] msg = readMsg(dataInput);
+                        byte[] data = handleVpnSecureLogin(tag, msg);
                         outputStream.write(data);
                         outputStream.flush();
                         break;
@@ -614,11 +624,11 @@ public class SSLVpnImpl extends SSLVpn {
         obj.put("gm_port", 0);
         obj.put("prd_port2", 0);
         obj.put("show_authen", 0);
-        obj.put("sm2_application", "");
-        obj.put("sm2_container", "");
-        obj.put("sm_cert", 0);
-        obj.put("sm_enc_algo", "");
-        obj.put("sm_enc_algo_id", 0);
+        obj.put("sm2_application", ""); // smxApp
+        obj.put("sm2_container", ""); // smxContainer
+        obj.put("sm_cert", 0); // smxCertEnable
+        obj.put("sm_enc_algo", ""); // smxAlgCipher
+        obj.put("sm_enc_algo_id", 0); // smxAlgID
         obj.put("standard_port", serverPort);
         obj.put("terminal_line_type", 0); // 控制是否允许电信网络访问
         obj.put("use_gm_ssl", 0);
@@ -645,11 +655,32 @@ public class SSLVpnImpl extends SSLVpn {
         return policy;
     }
 
+    private byte[] handleVpnSecureLogin(int tag, byte[] msg) throws IOException {
+        ByteBuffer buffer = ByteBuffer.wrap(msg);
+        JSONObject obj = readJSON(buffer);
+        if (log.isDebugEnabled()) {
+            log.debug("handleVpnSecureLogin: {}", obj);
+        }
+        JSONObject response = new JSONObject(true);
+        response.put("username", "FSXML");
+        response.put("access_token", DigestUtil.sha256Hex(msg));
+        return buildResponse(tag, response);
+    }
+
     private byte[] handleVpnLogin(int tag, byte[] msg) throws IOException {
         ByteBuffer buffer = ByteBuffer.wrap(msg);
         JSONObject obj = readJSON(buffer);
+        int subAuthType = obj.getIntValue("SubAuthType");
         String username = obj.getString("UserName");
-        String password = obj.getString("Password");
+        String password;
+        if (subAuthType == QianxinVpn.QX_SUB_AUTH_TYPE) {
+            if(username == null || username.isBlank()) {
+                username = "FSXML";
+            }
+            password = "NetGuard";
+        } else {
+            password = obj.getString("Password");
+        }
         if (log.isDebugEnabled()) {
             log.debug("client_version={}, username={}, password={}", obj.getString("client_version"), username, password);
         }
@@ -749,7 +780,7 @@ public class SSLVpnImpl extends SSLVpn {
         auth.put("QrFlag", 0);
         auth.put("SubAuthID", 1);
         auth.put("SubAuthName", "NetGuard");
-        auth.put("SubAuthType", 0);
+        auth.put("SubAuthType", QianxinVpn.QX_SUB_AUTH_TYPE);
         JSONArray array = new JSONArray(1);
         array.add(auth);
         return array;
