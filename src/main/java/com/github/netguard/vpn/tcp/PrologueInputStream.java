@@ -1,7 +1,5 @@
 package com.github.netguard.vpn.tcp;
 
-import org.apache.commons.io.IOUtils;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -27,7 +25,7 @@ class PrologueInputStream extends InputStream {
             return bais.read();
         }
         int b = dataInput.read();
-        if(b == IOUtils.EOF) {
+        if(b == -1) {
             throw new EOFException();
         }
         baos.write(b);

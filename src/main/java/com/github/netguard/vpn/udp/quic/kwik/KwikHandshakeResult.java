@@ -6,7 +6,6 @@ import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2Session;
 import com.github.netguard.vpn.udp.quic.HandshakeResult;
 import com.github.netguard.vpn.udp.quic.QuicServer;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.kwik.core.QuicClientConnection;
@@ -37,7 +36,7 @@ class KwikHandshakeResult implements HandshakeResult {
 
     @Override
     public QuicServer startServer(InspectorVpn vpn, Http2Filter http2Filter) throws Exception {
-        if (StringUtils.isAllBlank(handshakeApplicationProtocol)) {
+        if (handshakeApplicationProtocol == null || handshakeApplicationProtocol.isBlank()) {
             throw new IllegalStateException("handshakeApplicationProtocol=" + handshakeApplicationProtocol);
         }
         ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);

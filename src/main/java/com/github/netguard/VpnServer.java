@@ -14,7 +14,6 @@ import com.github.netguard.vpn.tcp.ExtensionServerName;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.udp.UDPRelay;
 import eu.faircode.netguard.ServiceSinkhole;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -196,7 +195,7 @@ public class VpnServer {
                         }
                         socket.setSoTimeout((int) Duration.ofHours(1).toMillis());
                     } catch (IOException e) {
-                        IOUtils.closeQuietly(socket);
+                        IoUtil.close(socket);
                         continue;
                     }
                     ProxyVpn vpn = null;
@@ -209,7 +208,7 @@ public class VpnServer {
                             log.debug("init ServiceSinkhole", e);
                             useNetGuardCore = false;
                         } catch (IOException e) {
-                            IOUtils.closeQuietly(socket);
+                            IoUtil.close(socket);
                             continue;
                         }
                     }
@@ -217,7 +216,7 @@ public class VpnServer {
                         try {
                             vpn = new ProxyVpnRunnable(socket, clients, rootCert, os);
                         } catch (IOException e) {
-                            IOUtils.closeQuietly(socket);
+                            IoUtil.close(socket);
                             continue;
                         }
                     }

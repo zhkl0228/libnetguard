@@ -1,6 +1,7 @@
 package com.github.netguard;
 
 import cn.hutool.core.codec.Base64;
+import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import com.github.netguard.vpn.udp.quic.netty.QuicSslContextWrapper;
@@ -32,7 +33,6 @@ import io.netty.incubator.codec.quic.QuicStreamChannel;
 import io.netty.util.CharsetUtil;
 import io.netty.util.ReferenceCountUtil;
 import junit.framework.TestCase;
-import org.apache.commons.io.IOUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import tech.kwik.core.QuicClientConnection;
@@ -337,7 +337,7 @@ public class Http3Test extends TestCase {
             output.flush();
         }
         try (InputStream input = quicStream.getInputStream()) {
-            Inspector.inspect(IOUtils.toByteArray(input), "Response");
+            Inspector.inspect(IoUtil.readBytes(input), "Response");
         }
         connection.close();
     }
@@ -354,7 +354,7 @@ public class Http3Test extends TestCase {
             @Override
             public void run() {
                 try (InputStream inputStream = stream.getInputStream(); OutputStream outputStream = stream.getOutputStream()) {
-                    System.out.println(new String(IOUtils.toByteArray(inputStream)));
+                    System.out.println(new String(IoUtil.readBytes(inputStream)));
                     outputStream.write("Echo".getBytes());
                     outputStream.flush();
                 } catch (IOException e) {

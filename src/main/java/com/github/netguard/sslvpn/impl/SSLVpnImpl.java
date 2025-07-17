@@ -1,6 +1,7 @@
 package com.github.netguard.sslvpn.impl;
 
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.io.file.FileNameUtil;
 import cn.hutool.core.util.HexUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.alibaba.fastjson.JSON;
@@ -21,7 +22,6 @@ import com.github.netguard.vpn.tcp.StreamForward;
 import eu.faircode.netguard.Packet;
 import eu.faircode.netguard.ServiceSinkhole;
 import io.netty.handler.codec.http.*;
-import org.apache.commons.io.FilenameUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -307,7 +307,7 @@ public class SSLVpnImpl extends SSLVpn {
             return notFound();
         }
         if(request.uri().startsWith("/portal/preset_icon/") && request.uri().endsWith(".png")) {
-            try (InputStream in = getClass().getResourceAsStream("/com/github/netguard/sslvpn/atrust/" + FilenameUtils.getName(request.uri()))) {
+            try (InputStream in = getClass().getResourceAsStream("/com/github/netguard/sslvpn/atrust/" + FileNameUtil.getName(request.uri()))) {
                 if (in == null) {
                     return notFound();
                 } else {

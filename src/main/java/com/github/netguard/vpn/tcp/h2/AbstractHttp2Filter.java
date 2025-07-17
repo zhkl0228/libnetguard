@@ -8,7 +8,7 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
-import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream;
+import org.brotli.dec.BrotliInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -144,7 +144,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
                     return ZipUtil.unGzip(data);
                 }
                 case "br": {
-                    try (InputStream inputStream = new BrotliCompressorInputStream(new ByteArrayInputStream(data))) {
+                    try (InputStream inputStream = new BrotliInputStream(new ByteArrayInputStream(data))) {
                         return IoUtil.readBytes(inputStream);
                     }
                 }
