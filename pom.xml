@@ -180,7 +180,7 @@
         <dependency>
             <groupId>tech.kwik</groupId>
             <artifactId>kwik</artifactId>
-            <version>0.10.3</version>
+            <version>0.10.4</version>
         </dependency>
         <dependency>
             <groupId>tech.kwik</groupId>
