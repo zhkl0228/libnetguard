@@ -28,7 +28,7 @@ public class FileReplay extends Replay {
     }
 
     @Override
-    public void doReplay(HttpDecoder httpDecoder) {
+    public void doReplayInternal(HttpDecoder httpDecoder) {
         List<String> lines = FileUtil.readLines(logFile, StandardCharsets.UTF_8);
         if (!lines.isEmpty()) {
             System.out.println("Start replay log file: " + logFile.getAbsolutePath());

@@ -6,6 +6,7 @@ package com.github.netguard;
 
 import cn.hutool.core.util.HexUtil;
 import cn.hutool.crypto.digest.DigestUtil;
+import com.github.netguard.handler.replay.Replay;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,9 +46,12 @@ public class Inspector {
 		StringBuilder buffer = new StringBuilder();
 		buffer.append("\n>-----------------------------------------------------------------------------<\n");
 
-		if (date == null) {
-			date = new Date();
-		}
+        if (date == null) {
+            date = Replay.getReplayLogDate();
+        }
+        if (date == null) {
+            date = new Date();
+        }
 		buffer.append(new SimpleDateFormat("[HH:mm:ss SSS]").format(date));
 
 		buffer.append(label);

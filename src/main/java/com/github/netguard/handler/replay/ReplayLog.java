@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
+import java.util.Date;
 
 class ReplayLog {
 
@@ -39,6 +40,10 @@ class ReplayLog {
     void replay(HttpDecoder httpDecoder) {
         if (event == null) {
             throw new IllegalStateException("event is null");
+        }
+        ThreadLocal<Date> threadLocal = Replay.replayLogDate;
+        if (threadLocal != null && timestamp > 0) {
+            threadLocal.set(new Date(timestamp));
         }
         try {
             TcpSessionKey key = new TcpSessionKeyImpl(InetAddress.getByName(clientIp), InetAddress.getByName(serverIp), clientPort, serverPort);

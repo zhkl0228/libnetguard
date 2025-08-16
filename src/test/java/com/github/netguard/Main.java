@@ -7,6 +7,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.handler.PacketDecoder;
+import com.github.netguard.handler.replay.Replay;
 import com.github.netguard.vpn.*;
 import com.github.netguard.vpn.tcp.ConnectRequest;
 import com.github.netguard.vpn.tcp.h2.AbstractHttp2Filter;
@@ -44,6 +45,10 @@ import java.util.List;
  * Chrome: --origin-to-force-quic-on=http3.is:443
  */
 public class Main {
+
+    static {
+        Replay.fakeReload4jServiceProvider();
+    }
 
     public static void main(String[] args) throws IOException {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
