@@ -1,5 +1,6 @@
 package com.github.netguard;
 
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.net.DefaultTrustManager;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.alibaba.fastjson.JSONObject;
@@ -48,13 +49,14 @@ public class Main {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
         Logger.getLogger(HttpFrameForward.class.getPackage().getName()).setLevel(Level.INFO);
         Logger.getLogger(DNSFilter.class.getPackage().getName()).setLevel(Level.DEBUG);
+        File replayFile = new File("target/replay.json");
         VpnServerBuilder builder = VpnServerBuilder.create()
                 .withPort(20240)
                 .enablePreMasterSecretsLogFile()
                 .enableBroadcast(10)
                 .enableTransparentProxying()
                 .enableUdpRelay()
-                .withReplayLogFile(new File("target/replay.json"))
+                .withReplayLogFile(replayFile)
                 .withVpnListener(new BaseVpnListener() {
                     @Override
                     protected IPacketCapture createPacketCapture() {
@@ -69,6 +71,7 @@ public class Main {
         }
         System.out.printf("vpn server listen on: %s:%d%n", lanIp, vpnServer.getPort());
         vpnServer.waitShutdown();
+        FileUtil.del(replayFile);
     }
 
     static class MyPacketDecoder extends PacketDecoder {
@@ -96,7 +99,6 @@ public class Main {
         public DNSFilter getDNSFilter() {
             return new MyVpnFilter();
         }
-
         @Override
         public QuicProxyProvider getQuicProxyProvider() {
             return new KwikProvider();
@@ -161,8 +163,8 @@ public class Main {
                         tlsSignature.getJa3nText());
             }
             AcceptUdpResult result = AcceptUdpResult.rule(AcceptRule.FILTER_H3);
-            if (tlsSignature != null) {
-                result.setUdpProxy(new InetSocketAddress("8.216.131.32", 20240));
+            if (tlsSignature != null && "http3.is".equals(packetRequest.hostName)) {
+                result.setUdpProxy(new InetSocketAddress("8.217.195.104", 20270));
             }
             return result;
         }

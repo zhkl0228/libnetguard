@@ -81,7 +81,7 @@ public class QuicStreamForward implements Runnable {
         } catch (Exception e) {
             log.warn("forward stream from={}, to={}", from, to, e);
         }
-        log.debug("{} exiting {}", server ? "Server" : "Client", getClass().getSimpleName());
+        log.debug("{} exiting {}@{}", server ? "Server" : "Client", getClass().getSimpleName(), hashCode() & 0xffffffffL);
     }
 
     void onEOF(DataOutputStream outputStream) throws IOException {

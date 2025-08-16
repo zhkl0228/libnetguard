@@ -381,7 +381,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                         Map.Entry<String, String> entry = iterator.next();
                         headers.add(entry.getKey(), entry.getValue());
                     }
-                    headers.set("X-Netguard-Fake-Response", sessionKey);
+                    headers.set("x-netguard-fake-response", sessionKey);
 //                    filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request, headersFrame.headers(), requestData == null ? new byte[0] : requestData);
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     peer.handleResponse(fakeHeadersFrame, responseData, baos, true);
@@ -415,9 +415,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             throw new IllegalStateException();
         }
         HttpHeaders headers = headersFrame.headers();
-        headers.setInt("X-Http2-Stream-Id", headersFrame.getStreamId());
-        headers.setInt("X-Http2-Stream-Weight", headersFrame.getWeight());
-        headers.set("X-Netguard-Session", sessionKey);
+        headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
+        headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
+        headers.set("x-netguard-session", sessionKey);
         writeMessage(headersFrame, responseData == null && data.length == 0 ? null : data, true, outputBuffer);
     }
 
@@ -651,13 +651,13 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     }
 
     private static void addNetGuardHeaders(HttpHeaders headers, HttpHeadersFrame headersFrame, String sessionKey, Akamai akamai) {
-        headers.setInt("X-Http2-Stream-Id", headersFrame.getStreamId());
-        headers.setInt("X-Http2-Stream-Weight", headersFrame.getWeight());
-        headers.set("X-Netguard-Session", sessionKey);
+        headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
+        headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
+        headers.set("x-netguard-session", sessionKey);
         String akamaiText = akamai == null ? null : akamai.getText();
         if (akamaiText != null) {
-            headers.set("X-Akamai-Text", akamaiText);
-            headers.set("X-Akamai-Hash", DigestUtil.md5Hex(akamaiText));
+            headers.set("x-akamai-text", akamaiText);
+            headers.set("x-akamai-hash", DigestUtil.md5Hex(akamaiText));
         }
     }
 

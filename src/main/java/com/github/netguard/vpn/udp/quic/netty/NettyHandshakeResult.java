@@ -157,7 +157,7 @@ class NettyHandshakeResult implements HandshakeResult {
                     } else {
                         byte[] responseData = result.responseData;
                         HttpResponse response = result.response;
-                        response.headers().set("X-Netguard-Fake-Response", sessionKey.toString());
+                        response.headers().set("x-netguard-fake-response", sessionKey.toString());
                         http2Filter.filterRequest(sessionKey, request, new NetGuardHttp2Headers(), requestData);
                         HttpHeaders headers = response.headers();
                         headers.remove(HttpHeaderNames.TRANSFER_ENCODING);

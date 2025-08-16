@@ -351,7 +351,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private void notifyConnected(Connected connected) {
-        log.debug("notifyConnected connected={}", connected);
+        log.trace("notifyConnected connected={}", connected);
         if (connectionListener != null) {
             try {
                 connectionListener.notifyConnected(this, connected);
@@ -364,7 +364,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     // Called from native code
     @SuppressWarnings("unused")
     private void notifyDisconnected(Connected connected) {
-        log.debug("notifyDisconnected connected={}", connected);
+        log.trace("notifyDisconnected connected={}", connected);
         if(connectionListener != null) {
             try {
                 connectionListener.notifyDisconnected(this, connected);

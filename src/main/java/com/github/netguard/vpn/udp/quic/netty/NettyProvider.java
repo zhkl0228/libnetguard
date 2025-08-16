@@ -10,6 +10,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.incubator.codec.http3.Http3;
 import io.netty.incubator.codec.quic.QuicChannel;
 import io.netty.incubator.codec.quic.QuicChannelBootstrap;
@@ -34,6 +35,7 @@ public class NettyProvider extends QuicProxyProvider {
 
         try {
             QuicSslContext context = QuicSslContextBuilder.forClient()
+                    .trustManager(InsecureTrustManagerFactory.INSTANCE)
                     .applicationProtocols(packetRequest.applicationLayerProtocols.toArray(new String[0])).build();
             ChannelHandler codec = Http3.newQuicClientCodecBuilder()
                     .sslContext(new QuicSslContextWrapper(context, packetRequest.hostName, udpProxy == null ? packetRequest.port : udpProxy.getPort()))
@@ -59,7 +61,7 @@ public class NettyProvider extends QuicProxyProvider {
             InetSocketAddress remoteAddress = new InetSocketAddress(udpProxy == null ? packetRequest.serverIp : udpProxy.getHostString(), udpProxy == null ? packetRequest.port : udpProxy.getPort());
             QuicChannelBootstrap bootstrap = QuicChannel.newBootstrap(channel)
                     .remoteAddress(remoteAddress);
-            log.debug("newClientConnection udpProxy={}, port={}, remoteAddress={}, bootstrap={}", udpProxy, port, remoteAddress, bootstrap);
+            log.debug("newClientConnection udpProxy={}, port={}, remoteAddress={}, packetRequest={}", udpProxy, port, remoteAddress, packetRequest);
             return new NettyClientConnection(group, channel, bootstrap);
         } catch (InterruptedException | IOException e) {
             throw new IllegalStateException("newClientConnection", e);
