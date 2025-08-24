@@ -39,6 +39,7 @@ public abstract class Replay implements TcpProcessor {
     public abstract void writeTcpClose(TcpSessionKey key);
     public abstract void writeTcpSend(TcpSessionKey key, byte[] data);
     public abstract void writeTcpReceive(TcpSessionKey key, byte[] data);
+    public abstract void writeLog(String log);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 

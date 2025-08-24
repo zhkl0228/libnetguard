@@ -5,6 +5,7 @@ enum ReplayEvent {
     TcpConnect,
     TcpClose,
     TcpSend,
-    TcpReceive
+    TcpReceive,
+    Log
 
 }

@@ -108,6 +108,7 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest<Ac
                 hostName.endsWith(".apple.com") ||
                 hostName.endsWith(".icloud.com.cn") ||
                 hostName.endsWith(".cdn-apple.com") ||
+                hostName.endsWith(".icloud-content.com") ||
                 "dispatcher.is.autonavi.com".equals(hostName) ||
                 "api.smoot.apple.cn".equals(hostName);
     }

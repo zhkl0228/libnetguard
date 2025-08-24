@@ -66,4 +66,10 @@ public class FileReplay extends Replay {
         writeLog(ReplayLog.createLog(key, ReplayEvent.TcpReceive, data));
     }
 
+    @Override
+    public void writeLog(String log) {
+        if (log != null) {
+            writeLog(new ReplayLog(ReplayEvent.Log, log.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
 }

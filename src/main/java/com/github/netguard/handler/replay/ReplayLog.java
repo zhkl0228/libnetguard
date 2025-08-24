@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 class ReplayLog {
@@ -71,6 +72,9 @@ class ReplayLog {
                 case TcpClose:
                     httpDecoder.onFinish(key);
                     break;
+                case Log:
+                    log.info("{}", new String(data, StandardCharsets.UTF_8));
+                    break;
                 default:
                     throw new IllegalStateException("unexpected event: " + event);
             }
@@ -89,7 +93,7 @@ class ReplayLog {
     public ReplayLog() {
     }
 
-    private ReplayLog(ReplayEvent event, byte[] data) {
+    ReplayLog(ReplayEvent event, byte[] data) {
         this.event = event;
         this.data = data;
         this.timestamp = System.currentTimeMillis();
