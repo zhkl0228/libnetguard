@@ -30,12 +30,16 @@ public class FileReplay extends Replay {
     @Override
     public void doReplayInternal(HttpDecoder httpDecoder) {
         List<String> lines = FileUtil.readLines(logFile, StandardCharsets.UTF_8);
-        if (!lines.isEmpty()) {
+        boolean hasLog = !lines.isEmpty();
+        if (hasLog) {
             System.out.println("Start replay log file: " + logFile.getAbsolutePath());
         }
         for(String line : lines) {
             ReplayLog replayLog = JSON.parseObject(line, ReplayLog.class);
             replayLog.replay(httpDecoder);
+        }
+        if (hasLog) {
+            System.out.println("End replay log file: " + logFile.getAbsolutePath());
         }
     }
 

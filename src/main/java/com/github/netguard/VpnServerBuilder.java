@@ -57,6 +57,13 @@ public class VpnServerBuilder {
         return this;
     }
 
+    private boolean enableSocksProxy;
+
+    public VpnServerBuilder enableSocksProxy() {
+        this.enableSocksProxy = true;
+        return this;
+    }
+
     private boolean enableUdpRelay;
 
     public VpnServerBuilder enableUdpRelay() {
@@ -100,6 +107,7 @@ public class VpnServerBuilder {
         if (disableNetGuard) {
             server.disableNetGuard();
         }
+        server.enableSocksProxy = enableSocksProxy;
         server.start();
         return server;
     }

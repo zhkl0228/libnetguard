@@ -4,16 +4,15 @@ import cn.hutool.core.io.IoUtil;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.handler.replay.FileReplay;
 import com.github.netguard.handler.replay.Replay;
-import com.github.netguard.sslvpn.SSLVpn;
 import com.github.netguard.transparent.TransparentSocketProxying;
 import com.github.netguard.vpn.BaseVpnListener;
+import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.ExtensionServerName;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.udp.UDPRelay;
-import eu.faircode.netguard.ServiceSinkhole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,6 +116,8 @@ public class VpnServer {
 
     private Replay replay;
 
+    boolean enableSocksProxy;
+
     /**
      * use BaseVpnListener
      */
@@ -173,52 +174,44 @@ public class VpnServer {
                         serverSocket.setSoTimeout(NO_CLIENT_BROADCAST_DELAY_MILLIS);
                     }
                     Socket socket = serverSocket.accept();
-                    final PushbackInputStream inputStream;
-                    final ClientHelloRecord clientHelloRecord;
-                    final int os;
+                    final ProxyVpnFactory proxyVpnFactory;
                     try {
                         socket.setSoTimeout(500);
-                        inputStream = new PushbackInputStream(socket.getInputStream(), 2048);
+                        PushbackInputStream inputStream = new PushbackInputStream(socket.getInputStream(), 2048);
                         DataInputStream dataInput = new DataInputStream(inputStream);
-                        os = dataInput.readUnsignedByte();
-                        if (os == 0x16) {
+                        int os = dataInput.readUnsignedByte();
+                        if (os == 0x4 || os == 0x5) { // socks proxy
+                            if (enableSocksProxy) {
+                                proxyVpnFactory = new ProxyVpnFactory.SocksFactory(os == 0x5 ? ClientOS.SocksV5 : ClientOS.SocksV4);
+                            } else {
+                                throw new IOException("SocksProxy not enabled.");
+                            }
+                        } else if (os == 0x16) {
                             inputStream.unread(os);
-                            clientHelloRecord = ExtensionServerName.parseServerNames(dataInput, (InetSocketAddress) socket.getRemoteSocketAddress());
+                            ClientHelloRecord clientHelloRecord = ExtensionServerName.parseServerNames(dataInput, (InetSocketAddress) socket.getRemoteSocketAddress());
                             log.debug("Accept client clientHelloRecord={}", clientHelloRecord);
                             if (clientHelloRecord.isSSL()) {
                                 inputStream.unread(clientHelloRecord.prologue);
                             } else {
                                 throw new EOFException("NOT SSL: " + clientHelloRecord);
                             }
+                            proxyVpnFactory = new ProxyVpnFactory.SSLVpnFactory(inputStream, getPort(), clientHelloRecord);
                         } else {
-                            clientHelloRecord = null;
+                            proxyVpnFactory = new ProxyVpnFactory.VpnFactory(os, useNetGuardCore);
                         }
                         socket.setSoTimeout((int) Duration.ofHours(1).toMillis());
                     } catch (IOException e) {
+                        log.debug("accept detect protocol", e);
                         IoUtil.close(socket);
                         continue;
                     }
-                    ProxyVpn vpn = null;
-                    if (clientHelloRecord != null) { // SSL
-                        vpn = SSLVpn.newSSLVpn(clients, rootCert, socket, inputStream, getPort(), clientHelloRecord);
-                    } else if (useNetGuardCore) {
-                        try {
-                            vpn = new ServiceSinkhole(socket, clients, rootCert, os);
-                        } catch (UnsatisfiedLinkError e) {
-                            log.debug("init ServiceSinkhole", e);
-                            useNetGuardCore = false;
-                        } catch (IOException e) {
-                            IoUtil.close(socket);
-                            continue;
-                        }
-                    }
-                    if (vpn == null) {
-                        try {
-                            vpn = new ProxyVpnRunnable(socket, clients, rootCert, os);
-                        } catch (IOException e) {
-                            IoUtil.close(socket);
-                            continue;
-                        }
+                    final ProxyVpn vpn;
+                    try {
+                        vpn = proxyVpnFactory.newVpn(socket, clients, rootCert);
+                    } catch (IOException e) {
+                        log.debug("accept newVpn", e);
+                        IoUtil.close(socket);
+                        continue;
                     }
                     if (vpnListener != null) {
                         vpnListener.onConnectClient(vpn);

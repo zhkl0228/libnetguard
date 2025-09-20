@@ -41,7 +41,7 @@ public abstract class SSLVpn extends ProxyVpn {
 
     private static final ServerCertificate SSL_VPN_SERVER_CERTIFICATE = new ServerCertificate(null);
 
-    public static SSLVpn newSSLVpn(List<ProxyVpn> clients, RootCert rootCert, Socket socket,
+    public static SSLVpn newSSLVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert,
                                    InputStream inputStream, int serverPort, ClientHelloRecord clientHelloRecord) {
         TlsSignature tlsSignature = clientHelloRecord.getJa3();
         if (log.isDebugEnabled()) {

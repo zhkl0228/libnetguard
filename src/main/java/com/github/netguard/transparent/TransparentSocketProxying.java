@@ -2,6 +2,7 @@ package com.github.netguard.transparent;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.ProxyVpn;
+import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.SSLProxyV2;
@@ -30,8 +31,8 @@ public class TransparentSocketProxying extends ProxyVpn implements InspectorVpn 
     }
 
     @Override
-    public boolean isTransparentProxying() {
-        return true;
+    public ClientOS getClientOS() {
+        return ClientOS.TransparentProxying;
     }
 
     private static final Pattern PATTERN = Pattern.compile("127\\.0\\.0\\.1:(\\d+)\\s+<-\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+):(\\d+)\\s+<-\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+):(\\d+)");

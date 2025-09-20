@@ -7,6 +7,11 @@ public enum ClientOS {
     MacOS,
     Windows,
 
+    SocksV4,
+    SocksV5,
+
+    TransparentProxying,
+
     SSLVpn,
     QianxinVPN, // 奇安信 VPN
 
