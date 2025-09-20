@@ -60,7 +60,7 @@ public class Main {
                 .enablePreMasterSecretsLogFile()
                 .enableBroadcast(10)
                 .enableTransparentProxying()
-                .enableSocksProxy()
+                .enableProxy()
                 .enableUdpRelay()
                 .withReplayLogFile(replayFile)
                 .withVpnListener(new BaseVpnListener() {

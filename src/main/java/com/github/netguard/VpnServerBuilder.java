@@ -57,10 +57,13 @@ public class VpnServerBuilder {
         return this;
     }
 
-    private boolean enableSocksProxy;
+    private boolean enableProxy;
 
-    public VpnServerBuilder enableSocksProxy() {
-        this.enableSocksProxy = true;
+    /**
+     * enable socks and http proxy
+     */
+    public VpnServerBuilder enableProxy() {
+        this.enableProxy = true;
         return this;
     }
 
@@ -107,7 +110,7 @@ public class VpnServerBuilder {
         if (disableNetGuard) {
             server.disableNetGuard();
         }
-        server.enableSocksProxy = enableSocksProxy;
+        server.enableProxy = enableProxy;
         server.start();
         return server;
     }

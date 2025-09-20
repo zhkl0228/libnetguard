@@ -67,10 +67,16 @@ public class SSLProxyV2 implements Runnable {
         }
     }
 
-    public static void create(final InspectorVpn vpn, final Packet packet, final int timeout, Socket socket) {
+    public static void create(final InspectorVpn vpn, final Packet packet, final int timeout, Socket socket,
+                              ConnectListener connectListener) {
+        create(vpn, packet, timeout, socket, connectListener, null);
+    }
+
+    public static void create(final InspectorVpn vpn, final Packet packet, final int timeout, Socket socket,
+                              ConnectListener connectListener, InputStream providedInputStream) {
         try {
             log.debug("create tcp proxy packet={}, socket={}", packet, socket);
-            new SSLProxyV2(vpn, packet, timeout, socket);
+            new SSLProxyV2(vpn, packet, timeout, socket, connectListener, providedInputStream);
             log.debug("create tcp proxy packet={}, socket={}", packet, socket);
         } catch (IOException e) {
             throw new IllegalStateException(e);
@@ -84,8 +90,11 @@ public class SSLProxyV2 implements Runnable {
     private final ServerSocket serverSocket;
     private final SSLSocket secureSocket;
     private final Socket acceptedSocket;
+    private final ConnectListener connectListener;
+    private final InputStream providedInputStream;
 
-    private SSLProxyV2(InspectorVpn vpn, Packet packet, int timeout, Socket socket) throws IOException {
+    private SSLProxyV2(InspectorVpn vpn, Packet packet, int timeout, Socket socket, ConnectListener connectListener,
+                       InputStream providedInputStream) throws IOException {
         this.vpn = vpn;
 
         this.packet = packet;
@@ -98,6 +107,8 @@ public class SSLProxyV2 implements Runnable {
 
         this.serverSocket = null;
         this.acceptedSocket = socket;
+        this.connectListener = connectListener;
+        this.providedInputStream = providedInputStream;
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Thread thread = new Thread(this, "Proxy for " + packet + " " + dateFormat.format(new Date()));
@@ -120,6 +131,8 @@ public class SSLProxyV2 implements Runnable {
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
         this.acceptedSocket = null;
+        this.connectListener = null;
+        this.providedInputStream = null;
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Thread thread = new Thread(this, "Proxy for " + packet + " " + dateFormat.format(new Date()));
@@ -148,6 +161,8 @@ public class SSLProxyV2 implements Runnable {
         this.serverSocket = factory.createServerSocket(0, 0, InetAddress.getLoopbackAddress());
         this.serverSocket.setSoTimeout(SERVER_SO_TIMEOUT);
         this.acceptedSocket = null;
+        this.connectListener = null;
+        this.providedInputStream = null;
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Thread thread = new Thread(this, "SSLProxy for " + packet + " " + dateFormat.format(new Date()));
@@ -159,12 +174,12 @@ public class SSLProxyV2 implements Runnable {
     public void run() {
         InetSocketAddress remote = packet.createServerAddress();
         try (Socket local = (serverSocket == null ? acceptedSocket : serverSocket.accept())) {
-            try (InputStream localIn = local.getInputStream(); OutputStream localOut = local.getOutputStream()) {
+            try (InputStream localIn = providedInputStream == null ? local.getInputStream() : providedInputStream; OutputStream localOut = local.getOutputStream()) {
                 if (packet.isInstallRootCert()) {
                     downloadRootCert(localIn, localOut);
                 } else {
                     if (secureSocket != null) {
-                        handleSSLSocket(remote, localIn, localOut, local, secureSocket, hostName);
+                        handleSSLSocket(localIn, localOut, local, secureSocket, hostName);
                     } else {
                         handleSocket(remote, localIn, localOut, local);
                     }
@@ -233,8 +248,8 @@ public class SSLProxyV2 implements Runnable {
         writer.flush();
     }
 
-    private void handleSSLSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName) throws IOException, InterruptedException {
-        log.debug("ssl proxy remote={}, socket={}, local={}, hostName={}, applicationLayerProtocols={}", remote, socket, local, hostName, applicationLayerProtocols);
+    private void handleSSLSocket(InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName) throws IOException, InterruptedException {
+        log.debug("ssl proxy socket={}, local={}, hostName={}, applicationLayerProtocols={}", socket, local, hostName, applicationLayerProtocols);
         if (!applicationLayerProtocols.isEmpty()) {
             if (applicationProtocol != null) {
                 SSLSocket sslSocket = (SSLSocket) local;
@@ -340,7 +355,7 @@ public class SSLProxyV2 implements Runnable {
             }
         }
         if (redirectAddress == null) {
-            redirectAddress = remote.getAddress().getHostAddress();
+            redirectAddress = remote.getHostString();
         }
         if (redirectPort <= 0) {
             redirectPort = remote.getPort();
@@ -379,6 +394,9 @@ public class SSLProxyV2 implements Runnable {
                 });
                 secureSocket.startHandshake();
                 countDownLatch.await();
+                if (connectListener != null) {
+                    connectListener.onConnected(secureSocket);
+                }
                 String applicationProtocol = null;
                 try {
                     applicationProtocol = secureSocket.getApplicationProtocol();
@@ -416,6 +434,9 @@ public class SSLProxyV2 implements Runnable {
             try (Socket socket = new Socket(socketProxy)) {
                 InetSocketAddress address = createSocketAddress(socketProxy, redirectAddress, redirectPort, redirectHost);
                 socket.connect(address, timeout);
+                if (connectListener != null) {
+                    connectListener.onConnected(socket);
+                }
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                     if (record.prologue.length > 0) {
                         socketOut.write(record.prologue);

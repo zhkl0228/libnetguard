@@ -1,4 +1,4 @@
-package com.github.netguard.socks;
+package com.github.netguard.proxy;
 
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.ProxyVpn;
@@ -17,23 +17,32 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
-public class SocksVpn extends ProxyVpn {
+public class SocksProxyVpn extends ProxyVpn {
 
-    private static final Logger log = LoggerFactory.getLogger(SocksVpn.class);
+    private static final Logger log = LoggerFactory.getLogger(SocksProxyVpn.class);
 
     private final Socket socket;
     private final ClientOS clientOS;
 
-    public SocksVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert,
-                    ClientOS clientOS) {
+    public SocksProxyVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert,
+                         ClientOS clientOS) {
         super(clients, rootCert);
 
         this.socket = socket;
         this.clientOS = clientOS;
     }
 
+    private static class Result {
+        final Packet packet;
+        Result(Packet packet) {
+            this.packet = packet;
+        }
+        void notifyConnected(Socket socket) throws IOException {
+            log.debug("notifyConnected: {}", socket);
+        }
+    }
 
-    private Packet handleV5(DataInputStream dis, OutputStream outputStream) throws IOException {
+    private Result handleV5(DataInputStream dis, OutputStream outputStream) throws IOException {
         DataOutputStream dos = new DataOutputStream(outputStream);
 
         byte methods = dis.readByte();
@@ -90,10 +99,10 @@ public class SocksVpn extends ProxyVpn {
         dos.writeShort(socketAddress.getPort());
         dos.flush();
 
-        return packet;
+        return new Result(packet);
     }
 
-    private Packet handleConnectV4(DataInputStream dis, OutputStream outputStream) throws IOException {
+    private Result handleConnectV4(DataInputStream dis, OutputStream outputStream) throws IOException {
         DataOutputStream dos = new DataOutputStream(outputStream);
 
         byte cd = dis.readByte();
@@ -137,7 +146,7 @@ public class SocksVpn extends ProxyVpn {
         dos.write(ipv4);
         dos.flush();
 
-        return packet;
+        return new Result(packet);
     }
 
     @Override
@@ -146,18 +155,18 @@ public class SocksVpn extends ProxyVpn {
             InputStream inputStream = socket.getInputStream();
             OutputStream outputStream = socket.getOutputStream();
             DataInputStream dis = new DataInputStream(inputStream);
-            final Packet packet;
+            final Result result;
             switch (clientOS) {
                 case SocksV4:
-                    packet = handleConnectV4(dis, outputStream);
+                    result = handleConnectV4(dis, outputStream);
                     break;
                 case SocksV5:
-                    packet = handleV5(dis, outputStream);
+                    result = handleV5(dis, outputStream);
                     break;
                 default:
                     throw new IllegalStateException("clientOS=" + clientOS);
             }
-            SSLProxyV2.create(this, packet, 10000, socket);
+            SSLProxyV2.create(this, result.packet, 10000, socket, result::notifyConnected);
         } catch (IOException e) {
             log.debug("handle socks failed.", e);
             IoUtil.close(socket);

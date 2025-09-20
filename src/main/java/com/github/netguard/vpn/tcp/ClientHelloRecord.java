@@ -48,7 +48,7 @@ public class ClientHelloRecord {
         byte[] data = baos.toByteArray();
         Buffer buffer = new ChainBuffer(data);
         if (!buffer.isEOB()) {
-            int index = buffer.bytesBefore(new byte[] { 0x20, 0x2f }); // "XXX /"
+            int index = buffer.bytesBefore(new byte[] { 0x20 }); // "XXX "
             log.debug("detectHttp index={}, baos={}", index, baos);
             if (index >= 3) {
                 String method = buffer.getString(index);

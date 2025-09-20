@@ -77,11 +77,7 @@ public class Packet {
     }
 
     public InetSocketAddress createServerAddress() {
-        try {
-            return new InetSocketAddress(InetAddress.getByName(daddr), dport);
-        } catch (UnknownHostException e) {
-            throw new IllegalStateException("createServerAddress daddr=" + daddr + ", dport=" + dport, e);
-        }
+        return new InetSocketAddress(daddr, dport);
     }
 
     @Override

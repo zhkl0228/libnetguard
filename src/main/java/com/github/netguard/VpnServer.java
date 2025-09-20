@@ -116,7 +116,7 @@ public class VpnServer {
 
     private Replay replay;
 
-    boolean enableSocksProxy;
+    boolean enableProxy;
 
     /**
      * use BaseVpnListener
@@ -181,10 +181,24 @@ public class VpnServer {
                         DataInputStream dataInput = new DataInputStream(inputStream);
                         int os = dataInput.readUnsignedByte();
                         if (os == 0x4 || os == 0x5) { // socks proxy
-                            if (enableSocksProxy) {
-                                proxyVpnFactory = new ProxyVpnFactory.SocksFactory(os == 0x5 ? ClientOS.SocksV5 : ClientOS.SocksV4);
+                            if (enableProxy) {
+                                proxyVpnFactory = new ProxyVpnFactory.SocksProxyFactory(os == 0x5 ? ClientOS.SocksV5 : ClientOS.SocksV4);
                             } else {
-                                throw new IOException("SocksProxy not enabled.");
+                                throw new IOException("Proxy not enabled.");
+                            }
+                        } else if (os == 'G' || os == 'P' || os == 'D' || os == 'H' || os == 'O' || os == 'T') { // http proxy: GET, POST, PUT, DELETE, HEAD, OPTIONS, TRACE, PATCH
+                            if (enableProxy) {
+                                inputStream.unread(os);
+                                proxyVpnFactory = new ProxyVpnFactory.HttpProxyFactory(inputStream);
+                            } else {
+                                throw new IOException("Proxy not enabled.");
+                            }
+                        } else if (os == 'C') { // https proxy: Connect
+                            if (enableProxy) {
+                                inputStream.unread(os);
+                                proxyVpnFactory = new ProxyVpnFactory.HttpsProxyFactory(inputStream);
+                            } else {
+                                throw new IOException("Proxy not enabled.");
                             }
                         } else if (os == 0x16) {
                             inputStream.unread(os);

@@ -62,7 +62,7 @@ public class TransparentSocketProxying extends ProxyVpn implements InspectorVpn 
                         Packet packet = new Packet();
                         packet.daddr = destAddr;
                         packet.dport = destPort;
-                        SSLProxyV2.create(this, packet, 10000, socket);
+                        SSLProxyV2.create(this, packet, 10000, socket, null);
                         return;
                     }
                 }

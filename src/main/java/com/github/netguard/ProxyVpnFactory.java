@@ -1,6 +1,8 @@
 package com.github.netguard;
 
-import com.github.netguard.socks.SocksVpn;
+import com.github.netguard.proxy.HttpProxyVpn;
+import com.github.netguard.proxy.HttpsProxyVpn;
+import com.github.netguard.proxy.SocksProxyVpn;
 import com.github.netguard.sslvpn.SSLVpn;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
@@ -11,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PushbackInputStream;
 import java.net.Socket;
 import java.util.List;
 
@@ -57,14 +60,36 @@ abstract class ProxyVpnFactory {
         }
     }
 
-    static class SocksFactory extends ProxyVpnFactory {
+    static class SocksProxyFactory extends ProxyVpnFactory {
         private final ClientOS clientOS;
-        SocksFactory(ClientOS clientOS) {
+        SocksProxyFactory(ClientOS clientOS) {
             this.clientOS = clientOS;
         }
         @Override
         ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
-            return new SocksVpn(socket, clients, rootCert, clientOS);
+            return new SocksProxyVpn(socket, clients, rootCert, clientOS);
+        }
+    }
+
+    static class HttpsProxyFactory extends ProxyVpnFactory {
+        private final InputStream inputStream;
+        HttpsProxyFactory(InputStream inputStream) {
+            this.inputStream = inputStream;
+        }
+        @Override
+        ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
+            return new HttpsProxyVpn(socket, clients, rootCert, inputStream);
+        }
+    }
+
+    static class HttpProxyFactory extends ProxyVpnFactory {
+        private final PushbackInputStream inputStream;
+        HttpProxyFactory(PushbackInputStream inputStream) {
+            this.inputStream = inputStream;
+        }
+        @Override
+        ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
+            return new HttpProxyVpn(socket, clients, rootCert, inputStream);
         }
     }
 

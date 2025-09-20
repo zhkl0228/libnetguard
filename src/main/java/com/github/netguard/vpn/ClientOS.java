@@ -10,6 +10,9 @@ public enum ClientOS {
     SocksV4,
     SocksV5,
 
+    HttpProxy,
+    HttpsProxy,
+
     TransparentProxying,
 
     SSLVpn,
