@@ -44,9 +44,9 @@ public class HttpsProxyVpn extends ProxyVpn {
                 }
                 String host = uri.substring(0, index);
                 int port = Integer.parseInt(uri.substring(index + 1));
-                PrintWriter clientWriter = new PrintWriter(socket.getOutputStream());
-                clientWriter.print(request.protocolVersion().toString());
-                clientWriter.println(" 200 Connection Established\r");
+                PrintWriter clientWriter = new PrintWriter(socket.getOutputStream(), false);
+                clientWriter.println(request.protocolVersion() + " 200 Connection Established\r");
+                clientWriter.println("Proxy-Agent: Netguard-Proxy/1.0.0\r");
                 clientWriter.println("\r");
                 clientWriter.flush();
                 log.debug("doRunVpn connect host={}, port={}", host, port);
