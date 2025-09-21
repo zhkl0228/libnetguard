@@ -14,7 +14,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.List;
 
 public class SocksProxyVpn extends ProxyVpn {
@@ -88,15 +87,9 @@ public class SocksProxyVpn extends ProxyVpn {
             throw new IOException("Unsupported tcp address type: " + addrType);
         }
 
-        InetSocketAddress socketAddress = packet.createServerAddress();
-        byte[] ipv4 = socketAddress.getAddress().getAddress();
-        if (ipv4.length != 4) {
-            throw new IOException("ipv4 failed: " + Arrays.toString(ipv4));
-        }
-
         dos.writeInt(0x5000001);
-        dos.write(ipv4);
-        dos.writeShort(socketAddress.getPort());
+        dos.write(new byte[4]); // ipv4
+        dos.writeShort(0);
         dos.flush();
 
         return new Result(packet);
@@ -136,14 +129,9 @@ public class SocksProxyVpn extends ProxyVpn {
             packet.daddr = address.getHostAddress();
         }
 
-        InetSocketAddress socketAddress = packet.createServerAddress();
-        ipv4 = socketAddress.getAddress().getAddress();
-        if (ipv4.length != 4) {
-            throw new IOException("ipv4 failed: " + Arrays.toString(ipv4));
-        }
         dos.writeShort(0x5a);
-        dos.writeShort(port);
-        dos.write(ipv4);
+        dos.writeShort(0);
+        dos.write(new byte[4]); // ipv4
         dos.flush();
 
         return new Result(packet);
