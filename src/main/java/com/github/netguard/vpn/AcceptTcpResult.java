@@ -1,6 +1,7 @@
 package com.github.netguard.vpn;
 
 import cn.hutool.core.net.DefaultTrustManager;
+import com.github.netguard.vpn.tcp.CustomHandler;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
@@ -58,11 +59,16 @@ public class AcceptTcpResult {
         public AcceptTcpResult build(String redirectHost) {
             return new AcceptTcpResult(rule, proxy, redirectAddress, redirectPort,
                     redirectHost == null ? this.redirectHost : redirectHost, sslContext,
-                    needPrologueCount);
+                    needPrologueCount, customHandler);
         }
         private int needPrologueCount;
         public AcceptResultBuilder setNeedPrologueCount(int needPrologueCount) {
             this.needPrologueCount = needPrologueCount;
+            return this;
+        }
+        private CustomHandler customHandler;
+        public AcceptResultBuilder setCustomHandler(CustomHandler customHandler) {
+            this.customHandler = customHandler;
             return this;
         }
     }
@@ -83,16 +89,18 @@ public class AcceptTcpResult {
     private final String redirectHost;
     private final SSLContext context;
     public final int needPrologueCount;
+    public final CustomHandler customHandler;
 
     private AcceptTcpResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost,
-                            SSLContext context, int needPrologueCount) {
+                            SSLContext context, int needPrologueCount, CustomHandler customHandler) {
         this.rule = rule;
         this.socketProxy = socketProxy;
         this.redirectAddress = redirectAddress;
         this.redirectPort = redirectPort;
         this.redirectHost = redirectHost;
         this.context = context;
-        this.needPrologueCount = rule == AllowRule.READ_MORE_PROLOGUE ? needPrologueCount : 0;
+        this.needPrologueCount = rule == AllowRule.__READ_MORE_PROLOGUE ? needPrologueCount : 0;
+        this.customHandler = rule == AllowRule.__CUSTOM_HANDLE ? customHandler : null;
     }
 
     public AllowRule getRule() {

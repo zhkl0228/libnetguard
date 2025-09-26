@@ -90,13 +90,19 @@ public class ConnectRequest implements com.github.netguard.vpn.ConnectRequest<Ac
         return AcceptTcpResult.builder(AllowRule.DISCONNECT).build();
     }
 
-    @Override
     public AcceptTcpResult readMorePrologue(int needPrologueCount) {
         int prologueLength = prologue.length;
         if (needPrologueCount <= 0 || needPrologueCount < prologueLength) {
             throw new IllegalStateException("needPrologueCount=" + needPrologueCount + ", prologueLength=" + prologueLength);
         }
-        return AcceptTcpResult.builder(AllowRule.READ_MORE_PROLOGUE).setNeedPrologueCount(needPrologueCount).build();
+        return AcceptTcpResult.builder(AllowRule.__READ_MORE_PROLOGUE).setNeedPrologueCount(needPrologueCount).build();
+    }
+
+    public AcceptTcpResult handle(CustomHandler handler) {
+        if(handler == null) {
+            throw new NullPointerException("handler");
+        }
+        return AcceptTcpResult.builder(AllowRule.__CUSTOM_HANDLE).setCustomHandler(handler).build();
     }
 
     public boolean isAppleHost() {

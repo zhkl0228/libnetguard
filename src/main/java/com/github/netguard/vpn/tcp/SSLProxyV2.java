@@ -344,10 +344,18 @@ public class SSLProxyV2 implements Runnable {
             try {
                 while (true) {
                     result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
-                    if (result == null || result.getRule() != AllowRule.READ_MORE_PROLOGUE) {
+                    if (result == null) {
                         break;
                     }
-                    record = record.readMorePrologue(dataInput, result.needPrologueCount);
+                    if (result.getRule() == AllowRule.__CUSTOM_HANDLE) {
+                        result.customHandler.handle(localIn, localOut);
+                        return;
+                    }
+                    if (result.getRule() == AllowRule.__READ_MORE_PROLOGUE) {
+                        record = record.readMorePrologue(dataInput, result.needPrologueCount);
+                    } else {
+                        break;
+                    }
                 }
             } catch (Exception e) {
                 log.warn("acceptTcp failed", e);

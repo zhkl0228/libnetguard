@@ -70,11 +70,6 @@ public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
         return AcceptUdpResult.rule(AcceptRule.Discard);
     }
 
-    @Override
-    public AcceptUdpResult readMorePrologue(int needPrologueCount) {
-        throw new UnsupportedOperationException();
-    }
-
     public PacketRequest(byte[] buffer, int length, ClientHello clientHello, Message dnsQuery, InetSocketAddress serverAddress, InspectorVpn vpn, Packet packet) {
         this.serverIp = serverAddress.getAddress().getHostAddress();
         this.port = serverAddress.getPort();
