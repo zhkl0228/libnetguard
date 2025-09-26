@@ -13,4 +13,6 @@ public interface ConnectRequest<T> {
 
     T disconnect();
 
+    T readMorePrologue(int needPrologueCount);
+
 }

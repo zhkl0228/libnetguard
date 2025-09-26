@@ -332,7 +332,7 @@ public class SSLProxyV2 implements Runnable {
 
     private void handleSocket(InetSocketAddress remote, InputStream localIn, OutputStream localOut, Socket local) throws Exception {
         DataInputStream dataInput = new DataInputStream(localIn);
-        final ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
+        ClientHelloRecord record = ExtensionServerName.parseServerNames(dataInput, remote);
         AllowRule allowRule = AllowRule.CONNECT_TCP;
         Proxy socketProxy = Proxy.NO_PROXY;
         String redirectAddress = null;
@@ -342,7 +342,13 @@ public class SSLProxyV2 implements Runnable {
         AcceptTcpResult result = null;
         if (packetCapture != null) {
             try {
-                result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
+                while (true) {
+                    result = packetCapture.acceptTcp(record.newConnectRequest(vpn, packet));
+                    if (result == null || result.getRule() != AllowRule.READ_MORE_PROLOGUE) {
+                        break;
+                    }
+                    record = record.readMorePrologue(dataInput, result.needPrologueCount);
+                }
             } catch (Exception e) {
                 log.warn("acceptTcp failed", e);
             }

@@ -56,7 +56,14 @@ public class AcceptTcpResult {
             return build(null);
         }
         public AcceptTcpResult build(String redirectHost) {
-            return new AcceptTcpResult(rule, proxy, redirectAddress, redirectPort, redirectHost == null ? this.redirectHost : redirectHost, sslContext);
+            return new AcceptTcpResult(rule, proxy, redirectAddress, redirectPort,
+                    redirectHost == null ? this.redirectHost : redirectHost, sslContext,
+                    needPrologueCount);
+        }
+        private int needPrologueCount;
+        public AcceptResultBuilder setNeedPrologueCount(int needPrologueCount) {
+            this.needPrologueCount = needPrologueCount;
+            return this;
         }
     }
 
@@ -75,15 +82,17 @@ public class AcceptTcpResult {
     private final int redirectPort;
     private final String redirectHost;
     private final SSLContext context;
+    public final int needPrologueCount;
 
     private AcceptTcpResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost,
-                            SSLContext context) {
+                            SSLContext context, int needPrologueCount) {
         this.rule = rule;
         this.socketProxy = socketProxy;
         this.redirectAddress = redirectAddress;
         this.redirectPort = redirectPort;
         this.redirectHost = redirectHost;
         this.context = context;
+        this.needPrologueCount = rule == AllowRule.READ_MORE_PROLOGUE ? needPrologueCount : 0;
     }
 
     public AllowRule getRule() {

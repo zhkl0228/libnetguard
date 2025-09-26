@@ -206,6 +206,19 @@ public class ClientHelloRecord {
         this.ssl = ssl;
     }
 
+    public ClientHelloRecord readMorePrologue(DataInputStream dataInput, int needPrologueCount) throws IOException {
+        int needPrologueLength = needPrologueCount - prologue.length;
+        if(needPrologueLength <= 0) {
+            throw new IllegalStateException("needPrologueLength=" + needPrologueLength);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(needPrologueCount);
+        baos.write(prologue);
+        byte[] buffer = new byte[needPrologueLength];
+        dataInput.readFully(buffer);
+        baos.write(buffer);
+        return new ClientHelloRecord(baos.toByteArray(), hostName, applicationLayerProtocols, httpRequest, ja3, cipherSuites, ssl);
+    }
+
     public final boolean isSSL() {
         return ssl;
     }
