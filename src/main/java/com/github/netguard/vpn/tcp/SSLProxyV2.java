@@ -26,14 +26,7 @@ import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
+import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.*;
@@ -348,7 +341,9 @@ public class SSLProxyV2 implements Runnable {
                         break;
                     }
                     if (result.getRule() == AllowRule.__CUSTOM_HANDLE) {
-                        result.customHandler.handle(localIn, localOut);
+                        PushbackInputStream pushbackInputStream = new PushbackInputStream(localIn);
+                        pushbackInputStream.unread(record.prologue);
+                        result.customHandler.handle(pushbackInputStream, localOut);
                         return;
                     }
                     if (result.getRule() == AllowRule.__READ_MORE_PROLOGUE) {
