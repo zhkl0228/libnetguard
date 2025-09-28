@@ -109,8 +109,8 @@ public class StreamForward implements Runnable {
 
     protected boolean forward(byte[] buf) throws IOException {
         try {
-            while (true) {
-                if (forwardHandler == null) {
+            if (forwardHandler == null) {
+                while (true) {
                     int read = inputStream.read(buf);
                     log.trace("forward read {} bytes, server={}, isSSL={}, socket={}", read, server, isSSL, socket);
                     if (read == -1) {
@@ -119,18 +119,18 @@ public class StreamForward implements Runnable {
                     read = notifyForward(buf, read);
                     outputStream.write(buf, 0, read);
                     outputStream.flush();
-                } else {
-                    if (server) {
-                        InputStream inputStream = this.inputStream;
-                        if(prologue != null && prologue.length > 0) {
-                            PushbackInputStream pushbackInputStream = new PushbackInputStream(inputStream, prologue.length);
-                            pushbackInputStream.unread(prologue);
-                            inputStream = pushbackInputStream;
-                        }
-                        forwardHandler.handleClient(buf, inputStream, outputStream);
-                    } else {
-                        forwardHandler.handleServer(buf, inputStream, outputStream);
+                }
+            } else {
+                if (server) {
+                    InputStream inputStream = this.inputStream;
+                    if(prologue != null && prologue.length > 0) {
+                        PushbackInputStream pushbackInputStream = new PushbackInputStream(inputStream, prologue.length);
+                        pushbackInputStream.unread(prologue);
+                        inputStream = pushbackInputStream;
                     }
+                    forwardHandler.handleClient(buf, inputStream, outputStream);
+                } else {
+                    forwardHandler.handleServer(buf, inputStream, outputStream);
                 }
             }
             return true;
