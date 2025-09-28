@@ -282,9 +282,6 @@ public class SSLProxyV2 implements Runnable {
                                   String hostName, boolean filterHttp2, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet,
                                   byte[] prologue, ForwardHandler forwardHandler) throws InterruptedException, IOException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
-        if (forwardHandler != null) {
-            forwardHandler.initialize(socketOut);
-        }
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
         IPacketCapture packetCapture = vpn == null ? null : vpn.getPacketCapture();
