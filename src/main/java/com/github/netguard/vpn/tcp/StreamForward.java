@@ -64,7 +64,7 @@ public class StreamForward implements Runnable {
 
     public final void startThread(byte[] prologue) {
         this.prologue = prologue;
-        if (packetCapture != null && prologue != null && prologue.length > 0) {
+        if (packetCapture != null && prologue != null && prologue.length > 0 && forwardHandler == null) {
             if (server) {
                 if (isSSL) {
                     packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, prologue);
