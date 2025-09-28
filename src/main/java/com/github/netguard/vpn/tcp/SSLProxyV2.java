@@ -102,6 +102,7 @@ public class SSLProxyV2 implements Runnable {
         this.acceptedSocket = socket;
         this.connectListener = connectListener;
         this.providedInputStream = providedInputStream;
+        this.forwardHandler = null;
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Thread thread = new Thread(this, "Proxy for " + packet + " " + dateFormat.format(new Date()));
@@ -126,6 +127,7 @@ public class SSLProxyV2 implements Runnable {
         this.acceptedSocket = null;
         this.connectListener = null;
         this.providedInputStream = null;
+        this.forwardHandler = null;
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Thread thread = new Thread(this, "Proxy for " + packet + " " + dateFormat.format(new Date()));
@@ -137,9 +139,10 @@ public class SSLProxyV2 implements Runnable {
     private final String applicationProtocol;
     private final boolean allowFilterH2;
     private final List<String> applicationLayerProtocols;
+    private final ForwardHandler forwardHandler;
 
     private SSLProxyV2(InspectorVpn vpn, Packet packet, int timeout, SSLContext context, SSLSocket secureSocket,
-                       ClientHelloRecord record, String applicationProtocol, boolean allowFilterH2) throws IOException {
+                       ClientHelloRecord record, String applicationProtocol, boolean allowFilterH2, ForwardHandler forwardHandler) throws IOException {
         this.vpn = vpn;
 
         this.packet = packet;
@@ -156,6 +159,7 @@ public class SSLProxyV2 implements Runnable {
         this.acceptedSocket = null;
         this.connectListener = null;
         this.providedInputStream = null;
+        this.forwardHandler = forwardHandler;
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Thread thread = new Thread(this, "SSLProxy for " + packet + " " + dateFormat.format(new Date()));
@@ -172,7 +176,7 @@ public class SSLProxyV2 implements Runnable {
                     downloadRootCert(localIn, localOut);
                 } else {
                     if (secureSocket != null) {
-                        handleSSLSocket(localIn, localOut, local, secureSocket, hostName);
+                        handleSSLSocket(localIn, localOut, local, secureSocket, hostName, forwardHandler);
                     } else {
                         handleSocket(remote, localIn, localOut, local);
                     }
@@ -241,7 +245,8 @@ public class SSLProxyV2 implements Runnable {
         writer.flush();
     }
 
-    private void handleSSLSocket(InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName) throws IOException, InterruptedException {
+    private void handleSSLSocket(InputStream localIn, OutputStream localOut, Socket local, SSLSocket socket, String hostName,
+                                 ForwardHandler forwardHandler) throws IOException, InterruptedException {
         log.debug("ssl proxy socket={}, local={}, hostName={}, applicationLayerProtocols={}", socket, local, hostName, applicationLayerProtocols);
         if (!applicationLayerProtocols.isEmpty()) {
             if (applicationProtocol != null) {
@@ -265,7 +270,7 @@ public class SSLProxyV2 implements Runnable {
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
             boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.filterHost(hostName, false);
             doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, hostName, filterHttp2, applicationLayerProtocols, applicationProtocol, true, packet,
-                    null);
+                    null, forwardHandler);
         }
     }
 
@@ -275,7 +280,7 @@ public class SSLProxyV2 implements Runnable {
 
     private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, InspectorVpn vpn,
                                   String hostName, boolean filterHttp2, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet,
-                                  byte[] prologue) throws InterruptedException {
+                                  byte[] prologue, ForwardHandler forwardHandler) throws InterruptedException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
@@ -301,14 +306,14 @@ public class SSLProxyV2 implements Runnable {
         if (filterHttp2) {
             Http2Session session = new Http2Session(client.getAddress().getHostAddress(), server.getAddress().getHostAddress(), client.getPort(), server.getPort(), hostName);
             HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName,
-                    session, packet);
+                    session, packet, forwardHandler);
             outbound = new HttpFrameForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName,
-                    session, packet)
+                    session, packet, forwardHandler)
                     .setPeer(inboundForward);
             inbound = inboundForward;
         } else {
-            inbound = new StreamForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName, isSSL, packet);
-            outbound = new StreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName, isSSL, packet);
+            inbound = new StreamForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName, isSSL, packet, forwardHandler);
+            outbound = new StreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName, isSSL, packet, forwardHandler);
         }
         inbound.startThread(prologue);
         outbound.startThread(null);
@@ -420,7 +425,7 @@ public class SSLProxyV2 implements Runnable {
                 ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
                 SSLContext serverContext = serverCertificate.getServerContext(vpn.getRootCert()).newSSLContext();
                 SSLProxyV2 proxy = new SSLProxyV2(vpn, packet, timeout, serverContext, secureSocket,
-                        record, applicationProtocol, allowRule == AllowRule.FILTER_H2);
+                        record, applicationProtocol, allowRule == AllowRule.FILTER_H2, result.forwardHandler);
                 try (Socket socket = SocketFactory.getDefault().createSocket("127.0.0.1", proxy.serverSocket.getLocalPort())) {
                     try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
                         if (record.prologue.length > 0) {
@@ -428,7 +433,7 @@ public class SSLProxyV2 implements Runnable {
                             socketOut.flush();
                         }
                         doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false, null, null, false, packet,
-                                record.prologue);
+                                record.prologue, null);
                     }
                 }
             } catch (IOException e) {
@@ -452,7 +457,7 @@ public class SSLProxyV2 implements Runnable {
                         socketOut.flush();
                     }
                     doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, null, false, null, null, false, packet,
-                            record.prologue);
+                            record.prologue, result == null ? null : result.forwardHandler);
                 }
             }
         }

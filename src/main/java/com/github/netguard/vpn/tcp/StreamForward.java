@@ -40,9 +40,10 @@ public class StreamForward implements Runnable {
     protected final String hostName;
     private final boolean isSSL;
     private final Packet packet;
+    protected final ForwardHandler forwardHandler;
 
     public StreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
-                            InspectorVpn vpn, String hostName, boolean isSSL, Packet packet) {
+                            InspectorVpn vpn, String hostName, boolean isSSL, Packet packet, ForwardHandler forwardHandler) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.server = server;
@@ -55,6 +56,7 @@ public class StreamForward implements Runnable {
         this.hostName = hostName;
         this.isSSL = isSSL;
         this.packet = packet;
+        this.forwardHandler = forwardHandler;
     }
 
     public final void startThread(byte[] prologue) {
@@ -104,14 +106,22 @@ public class StreamForward implements Runnable {
     protected boolean forward(byte[] buf) throws IOException {
         try {
             while (true) {
-                int read = inputStream.read(buf);
-                log.trace("forward read {} bytes, server={}, isSSL={}, socket={}", read, server, isSSL, socket);
-                if (read == -1) {
-                    break;
+                if (forwardHandler == null) {
+                    int read = inputStream.read(buf);
+                    log.trace("forward read {} bytes, server={}, isSSL={}, socket={}", read, server, isSSL, socket);
+                    if (read == -1) {
+                        break;
+                    }
+                    read = notifyForward(buf, read);
+                    outputStream.write(buf, 0, read);
+                    outputStream.flush();
+                } else {
+                    if (server) {
+                        forwardHandler.handleClient(inputStream, outputStream);
+                    } else {
+                        forwardHandler.handleServer(inputStream, outputStream);
+                    }
                 }
-                read = notifyForward(buf, read);
-                outputStream.write(buf, 0, read);
-                outputStream.flush();
             }
             return true;
         } catch (SocketTimeoutException ignored) {

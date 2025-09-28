@@ -474,7 +474,8 @@ public class SSLVpnImpl extends SSLVpn {
 
             proxyOutputStream = proxySocket.getOutputStream();
             proxyBuffer = new byte[VPN_BUFFER_SIZE];
-            StreamForward outbound = new StreamForward(proxySocket.getInputStream(), outputStream, false, getRemoteSocketAddress(), server, null, proxySocket, null, server.getHostName(), false, null) {
+            StreamForward outbound = new StreamForward(proxySocket.getInputStream(), outputStream, false, getRemoteSocketAddress(), server, null,
+                    proxySocket, null, server.getHostName(), false, null, null) {
                 @Override
                 protected int getReceiveBufferSize() {
                     return VPN_BUFFER_SIZE;
@@ -500,7 +501,8 @@ public class SSLVpnImpl extends SSLVpn {
 
     private class VpnStreamForward extends StreamForward {
         public VpnStreamForward(Socket vpnSocket, OutputStream outputStream, InetSocketAddress server) throws IOException {
-            super(vpnSocket.getInputStream(), outputStream, false, SSLVpnImpl.this.getRemoteSocketAddress(), server, null, vpnSocket, null, server.getHostName(), false, null);
+            super(vpnSocket.getInputStream(), outputStream, false, SSLVpnImpl.this.getRemoteSocketAddress(), server, null,
+                    vpnSocket, null, server.getHostName(), false, null, null);
         }
         @Override
         protected int getReceiveBufferSize() {

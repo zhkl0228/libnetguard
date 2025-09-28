@@ -5,6 +5,7 @@ import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.HexUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.vpn.InspectorVpn;
+import com.github.netguard.vpn.tcp.ForwardHandler;
 import com.github.netguard.vpn.tcp.StreamForward;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
@@ -67,8 +68,8 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     private final String sessionKey;
 
     public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket, InspectorVpn vpn, String hostName,
-                            Http2Session session, Packet packet) {
-        super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, vpn, hostName, true, packet);
+                            Http2Session session, Packet packet, ForwardHandler forwardHandler) {
+        super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, vpn, hostName, true, packet, forwardHandler);
         this.frameDecoder = new NetGuardFrameDecoder(server, this);
         this.frameEncoder = new HttpFrameEncoder();
 

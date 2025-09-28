@@ -2,6 +2,7 @@ package com.github.netguard.vpn;
 
 import cn.hutool.core.net.DefaultTrustManager;
 import com.github.netguard.vpn.tcp.CustomHandler;
+import com.github.netguard.vpn.tcp.ForwardHandler;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
@@ -59,7 +60,7 @@ public class AcceptTcpResult {
         public AcceptTcpResult build(String redirectHost) {
             return new AcceptTcpResult(rule, proxy, redirectAddress, redirectPort,
                     redirectHost == null ? this.redirectHost : redirectHost, sslContext,
-                    needPrologueCount, customHandler);
+                    needPrologueCount, customHandler, forwardHandler);
         }
         private int needPrologueCount;
         public AcceptResultBuilder setNeedPrologueCount(int needPrologueCount) {
@@ -69,6 +70,11 @@ public class AcceptTcpResult {
         private CustomHandler customHandler;
         public AcceptResultBuilder setCustomHandler(CustomHandler customHandler) {
             this.customHandler = customHandler;
+            return this;
+        }
+        private ForwardHandler forwardHandler;
+        public AcceptResultBuilder setForwardHandler(ForwardHandler forwardHandler) {
+            this.forwardHandler = forwardHandler;
             return this;
         }
     }
@@ -90,9 +96,10 @@ public class AcceptTcpResult {
     private final SSLContext context;
     public final int needPrologueCount;
     public final CustomHandler customHandler;
+    public final ForwardHandler forwardHandler;
 
     private AcceptTcpResult(AllowRule rule, Proxy socketProxy, String redirectAddress, int redirectPort, String redirectHost,
-                            SSLContext context, int needPrologueCount, CustomHandler customHandler) {
+                            SSLContext context, int needPrologueCount, CustomHandler customHandler, ForwardHandler forwardHandler) {
         this.rule = rule;
         this.socketProxy = socketProxy;
         this.redirectAddress = redirectAddress;
@@ -101,6 +108,7 @@ public class AcceptTcpResult {
         this.context = context;
         this.needPrologueCount = rule == AllowRule.__READ_MORE_PROLOGUE ? needPrologueCount : 0;
         this.customHandler = rule == AllowRule.__CUSTOM_HANDLE ? customHandler : null;
+        this.forwardHandler = forwardHandler;
     }
 
     public AllowRule getRule() {

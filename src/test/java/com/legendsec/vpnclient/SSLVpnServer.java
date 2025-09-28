@@ -219,7 +219,8 @@ class SSLVpnServer implements Runnable {
     private class SacMsgStreamForward extends StreamForward {
         public SacMsgStreamForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket,
                                    String hostName, boolean ssl) {
-            super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, null, hostName, ssl, null);
+            super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch,
+                    socket, null, hostName, ssl, null, null);
         }
         public void startThread() {
             startThread(null);
