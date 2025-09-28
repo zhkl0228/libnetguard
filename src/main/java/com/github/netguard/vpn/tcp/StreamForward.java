@@ -12,6 +12,7 @@ import javax.net.ssl.SSLException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PushbackInputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -59,7 +60,10 @@ public class StreamForward implements Runnable {
         this.forwardHandler = forwardHandler;
     }
 
+    private byte[] prologue;
+
     public final void startThread(byte[] prologue) {
+        this.prologue = prologue;
         if (packetCapture != null && prologue != null && prologue.length > 0) {
             if (server) {
                 if (isSSL) {
@@ -117,6 +121,12 @@ public class StreamForward implements Runnable {
                     outputStream.flush();
                 } else {
                     if (server) {
+                        InputStream inputStream = this.inputStream;
+                        if(prologue != null && prologue.length > 0) {
+                            PushbackInputStream pushbackInputStream = new PushbackInputStream(inputStream, prologue.length);
+                            pushbackInputStream.unread(prologue);
+                            inputStream = pushbackInputStream;
+                        }
                         forwardHandler.handleClient(inputStream, outputStream);
                     } else {
                         forwardHandler.handleServer(inputStream, outputStream);

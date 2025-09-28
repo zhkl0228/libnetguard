@@ -177,7 +177,7 @@ public class VpnServer {
                     final ProxyVpnFactory proxyVpnFactory;
                     try {
                         socket.setSoTimeout(500);
-                        PushbackInputStream inputStream = new PushbackInputStream(socket.getInputStream(), 2048);
+                        PushbackInputStream inputStream = new PushbackInputStream(socket.getInputStream(), 20480);
                         DataInputStream dataInput = new DataInputStream(inputStream);
                         int os = dataInput.readUnsignedByte();
                         if (os == 0x4 || os == 0x5) { // socks proxy

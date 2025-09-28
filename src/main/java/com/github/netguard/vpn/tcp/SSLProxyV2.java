@@ -346,7 +346,7 @@ public class SSLProxyV2 implements Runnable {
                         break;
                     }
                     if (result.getRule() == AllowRule.__CUSTOM_HANDLE) {
-                        PushbackInputStream pushbackInputStream = new PushbackInputStream(localIn);
+                        PushbackInputStream pushbackInputStream = new PushbackInputStream(localIn, record.prologue.length);
                         pushbackInputStream.unread(record.prologue);
                         result.customHandler.handle(pushbackInputStream, localOut);
                         return;
