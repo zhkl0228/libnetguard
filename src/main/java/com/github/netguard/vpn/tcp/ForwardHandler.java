@@ -6,8 +6,10 @@ import java.io.OutputStream;
 
 public interface ForwardHandler {
 
-    void handleClient(InputStream clientInput, OutputStream serverOutput) throws IOException;
+    void initialize() throws IOException;
 
-    void handleServer(InputStream serverInput, OutputStream clientOutput) throws IOException;
+    void handleClient(byte[] buf, InputStream clientInput, OutputStream serverOutput) throws IOException;
+
+    void handleServer(byte[] buf, InputStream serverInput, OutputStream clientOutput) throws IOException;
 
 }

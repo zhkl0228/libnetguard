@@ -280,8 +280,11 @@ public class SSLProxyV2 implements Runnable {
 
     private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, InspectorVpn vpn,
                                   String hostName, boolean filterHttp2, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet,
-                                  byte[] prologue, ForwardHandler forwardHandler) throws InterruptedException {
+                                  byte[] prologue, ForwardHandler forwardHandler) throws InterruptedException, IOException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
+        if (forwardHandler != null) {
+            forwardHandler.initialize();
+        }
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
         IPacketCapture packetCapture = vpn == null ? null : vpn.getPacketCapture();
@@ -452,12 +455,15 @@ public class SSLProxyV2 implements Runnable {
                     connectListener.onConnected(socket);
                 }
                 try (InputStream socketIn = socket.getInputStream(); OutputStream socketOut = socket.getOutputStream()) {
-                    if (record.prologue.length > 0) {
-                        socketOut.write(record.prologue);
-                        socketOut.flush();
+                    ForwardHandler forwardHandler = result == null ? null : result.forwardHandler;
+                    if (forwardHandler == null) {
+                        if (record.prologue.length > 0) {
+                            socketOut.write(record.prologue);
+                            socketOut.flush();
+                        }
                     }
                     doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, null, false, null, null, false, packet,
-                            record.prologue, result == null ? null : result.forwardHandler);
+                            record.prologue, forwardHandler);
                 }
             }
         }
