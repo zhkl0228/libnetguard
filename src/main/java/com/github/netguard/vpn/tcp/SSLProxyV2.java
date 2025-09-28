@@ -283,7 +283,7 @@ public class SSLProxyV2 implements Runnable {
                                   byte[] prologue, ForwardHandler forwardHandler) throws InterruptedException, IOException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         if (forwardHandler != null) {
-            forwardHandler.initialize();
+            forwardHandler.initialize(socketOut);
         }
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
