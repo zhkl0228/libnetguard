@@ -62,6 +62,11 @@ public class SSLProxyV2 implements Runnable {
 
     public static void create(final InspectorVpn vpn, final Packet packet, final int timeout, Socket socket,
                               ConnectListener connectListener) {
+        if (packet.saddr == null || packet.sport == 0) {
+            InetSocketAddress remoteAddress = vpn.getRemoteSocketAddress();
+            packet.saddr = remoteAddress.getAddress().getHostAddress();
+            packet.sport = remoteAddress.getPort();
+        }
         create(vpn, packet, timeout, socket, connectListener, null);
     }
 
