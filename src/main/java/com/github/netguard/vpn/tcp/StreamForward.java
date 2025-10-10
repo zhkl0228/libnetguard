@@ -128,9 +128,9 @@ public class StreamForward implements Runnable {
                         pushbackInputStream.unread(prologue);
                         inputStream = pushbackInputStream;
                     }
-                    forwardHandler.handleClient(buf, inputStream, outputStream);
+                    forwardHandler.handleClient(socket, buf, inputStream, outputStream);
                 } else {
-                    forwardHandler.handleServer(buf, inputStream, outputStream);
+                    forwardHandler.handleServer(socket, buf, inputStream, outputStream);
                 }
             }
             return true;
