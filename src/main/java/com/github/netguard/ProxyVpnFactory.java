@@ -17,7 +17,7 @@ import java.io.PushbackInputStream;
 import java.net.Socket;
 import java.util.List;
 
-abstract class ProxyVpnFactory {
+public abstract class ProxyVpnFactory {
 
     private static final Logger log = LoggerFactory.getLogger(ProxyVpnFactory.class);
 

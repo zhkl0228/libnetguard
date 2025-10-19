@@ -125,6 +125,13 @@ public class VpnServer {
         replay = new FileReplay(this, logFile);
     }
 
+    private ProxyVpnFactory fallbackVpnFactory;
+
+    @SuppressWarnings("unused")
+    public void setFallbackVpnFactory(ProxyVpnFactory fallbackVpnFactory) {
+        this.fallbackVpnFactory = fallbackVpnFactory;
+    }
+
     final void start() {
         if (thread != null) {
             throw new IllegalStateException("Already started.");
@@ -174,7 +181,7 @@ public class VpnServer {
                         serverSocket.setSoTimeout(NO_CLIENT_BROADCAST_DELAY_MILLIS);
                     }
                     Socket socket = serverSocket.accept();
-                    final ProxyVpnFactory proxyVpnFactory;
+                    ProxyVpnFactory proxyVpnFactory;
                     try {
                         socket.setSoTimeout(500);
                         PushbackInputStream inputStream = new PushbackInputStream(socket.getInputStream(), 20480);
@@ -216,16 +223,30 @@ public class VpnServer {
                         socket.setSoTimeout((int) Duration.ofHours(1).toMillis());
                     } catch (IOException e) {
                         log.debug("accept detect protocol", e);
-                        IoUtil.close(socket);
-                        continue;
+                        if (fallbackVpnFactory != null) {
+                            proxyVpnFactory = fallbackVpnFactory;
+                        } else {
+                            IoUtil.close(socket);
+                            continue;
+                        }
                     }
-                    final ProxyVpn vpn;
+                    ProxyVpn vpn;
                     try {
                         vpn = proxyVpnFactory.newVpn(socket, clients, rootCert);
                     } catch (IOException e) {
                         log.debug("accept newVpn", e);
-                        IoUtil.close(socket);
-                        continue;
+                        if (fallbackVpnFactory != null && fallbackVpnFactory != proxyVpnFactory) {
+                            try {
+                                vpn = fallbackVpnFactory.newVpn(socket, clients, rootCert);
+                            } catch (IOException ioe) {
+                                log.debug("accept fallback.newVpn", ioe);
+                                IoUtil.close(socket);
+                                continue;
+                            }
+                        } else {
+                            IoUtil.close(socket);
+                            continue;
+                        }
                     }
                     if (vpnListener != null) {
                         vpnListener.onConnectClient(vpn);
