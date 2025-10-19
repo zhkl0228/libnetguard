@@ -1,6 +1,7 @@
 package com.github.netguard.proxy;
 
 import cn.hutool.core.io.IoUtil;
+import com.github.netguard.FallbackProxyVpn;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
@@ -12,21 +13,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
 import java.util.List;
 
-public class HttpProxyVpn extends ProxyVpn {
+public class HttpProxyVpn extends FallbackProxyVpn {
 
     private static final Logger log = LoggerFactory.getLogger(HttpProxyVpn.class);
 
-    private final Socket socket;
     private final PushbackInputStream inputStream;
 
     public HttpProxyVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) {
-        super(clients, rootCert);
-        this.socket = socket;
+        super(socket, clients, rootCert);
         this.inputStream = inputStream;
     }
 
@@ -68,18 +66,8 @@ public class HttpProxyVpn extends ProxyVpn {
     }
 
     @Override
-    protected void stop() {
-        IoUtil.close(socket);
-    }
-
-    @Override
     public final ClientOS getClientOS() {
         return ClientOS.HttpProxy;
-    }
-
-    @Override
-    public InetSocketAddress getRemoteSocketAddress() {
-        return (InetSocketAddress) socket.getRemoteSocketAddress();
     }
 
 }

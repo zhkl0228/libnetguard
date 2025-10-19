@@ -1,6 +1,7 @@
 package com.github.netguard.proxy;
 
 import cn.hutool.core.io.IoUtil;
+import com.github.netguard.FallbackProxyVpn;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.RootCert;
@@ -11,24 +12,22 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-public class SocksProxyVpn extends ProxyVpn {
+public class SocksProxyVpn extends FallbackProxyVpn {
 
     private static final Logger log = LoggerFactory.getLogger(SocksProxyVpn.class);
 
-    private final Socket socket;
-    private final ClientOS clientOS;
+    private final PushbackInputStream inputStream;
 
     public SocksProxyVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert,
-                         ClientOS clientOS) {
-        super(clients, rootCert);
+                         PushbackInputStream inputStream, ClientOS clientOS) {
+        super(socket, clients, rootCert);
 
-        this.socket = socket;
-        this.clientOS = clientOS;
+        this.inputStream = inputStream;
+        super.clientOS = clientOS;
     }
 
     private static class Result {
@@ -140,7 +139,6 @@ public class SocksProxyVpn extends ProxyVpn {
     @Override
     protected void doRunVpn() {
         try {
-            InputStream inputStream = socket.getInputStream();
             OutputStream outputStream = socket.getOutputStream();
             DataInputStream dis = new DataInputStream(inputStream);
             final Result result;
@@ -165,18 +163,8 @@ public class SocksProxyVpn extends ProxyVpn {
     }
 
     @Override
-    protected void stop() {
-        IoUtil.close(socket);
-    }
-
-    @Override
     public final ClientOS getClientOS() {
-        return clientOS;
-    }
-
-    @Override
-    public InetSocketAddress getRemoteSocketAddress() {
-        return (InetSocketAddress) socket.getRemoteSocketAddress();
+        return super.clientOS;
     }
 
 }

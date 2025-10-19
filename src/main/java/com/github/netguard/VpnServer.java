@@ -182,28 +182,35 @@ public class VpnServer {
                     }
                     Socket socket = serverSocket.accept();
                     ProxyVpnFactory proxyVpnFactory;
+                    PushbackInputStream inputStream = null;
                     try {
                         socket.setSoTimeout(500);
-                        PushbackInputStream inputStream = new PushbackInputStream(socket.getInputStream(), 20480);
+                        inputStream = new PushbackInputStream(socket.getInputStream(), 20480);
                         DataInputStream dataInput = new DataInputStream(inputStream);
                         int os = dataInput.readUnsignedByte();
-                        if (os == 0x4 || os == 0x5) { // socks proxy
+                        if ((os == 0x4 && checkRead(dataInput, inputStream, new byte[] { 0x1 })) ||
+                                (os == 0x5 && checkSocksV5Read(dataInput, inputStream))) { // socks proxy
                             if (enableProxy) {
                                 proxyVpnFactory = new ProxyVpnFactory.SocksProxyFactory(os == 0x5 ? ClientOS.SocksV5 : ClientOS.SocksV4);
                             } else {
                                 throw new IOException("Proxy not enabled.");
                             }
-                        } else if (os == 'G' || os == 'P' || os == 'D' || os == 'H' || os == 'O' || os == 'T') { // http proxy: GET, POST, PUT, DELETE, HEAD, OPTIONS, TRACE, PATCH
+                        } else if ((os == 'G' && checkRead(dataInput, inputStream, "ET".getBytes())) ||
+                                (os == 'P' && (checkRead(dataInput, inputStream, "UT".getBytes()) || checkRead(dataInput, inputStream, "ATCH".getBytes()) || checkRead(dataInput, inputStream, "OST".getBytes()))) ||
+                                (os == 'D' && checkRead(dataInput, inputStream, "ELETE".getBytes())) ||
+                                (os == 'H' && checkRead(dataInput, inputStream, "EAD".getBytes())) ||
+                                (os == 'O' && checkRead(dataInput, inputStream, "PTIONS".getBytes())) ||
+                                (os == 'T' && checkRead(dataInput, inputStream, "RACE".getBytes()))) { // http proxy: GET, POST, PUT, DELETE, HEAD, OPTIONS, TRACE, PATCH
                             if (enableProxy) {
                                 inputStream.unread(os);
-                                proxyVpnFactory = new ProxyVpnFactory.HttpProxyFactory(inputStream);
+                                proxyVpnFactory = new ProxyVpnFactory.HttpProxyFactory();
                             } else {
                                 throw new IOException("Proxy not enabled.");
                             }
-                        } else if (os == 'C') { // https proxy: Connect
+                        } else if (os == 'C' && checkRead(dataInput, inputStream, "onnect".getBytes())) { // https proxy: Connect
                             if (enableProxy) {
                                 inputStream.unread(os);
-                                proxyVpnFactory = new ProxyVpnFactory.HttpsProxyFactory(inputStream);
+                                proxyVpnFactory = new ProxyVpnFactory.HttpsProxyFactory();
                             } else {
                                 throw new IOException("Proxy not enabled.");
                             }
@@ -216,28 +223,29 @@ public class VpnServer {
                             } else {
                                 throw new EOFException("NOT SSL: " + clientHelloRecord);
                             }
-                            proxyVpnFactory = new ProxyVpnFactory.SSLVpnFactory(inputStream, getPort(), clientHelloRecord);
+                            proxyVpnFactory = new ProxyVpnFactory.SSLVpnFactory(getPort(), clientHelloRecord);
                         } else {
+                            inputStream.unread(os);
                             proxyVpnFactory = new ProxyVpnFactory.VpnFactory(os, useNetGuardCore);
                         }
                         socket.setSoTimeout((int) Duration.ofHours(1).toMillis());
                     } catch (IOException e) {
                         log.debug("accept detect protocol", e);
-                        if (fallbackVpnFactory != null) {
-                            proxyVpnFactory = fallbackVpnFactory;
-                        } else {
+                        if (fallbackVpnFactory == null || inputStream == null) {
                             IoUtil.close(socket);
                             continue;
+                        } else {
+                            proxyVpnFactory = fallbackVpnFactory;
                         }
                     }
                     ProxyVpn vpn;
                     try {
-                        vpn = proxyVpnFactory.newVpn(socket, clients, rootCert);
+                        vpn = proxyVpnFactory.newVpn(socket, clients, rootCert, inputStream);
                     } catch (IOException e) {
                         log.debug("accept newVpn", e);
                         if (fallbackVpnFactory != null && fallbackVpnFactory != proxyVpnFactory) {
                             try {
-                                vpn = fallbackVpnFactory.newVpn(socket, clients, rootCert);
+                                vpn = fallbackVpnFactory.newVpn(socket, clients, rootCert, inputStream);
                             } catch (IOException ioe) {
                                 log.debug("accept fallback.newVpn", ioe);
                                 IoUtil.close(socket);
@@ -268,6 +276,45 @@ public class VpnServer {
             }
         }, getClass().getSimpleName());
         thread.start();
+    }
+
+    private boolean checkSocksV5Read(DataInputStream dataInput, PushbackInputStream inputStream) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(16);
+        try {
+            int n = dataInput.readUnsignedByte();
+            baos.write(n);
+            if (n != 1 && n != 2) {
+                return false;
+            }
+            for(int i = 0; i < n; i++) {
+                int m = dataInput.readUnsignedByte();
+                baos.write(m);
+                // X’00’ NO AUTHENTICATION REQUIRED
+                // X’02’ USERNAME/PASSWORD
+                if (m != 0 && m != 2) {
+                    return false;
+                }
+            }
+            return true;
+        } finally {
+            inputStream.unread(baos.toByteArray());
+        }
+    }
+
+    private boolean checkRead(DataInputStream dataInput, PushbackInputStream inputStream, byte[] data) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(16);
+        try {
+            for (byte d : data) {
+                byte b = dataInput.readByte();
+                baos.write(b);
+                if (b != d) {
+                    return false;
+                }
+            }
+            return true;
+        } finally {
+            inputStream.unread(baos.toByteArray());
+        }
     }
 
     public void waitShutdown() {

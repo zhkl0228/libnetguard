@@ -18,4 +18,6 @@ public enum ClientOS {
     SSLVpn,
     QianxinVPN, // 奇安信 VPN
 
+    Fallback,
+
 }

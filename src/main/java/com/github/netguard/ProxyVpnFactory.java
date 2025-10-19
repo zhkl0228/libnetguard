@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.PushbackInputStream;
 import java.net.Socket;
 import java.util.List;
@@ -29,7 +28,7 @@ public abstract class ProxyVpnFactory {
             this.useNetGuardCore = useNetGuardCore;
         }
         @Override
-        ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) throws IOException {
+        protected ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) throws IOException {
             ProxyVpn vpn = null;
             if (useNetGuardCore) {
                 try {
@@ -46,16 +45,14 @@ public abstract class ProxyVpnFactory {
     }
 
     static class SSLVpnFactory extends ProxyVpnFactory {
-        private final InputStream inputStream;
         private final int serverPort;
         private final ClientHelloRecord clientHelloRecord;
-        SSLVpnFactory(InputStream inputStream, int serverPort, ClientHelloRecord clientHelloRecord) {
-            this.inputStream = inputStream;
+        SSLVpnFactory(int serverPort, ClientHelloRecord clientHelloRecord) {
             this.serverPort = serverPort;
             this.clientHelloRecord = clientHelloRecord;
         }
         @Override
-        ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
+        protected ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) {
             return SSLVpn.newSSLVpn(socket, clients, rootCert, inputStream, serverPort, clientHelloRecord);
         }
     }
@@ -66,33 +63,25 @@ public abstract class ProxyVpnFactory {
             this.clientOS = clientOS;
         }
         @Override
-        ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
-            return new SocksProxyVpn(socket, clients, rootCert, clientOS);
+        protected ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) {
+            return new SocksProxyVpn(socket, clients, rootCert, inputStream, clientOS);
         }
     }
 
     static class HttpsProxyFactory extends ProxyVpnFactory {
-        private final InputStream inputStream;
-        HttpsProxyFactory(InputStream inputStream) {
-            this.inputStream = inputStream;
-        }
         @Override
-        ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
+        protected ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) {
             return new HttpsProxyVpn(socket, clients, rootCert, inputStream);
         }
     }
 
     static class HttpProxyFactory extends ProxyVpnFactory {
-        private final PushbackInputStream inputStream;
-        HttpProxyFactory(PushbackInputStream inputStream) {
-            this.inputStream = inputStream;
-        }
         @Override
-        ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) {
+        protected ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) {
             return new HttpProxyVpn(socket, clients, rootCert, inputStream);
         }
     }
 
-    abstract ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert) throws IOException;
+    protected abstract ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) throws IOException;
 
 }
