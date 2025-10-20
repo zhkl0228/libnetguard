@@ -180,9 +180,9 @@ public class VpnServer {
                     if (clients.isEmpty()) {
                         serverSocket.setSoTimeout(NO_CLIENT_BROADCAST_DELAY_MILLIS);
                     }
-                    Socket socket = serverSocket.accept();
-                    ProxyVpnFactory proxyVpnFactory;
-                    PushbackInputStream inputStream = null;
+                    final Socket socket = serverSocket.accept();
+                    final ProxyVpnFactory proxyVpnFactory;
+                    final PushbackInputStream inputStream;
                     try {
                         socket.setSoTimeout(500);
                         inputStream = new PushbackInputStream(socket.getInputStream(), 20480);
@@ -207,13 +207,16 @@ public class VpnServer {
                             } else {
                                 throw new IOException("Proxy not enabled.");
                             }
-                        } else if (os == 'C' && checkRead(dataInput, inputStream, "onnect".getBytes())) { // https proxy: Connect
+                        } else if (os == 'C' && checkRead(dataInput, inputStream, "ONNECT".getBytes())) { // https proxy: CONNECT
                             if (enableProxy) {
                                 inputStream.unread(os);
                                 proxyVpnFactory = new ProxyVpnFactory.HttpsProxyFactory();
                             } else {
                                 throw new IOException("Proxy not enabled.");
                             }
+                        } else if (fallbackVpnFactory != null) {
+                            inputStream.unread(os);
+                            proxyVpnFactory = fallbackVpnFactory;
                         } else if (os == 0x16) {
                             inputStream.unread(os);
                             ClientHelloRecord clientHelloRecord = ExtensionServerName.parseServerNames(dataInput, (InetSocketAddress) socket.getRemoteSocketAddress());
@@ -225,36 +228,21 @@ public class VpnServer {
                             }
                             proxyVpnFactory = new ProxyVpnFactory.SSLVpnFactory(getPort(), clientHelloRecord);
                         } else {
-                            inputStream.unread(os);
                             proxyVpnFactory = new ProxyVpnFactory.VpnFactory(os, useNetGuardCore);
                         }
                         socket.setSoTimeout((int) Duration.ofHours(1).toMillis());
                     } catch (IOException e) {
                         log.debug("accept detect protocol", e);
-                        if (fallbackVpnFactory == null || inputStream == null) {
-                            IoUtil.close(socket);
-                            continue;
-                        } else {
-                            proxyVpnFactory = fallbackVpnFactory;
-                        }
+                        IoUtil.close(socket);
+                        continue;
                     }
-                    ProxyVpn vpn;
+                    final ProxyVpn vpn;
                     try {
                         vpn = proxyVpnFactory.newVpn(socket, clients, rootCert, inputStream);
                     } catch (IOException e) {
                         log.debug("accept newVpn", e);
-                        if (fallbackVpnFactory != null && fallbackVpnFactory != proxyVpnFactory) {
-                            try {
-                                vpn = fallbackVpnFactory.newVpn(socket, clients, rootCert, inputStream);
-                            } catch (IOException ioe) {
-                                log.debug("accept fallback.newVpn", ioe);
-                                IoUtil.close(socket);
-                                continue;
-                            }
-                        } else {
-                            IoUtil.close(socket);
-                            continue;
-                        }
+                        IoUtil.close(socket);
+                        continue;
                     }
                     if (vpnListener != null) {
                         vpnListener.onConnectClient(vpn);
