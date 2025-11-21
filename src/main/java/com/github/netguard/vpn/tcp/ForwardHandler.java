@@ -7,8 +7,8 @@ import java.net.Socket;
 
 public interface ForwardHandler {
 
-    void handleClient(Socket socket, byte[] buf, InputStream inputStream, OutputStream outputStream) throws IOException;
+    void handleClient(Socket clientSocket, byte[] buf, InputStream clientInputStream, OutputStream serverOutputStream) throws IOException;
 
-    void handleServer(Socket socket, byte[] buf, InputStream inputStream, OutputStream outputStream) throws IOException;
+    void handleServer(Socket serverSocket, byte[] buf, InputStream serverInputStream, OutputStream clientOutputStream) throws IOException;
 
 }
