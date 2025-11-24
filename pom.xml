@@ -6,7 +6,7 @@
 
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.8</version>
+    <version>0.0.9</version>
     <packaging>jar</packaging>
     <name>VPN packet capture server</name>
     <description>VPN packet capture server</description>
@@ -32,8 +32,8 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.test.skip>true</maven.test.skip>
-        <netty.version>4.1.123.Final</netty.version>
-        <bc.version>1.78.1</bc.version>
+        <netty.version>4.1.128.Final</netty.version>
+        <bc.version>1.82</bc.version>
     </properties>
     <build>
         <extensions>
@@ -109,6 +109,15 @@
                 <artifactId>maven-resources-plugin</artifactId>
                 <version>3.3.1</version>
             </plugin>
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.8.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>oss</publishingServerId>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
@@ -136,7 +145,7 @@
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-crypto</artifactId>
-            <version>5.8.39</version>
+            <version>5.8.41</version>
         </dependency>
         <dependency>
             <groupId>com.github.zhkl0228</groupId>
@@ -235,7 +244,7 @@
         <dependency>
             <groupId>com.github.zhkl0228</groupId>
             <artifactId>impersonator-okhttp</artifactId>
-            <version>1.0.8</version>
+            <version>1.0.9</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -245,15 +254,5 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-    <distributionManagement>
-        <snapshotRepository>
-            <id>oss</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-        </snapshotRepository>
-        <repository>
-            <id>oss</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-        </repository>
-    </distributionManagement>
 
 </project>

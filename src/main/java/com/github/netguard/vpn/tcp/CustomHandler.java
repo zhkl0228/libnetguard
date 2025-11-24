@@ -6,6 +6,6 @@ import java.io.OutputStream;
 
 public interface CustomHandler {
 
-    void handle(InputStream inputStream, OutputStream outputStream) throws IOException;
+    void handle(InputStream clientInput, OutputStream clientOutput) throws IOException;
 
 }

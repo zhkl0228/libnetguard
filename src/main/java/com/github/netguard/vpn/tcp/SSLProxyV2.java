@@ -357,7 +357,15 @@ public class SSLProxyV2 implements Runnable {
                         return;
                     }
                     if (result.getRule() == AllowRule.__READ_MORE_PROLOGUE) {
-                        record = record.readMorePrologue(dataInput, result.needPrologueCount);
+                        int soTimeout = local.getSoTimeout();
+                        try {
+                            local.setSoTimeout(800);
+                            record = record.readMorePrologue(dataInput, result.needPrologueCount);
+                        } catch (SocketTimeoutException e) {
+                            log.debug("readMorePrologue", e);
+                        } finally {
+                            local.setSoTimeout(soTimeout);
+                        }
                     } else {
                         break;
                     }

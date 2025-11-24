@@ -1,4 +1,4 @@
-# VPN packet capture server
+# VPN packet capture server, support socks/http proxy
 
 - [QianxinVPN](https://appstore.qianxin.com/app/download)
 - [iPhoneVPN](https://github.com/zhkl0228/InspectorVpn)

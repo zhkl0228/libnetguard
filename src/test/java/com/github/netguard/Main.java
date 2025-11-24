@@ -3,6 +3,7 @@ package com.github.netguard;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.net.DefaultTrustManager;
 import cn.hutool.crypto.digest.DigestUtil;
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
@@ -39,6 +40,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 /**
  * java9: --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED
@@ -84,14 +86,31 @@ public class Main {
         public MyPacketDecoder() {
             super(new File("target/vpn.pcap"), true);
         }
-
+        @Override
+        protected void onRequest(HttpSession session, com.github.netguard.handler.http.HttpRequest request) {
+            Inspector.inspect(request.getPostData(), request.getRequestMethod() + " " + request.getRequestUri() + "?" + request.getQuery());
+            if ("api.m.jd.com".equals(request.getHost())) {
+                Map<String, String> query = parseParameters(request.getQuery());
+                System.out.println(JSON.toJSONString(query, SerializerFeature.PrettyFormat));
+                Map<String, String> bodyParams = parseParameters(new String(request.getPostData(), StandardCharsets.UTF_8));
+                String body = bodyParams.get("body");
+                System.out.println("body: " + body);
+                JSONObject obj = JSON.parseObject(body);
+                System.out.println(obj.toString(SerializerFeature.PrettyFormat));
+            }
+            super.onRequest(session, request);
+        }
         @Override
         protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
-            if ("application/json".equals(response.getContentType())) {
+            String contentType = response.getContentType();
+            if (contentType != null && contentType.contains("application/json")) {
                 try {
-                    JSONObject obj = JSONObject.parseObject(new String(response.getResponseData(), StandardCharsets.UTF_8));
+                    byte[] data = response.getResponseData();
+                    JSONObject obj = JSONObject.parseObject(new String(data, StandardCharsets.UTF_8), Feature.OrderedField);
                     System.out.println(obj.toString(SerializerFeature.PrettyFormat));
                 } catch(Exception ignored) {}
+            } else if (contentType != null && contentType.contains("text/plain")) {
+                System.out.println(new String(response.getResponseData(), StandardCharsets.UTF_8));
             }
             super.onResponse(session, request, response);
         }
@@ -122,6 +141,10 @@ public class Main {
                         tlsSignature.getJa3nText(),
                         tlsSignature.getScrapflyFP(),
                         DigestUtil.md5Hex(tlsSignature.getScrapflyFP()));
+            }
+            if (connectRequest.hostName != null && connectRequest.hostName.endsWith(".m.jd.com")) {
+                return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
+                        .build();
             }
             if ("legy.line-apps.com".equals(connectRequest.hostName)) {
                 return AcceptTcpResult.builder(AllowRule.CONNECT_TCP)

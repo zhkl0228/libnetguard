@@ -5,12 +5,7 @@ import com.github.netguard.vpn.tls.CipherSuite;
 import com.github.netguard.vpn.tls.JA3Signature;
 import com.github.netguard.vpn.tls.TlsSignature;
 import eu.faircode.netguard.Packet;
-import io.netty.handler.codec.http.DefaultHttpRequest;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.ReadOnlyHttpHeaders;
+import io.netty.handler.codec.http.*;
 import org.krakenapps.pcap.util.Buffer;
 import org.krakenapps.pcap.util.ChainBuffer;
 import org.slf4j.Logger;
@@ -20,7 +15,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class ClientHelloRecord {
 
