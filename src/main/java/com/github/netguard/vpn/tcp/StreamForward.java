@@ -76,8 +76,9 @@ public class StreamForward implements Runnable {
             }
         }
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + clientSocketAddress + "_" + serverSocketAddress + "_" + dateFormat.format(new Date()));
+        Thread thread = new Thread(this, getClass().getSimpleName() + " for " + clientSocketAddress + " => " + serverSocketAddress + " at " + dateFormat.format(new Date()));
         thread.setDaemon(true);
+        thread.setPriority(Thread.MIN_PRIORITY);
         thread.start();
     }
 

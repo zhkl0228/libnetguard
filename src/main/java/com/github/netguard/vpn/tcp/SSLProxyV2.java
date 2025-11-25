@@ -109,8 +109,8 @@ public class SSLProxyV2 implements Runnable {
         this.providedInputStream = providedInputStream;
         this.forwardHandler = null;
 
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        Thread thread = new Thread(this, "Proxy for " + packet + " " + dateFormat.format(new Date()));
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss SSS");
+        Thread thread = new Thread(this, "Proxy for " + packet + " at " + dateFormat.format(new Date()));
         thread.setDaemon(true);
         thread.start();
     }
@@ -134,8 +134,8 @@ public class SSLProxyV2 implements Runnable {
         this.providedInputStream = null;
         this.forwardHandler = null;
 
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        Thread thread = new Thread(this, "Proxy for " + packet + " " + dateFormat.format(new Date()));
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss SSS");
+        Thread thread = new Thread(this, "Proxy for " + packet + " at " + dateFormat.format(new Date()));
         thread.setDaemon(true);
         thread.start();
     }
@@ -166,8 +166,8 @@ public class SSLProxyV2 implements Runnable {
         this.providedInputStream = null;
         this.forwardHandler = forwardHandler;
 
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        Thread thread = new Thread(this, "SSLProxy for " + packet + " " + dateFormat.format(new Date()));
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss SSS");
+        Thread thread = new Thread(this, "SSLProxy for " + packet + " at " + dateFormat.format(new Date()));
         thread.setDaemon(true);
         thread.start();
     }
@@ -289,6 +289,9 @@ public class SSLProxyV2 implements Runnable {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
         InetSocketAddress server = (InetSocketAddress) socket.getRemoteSocketAddress();
+        if (hostName != null && !hostName.isBlank()) {
+            server = new InetSocketAddress(hostName, server.getPort());
+        }
         IPacketCapture packetCapture = vpn == null ? null : vpn.getPacketCapture();
         if (packetCapture != null) {
             if (isSSL) {

@@ -82,7 +82,7 @@ public class Packet {
 
     @Override
     public String toString() {
-        return "uid=" + uid + " v" + version + " p" + protocol + " " + saddr + "/" + sport + " => " + daddr + "/" + dport + ", flags=" + flags;
+        return saddr + "/" + sport + " => " + daddr + "/" + dport;
     }
 
     public void sendAllowed(DatagramSocket udp, SocketAddress address) {
