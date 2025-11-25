@@ -448,7 +448,7 @@ public class SSLProxyV2 implements Runnable {
                             socketOut.write(record.prologue);
                             socketOut.flush();
                         }
-                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, null, false, null, null, false, packet,
+                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, record.hostName, false, null, null, false, packet,
                                 record.prologue, null);
                     }
                 }
@@ -475,7 +475,7 @@ public class SSLProxyV2 implements Runnable {
                             socketOut.flush();
                         }
                     }
-                    doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, null, false, null, null, false, packet,
+                    doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, record.hostName, false, null, null, false, packet,
                             record.prologue, forwardHandler);
                 }
             }

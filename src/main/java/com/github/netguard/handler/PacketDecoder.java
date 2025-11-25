@@ -302,6 +302,19 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         onResponse(session, new KrakenHttpRequest(request), new KrakenHttpResponse(response));
     }
 
+    @Override
+    public final void onPollingResponse(HttpSession session, HttpRequest request, HttpResponse response) {
+        onPollingResponse(session, new KrakenHttpRequest(request), new KrakenHttpResponse(response));
+    }
+
+    protected void onPollingResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
+        if (log.isDebugEnabled()) {
+            byte[] data = response.getResponseData();
+            log.debug("onPollingResponse {} bytes session={}, application={}, requestUri={}, request={}, response={}\nResponse code: {} {}\n{}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), request,
+                    response, response.getResponseCode(), response.getResponseCodeMsg(), request.getHeaderString(), response.getHeaderString());
+        }
+    }
+
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
