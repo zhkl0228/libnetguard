@@ -176,7 +176,7 @@ public class ClientHelloRecord {
     }
 
     public final byte[] prologue;
-    final String hostName;
+    public final String hostName;
     final List<String> applicationLayerProtocols;
     private final HttpRequest httpRequest;
     private final JA3Signature ja3;

@@ -1,5 +1,6 @@
 package com.github.netguard;
 
+import cn.hutool.core.codec.Base64;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.handler.replay.FileReplay;
@@ -65,6 +66,29 @@ public class VpnServer {
 
     VpnServer(int port) throws IOException {
         this.serverSocket = new ServerSocket(port);
+    }
+
+    /**
+     * 生成小火箭 socks5 QRCode
+     */
+    @SuppressWarnings("unused")
+    public String generateShadowRocketQRCode() {
+        if (!enableProxy) {
+            throw new IllegalStateException("Enable proxy when generating shadow rocket QR code");
+        }
+        try {
+            String lanIp = Inspector.detectLanIP();
+            int port = getPort();
+            List<String> list = new ArrayList<>(3);
+            list.add("method=strict");
+            list.add(String.format("remarks=Dev_%s:%d", lanIp, port));
+            list.add("udp=0");
+            return String.format("socks://%s?%s",
+                    Base64.encodeUrlSafe((lanIp + ":" + port).getBytes()),
+                    String.join("&", list));
+        } catch (SocketException e) {
+            throw new IllegalStateException("generateShadowRocketQRCode", e);
+        }
     }
 
     private VpnListener vpnListener;
