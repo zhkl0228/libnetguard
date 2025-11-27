@@ -13,6 +13,8 @@ public enum ClientOS {
     HttpProxy,
     HttpsProxy,
 
+    TrojanProxy,
+
     TransparentProxying,
 
     SSLVpn,

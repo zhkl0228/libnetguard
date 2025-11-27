@@ -251,6 +251,8 @@ public class VpnServer {
                                 throw new EOFException("NOT SSL: " + clientHelloRecord);
                             }
                             proxyVpnFactory = new ProxyVpnFactory.SSLVpnFactory(getPort(), clientHelloRecord);
+                        } else if ((Character.isLowerCase(os) || Character.isDigit(os)) && isTrajan(os, dataInput, inputStream)) { // may Trojan
+                            proxyVpnFactory = new ProxyVpnFactory.TrojanProxyFactory();
                         } else {
                             proxyVpnFactory = new ProxyVpnFactory.VpnFactory(os, useNetGuardCore);
                         }
@@ -288,6 +290,23 @@ public class VpnServer {
             }
         }, getClass().getSimpleName());
         thread.start();
+    }
+
+    private boolean isTrajan(int os, DataInputStream dataInput, PushbackInputStream inputStream) throws IOException {
+        inputStream.unread(os);
+        byte[] passwdWithCommand = new byte[56 + 3];
+        dataInput.readFully(passwdWithCommand);
+        try {
+            for (int i = 0; i < 56; i++) {
+                int ch = passwdWithCommand[i] & 0xff;
+                if (!Character.isLowerCase(ch) && !Character.isDigit(ch)) {
+                    return false;
+                }
+            }
+            return passwdWithCommand[56] == 0xd && passwdWithCommand[57] == 0xa && passwdWithCommand[58] == 0x1;
+        } finally {
+            inputStream.unread(passwdWithCommand);
+        }
     }
 
     private boolean checkSocksV5Read(DataInputStream dataInput, PushbackInputStream inputStream) throws IOException {

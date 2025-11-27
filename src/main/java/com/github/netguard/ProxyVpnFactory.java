@@ -3,6 +3,7 @@ package com.github.netguard;
 import com.github.netguard.proxy.HttpProxyVpn;
 import com.github.netguard.proxy.HttpsProxyVpn;
 import com.github.netguard.proxy.SocksProxyVpn;
+import com.github.netguard.proxy.TrojanProxyVpn;
 import com.github.netguard.sslvpn.SSLVpn;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
@@ -79,6 +80,13 @@ public abstract class ProxyVpnFactory {
         @Override
         protected ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) {
             return new HttpProxyVpn(socket, clients, rootCert, inputStream);
+        }
+    }
+
+    static class TrojanProxyFactory extends ProxyVpnFactory {
+        @Override
+        protected ProxyVpn newVpn(Socket socket, List<ProxyVpn> clients, RootCert rootCert, PushbackInputStream inputStream) {
+            return new TrojanProxyVpn(socket, clients, rootCert, inputStream);
         }
     }
 

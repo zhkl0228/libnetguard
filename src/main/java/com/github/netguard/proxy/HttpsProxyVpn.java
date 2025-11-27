@@ -13,7 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
@@ -54,7 +53,7 @@ public class HttpsProxyVpn extends FallbackProxyVpn {
                 SSLProxyV2.create(this, packet, 10000, socket, null);
                 return;
             }
-            throw new IOException("NOT support https proxy: request=" + request);
+            throw new UnsupportedOperationException("NOT support https proxy: request=" + request);
         } catch (Exception e) {
             log.warn("handle http proxy", e);
             IoUtil.close(socket);

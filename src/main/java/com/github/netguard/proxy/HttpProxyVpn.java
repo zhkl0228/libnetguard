@@ -8,6 +8,7 @@ import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.SSLProxyV2;
 import eu.faircode.netguard.Packet;
+import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,10 @@ public class HttpProxyVpn extends FallbackProxyVpn {
         try(final ByteArrayOutputStream baos = new ByteArrayOutputStream(0x10)) {
             HttpRequest request = parseRequest(baos, inputStream, socket);
             if (request != null) {
+                if(request.method() != HttpMethod.CONNECT) {
+                    throw new UnsupportedOperationException("Only CONNECT requests are supported: " + request);
+                }
+
                 inputStream.unread(baos.toByteArray());
                 URL url = new URL(request.uri());
                 String host = url.getHost();
