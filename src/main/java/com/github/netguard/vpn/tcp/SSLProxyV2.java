@@ -283,7 +283,7 @@ public class SSLProxyV2 implements Runnable {
         return Vpn.HTTP2_PROTOCOL.equals(applicationProtocol);
     }
 
-    private static void doForward(InputStream localIn, OutputStream localOut, Socket local, InputStream socketIn, OutputStream socketOut, Socket socket, InspectorVpn vpn,
+    private static void doForward(InputStream localIn, OutputStream localOut, final Socket local, InputStream socketIn, OutputStream socketOut, final Socket socket, InspectorVpn vpn,
                                   String hostName, boolean filterHttp2, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet,
                                   byte[] prologue, ForwardHandler forwardHandler) throws InterruptedException, IOException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
@@ -322,6 +322,19 @@ public class SSLProxyV2 implements Runnable {
         } else {
             inbound = new StreamForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName, isSSL, packet, forwardHandler);
             outbound = new StreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName, isSSL, packet, forwardHandler);
+        }
+        if (forwardHandler != null) {
+            ForwardContext forwardContext = new ForwardContext() {
+                @Override
+                public Socket getClinetSocket() {
+                    return local;
+                }
+                @Override
+                public Socket getServerSocket() {
+                    return socket;
+                }
+            };
+            forwardHandler.initContext(forwardContext);
         }
         inbound.startThread(prologue);
         outbound.startThread(null);

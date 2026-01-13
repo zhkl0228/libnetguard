@@ -7,6 +7,9 @@ import java.net.Socket;
 
 public interface ForwardHandler {
 
+    default void initContext(ForwardContext context) {
+    }
+
     void handleClient(Socket clientSocket, byte[] buf, InputStream clientInputStream, OutputStream serverOutputStream) throws IOException;
 
     void handleServer(Socket serverSocket, byte[] buf, InputStream serverInputStream, OutputStream clientOutputStream) throws IOException;

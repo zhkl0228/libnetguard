@@ -106,9 +106,11 @@ public class Main {
             if (contentType != null && contentType.contains("application/json")) {
                 try {
                     byte[] data = response.getResponseData();
-                    JSONObject obj = JSONObject.parseObject(new String(data, StandardCharsets.UTF_8), Feature.OrderedField);
+                    JSON obj = (JSON) JSON.parse(new String(data, StandardCharsets.UTF_8));
                     System.out.println(obj.toString(SerializerFeature.PrettyFormat));
-                } catch(Exception ignored) {}
+                } catch(Exception e) {
+                    e.printStackTrace(System.err);
+                }
             } else if (contentType != null && contentType.contains("text/plain")) {
                 System.out.println(new String(response.getResponseData(), StandardCharsets.UTF_8));
             }
