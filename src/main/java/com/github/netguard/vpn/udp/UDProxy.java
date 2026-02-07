@@ -76,8 +76,8 @@ public class UDProxy {
     private final InspectorVpn vpn;
     private final InetSocketAddress clientAddress;
     private final InetSocketAddress serverAddress;
-    private final DatagramSocket clientSocket;
-    private final DatagramSocket serverSocket;
+    private final DatagramSocket remoteSocket;
+    private final DatagramSocket localSocket;
     private final Http2Filter http2Filter;
     private final DNSFilter dnsFilter;
 
@@ -85,11 +85,11 @@ public class UDProxy {
         this.vpn = vpn;
         this.clientAddress = packet.createClientAddress();
         this.serverAddress = packet.createServerAddress();
-        this.serverSocket = new DatagramSocket(new InetSocketAddress(0));
-        this.serverSocket.setSoTimeout(READ_TIMEOUT);
-        this.clientSocket = new DatagramSocket(new InetSocketAddress(0));
-        this.clientSocket.setSoTimeout(3000);
-        log.trace("UDProxy client={}, server={}, clientSocket={}, serverSocket={}", clientAddress, serverAddress, clientSocket.getLocalPort(), serverSocket.getLocalPort());
+        this.localSocket = new DatagramSocket(new InetSocketAddress(0));
+        this.localSocket.setSoTimeout(READ_TIMEOUT);
+        this.remoteSocket = new DatagramSocket(new InetSocketAddress(0));
+        this.remoteSocket.setSoTimeout(3000);
+        log.trace("UDProxy client={}, server={}, remoteSocket={}, localSocket={}", clientAddress, serverAddress, remoteSocket.getLocalPort(), localSocket.getLocalPort());
         IPacketCapture packetCapture = vpn.getPacketCapture();
         this.http2Filter = packetCapture == null ? null : packetCapture.getH2Filter();
         this.dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
@@ -101,12 +101,12 @@ public class UDProxy {
     }
 
     private Allowed redirect() {
-        return new Allowed("127.0.0.1", serverSocket.getLocalPort());
+        return new Allowed("127.0.0.1", localSocket.getLocalPort());
     }
 
     private boolean serverClosed;
 
-    private class Server implements Runnable {
+    private class Server implements Runnable, ProxyContext {
         private final Client client;
         private final Packet packet;
         Server(Client client, InetSocketAddress serverAddress, Packet packet) {
@@ -123,12 +123,13 @@ public class UDProxy {
             try {
                 final byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
                 final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                boolean first = true;
+                boolean firstPacket = true;
                 List<byte[]> pendingList = new ArrayList<>(10);
                 while (true) {
                     try {
-                        serverSocket.receive(packet);
-                        int length = packet.getLength();
+                        packet.setLength(buffer.length);
+                        localSocket.receive(packet);
+                        final int length = packet.getLength();
                         if (log.isDebugEnabled()) {
                             byte[] data = Arrays.copyOf(buffer, length);
                             if (client.connection == null) {
@@ -137,8 +138,8 @@ public class UDProxy {
                                 log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.encode(data)));
                             }
                         }
-                        if (first || continueQuic) {
-                            if (first) {
+                        if (firstPacket || continueQuic) {
+                            if (firstPacket) {
                                 client.forwardAddress = (InetSocketAddress) packet.getSocketAddress();
                             }
                             ClientHello clientHello = null;
@@ -158,7 +159,7 @@ public class UDProxy {
                                     continue;
                                 }
                             }
-                            if (first) {
+                            if (firstPacket) {
                                 client.dnsQuery = detectDnsQuery(buffer, length);
                                 log.trace("dnsQuery={}", client.dnsQuery);
                             }
@@ -170,7 +171,7 @@ public class UDProxy {
                                 byte[] fakeResponse = fake.toWire();
                                 DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
                                 fakePacket.setSocketAddress(client.forwardAddress);
-                                serverSocket.send(fakePacket);
+                                localSocket.send(fakePacket);
                                 continue;
                             }
                             if (packetCapture != null) {
@@ -186,7 +187,7 @@ public class UDProxy {
                                     case Discard:
                                         throw new SocketTimeoutException("discard");
                                     case Forward: {
-                                        setUdpProxy(packetRequest, udpProxy);
+                                        setUdpProxy(packetRequest, udpProxy, acceptUdpResult == null ? null : acceptUdpResult.proxyHandler);
                                         break;
                                     }
                                     case FILTER_H3:
@@ -194,7 +195,7 @@ public class UDProxy {
                                         if (packetRequest.hostName == null ||
                                                 packetRequest.hostName.isEmpty() ||
                                                 packetRequest.applicationLayerProtocols.isEmpty()) {
-                                            setUdpProxy(packetRequest, udpProxy);
+                                            setUdpProxy(packetRequest, udpProxy, acceptUdpResult.proxyHandler);
                                             break; // forward traffic
                                         }
                                         Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? UDProxy.this.http2Filter : null;
@@ -206,14 +207,14 @@ public class UDProxy {
                         for (byte[] data : pendingList) {
                             DatagramPacket pendingPacket = new DatagramPacket(data, data.length);
                             pendingPacket.setSocketAddress(forwardAddress);
-                            clientSocket.send(pendingPacket);
+                            sendToServer(pendingPacket);
                             if (log.isDebugEnabled()) {
                                 log.debug("pendingPacket={}, length={}, hash={}, forwardAddress={}", pendingPacket, data.length, DigestUtil.md5Hex(data), forwardAddress);
                             }
                         }
                         pendingList.clear();
                         packet.setSocketAddress(forwardAddress);
-                        clientSocket.send(packet);
+                        sendToServer(packet);
                     } catch (SocketTimeoutException e) {
                         log.trace("server", e);
                         break;
@@ -221,7 +222,7 @@ public class UDProxy {
                         log.warn("server", e);
                         break;
                     } finally {
-                        first = false;
+                        firstPacket = false;
                     }
                 }
             } finally {
@@ -230,14 +231,38 @@ public class UDProxy {
             }
         }
 
-        private void setUdpProxy(PacketRequest packetRequest, InetSocketAddress udpProxy) throws IOException {
+        private void setUdpProxy(PacketRequest packetRequest, InetSocketAddress udpProxy, ProxyHandler proxyHandler) throws IOException {
             if (udpProxy != null) {
                 byte[] connect = UDPRelay.createConnectUdpRelayRequest(new InetSocketAddress(packetRequest.serverIp, packetRequest.port), 60);
                 forwardAddress = udpProxy;
                 DatagramPacket packet = new DatagramPacket(connect, connect.length);
                 packet.setSocketAddress(forwardAddress);
-                clientSocket.send(packet);
+                remoteSocket.send(packet);
             }
+            if (proxyHandler != null) {
+                proxyHandler.initContext(this);
+                UDProxy.this.proxyHandler = proxyHandler;
+            }
+        }
+
+        @Override
+        public InetSocketAddress getClientAddress() {
+            return clientAddress;
+        }
+
+        @Override
+        public InetSocketAddress getServerAddress() {
+            return serverAddress;
+        }
+
+        @Override
+        public DatagramSocket getLocalSocket() {
+            return localSocket;
+        }
+
+        @Override
+        public DatagramSocket getRemoteSocket() {
+            return remoteSocket;
         }
 
         private void handleQuicProxy(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello, QuicProxyProvider quicProxyProvider, InetSocketAddress udpProxy) throws SocketTimeoutException {
@@ -435,7 +460,7 @@ public class UDProxy {
                 }
                 DatagramPacket datagram = new DatagramPacket(packetBytes, packetBytes.length, clientAddress.getAddress(), clientAddress.getPort());
                 try {
-                    serverSocket.send(datagram);
+                    localSocket.send(datagram);
                 } catch (IOException e) {
                     log.error("Sending version negotiation packet failed", e);
                 }
@@ -454,6 +479,35 @@ public class UDProxy {
         }
     }
 
+    private void sendToServer(DatagramPacket packet) throws IOException {
+        if (proxyHandler == null) {
+            remoteSocket.send(packet);
+        } else {
+            byte[] buf = packet.getData();
+            int newLength = proxyHandler.handleUdpClient(clientAddress, buf, packet.getLength());
+            sendProxyUdp(remoteSocket, packet, newLength);
+        }
+    }
+
+    private void sendToClient(DatagramPacket packet) throws IOException {
+        if (proxyHandler == null) {
+            localSocket.send(packet);
+        } else {
+            byte[] buf = packet.getData();
+            int newLength = proxyHandler.handleUdpServer(serverAddress, buf, packet.getLength());
+            sendProxyUdp(localSocket, packet, newLength);
+        }
+    }
+
+    private void sendProxyUdp(DatagramSocket socket, DatagramPacket packet, int newLength) throws IOException {
+        if (newLength > 0) {
+            packet.setLength(newLength);
+            socket.send(packet);
+        }
+    }
+
+    private ProxyHandler proxyHandler;
+
     private class Client implements Runnable {
         private InetSocketAddress forwardAddress;
         private Message dnsQuery;
@@ -466,8 +520,9 @@ public class UDProxy {
                 final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 while (true) {
                     try {
-                        clientSocket.receive(packet);
-                        int length = packet.getLength();
+                        packet.setLength(buffer.length);
+                        remoteSocket.receive(packet);
+                        final int length = packet.getLength();
                         if (log.isDebugEnabled()) {
                             byte[] data = new byte[length];
                             System.arraycopy(buffer, 0, data, 0, length);
@@ -494,7 +549,7 @@ public class UDProxy {
                                         byte[] fakeResponse = fake.toWire();
                                         DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
                                         fakePacket.setSocketAddress(forwardAddress);
-                                        serverSocket.send(fakePacket);
+                                        localSocket.send(fakePacket);
                                         continue;
                                     }
                                 }
@@ -503,7 +558,7 @@ public class UDProxy {
                             }
                         }
                         packet.setSocketAddress(forwardAddress);
-                        serverSocket.send(packet);
+                        sendToClient(packet);
                     } catch (SocketTimeoutException e) {
                         log.trace("client", e);
                         if (serverClosed) {
@@ -517,8 +572,8 @@ public class UDProxy {
             } finally {
                 IoUtil.close(quicServer);
                 IoUtil.close(connection);
-                IoUtil.close(serverSocket);
-                IoUtil.close(clientSocket);
+                IoUtil.close(localSocket);
+                IoUtil.close(remoteSocket);
                 log.trace("udp proxy client exit: client={}, server={}", clientAddress, serverAddress);
             }
         }

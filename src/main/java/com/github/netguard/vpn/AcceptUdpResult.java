@@ -1,6 +1,7 @@
 package com.github.netguard.vpn;
 
 import com.github.netguard.vpn.udp.AcceptRule;
+import com.github.netguard.vpn.udp.ProxyHandler;
 
 import java.net.InetSocketAddress;
 
@@ -18,8 +19,16 @@ public class AcceptUdpResult {
         this.udpProxy = udpProxy;
     }
 
-    public void setUdpProxy(InetSocketAddress udpProxy) {
+    public AcceptUdpResult setUdpProxy(InetSocketAddress udpProxy) {
         this.udpProxy = udpProxy;
+        return this;
+    }
+
+    public ProxyHandler proxyHandler;
+
+    public AcceptUdpResult setProxyHandler(ProxyHandler proxyHandler) {
+        this.proxyHandler = proxyHandler;
+        return this;
     }
 
 }

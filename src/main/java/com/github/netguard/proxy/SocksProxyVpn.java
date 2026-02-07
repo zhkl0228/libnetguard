@@ -55,9 +55,9 @@ public class SocksProxyVpn extends FallbackProxyVpn {
             throw new IOException("Unsupported handleConnect version: " + v);
         }
 
-        byte ip = dis.readByte();
-        if(ip != 1) {
-            throw new IOException("Unsupported ip version type: " + ip);
+        byte cmd = dis.readByte();
+        if(cmd != 1) {
+            throw new IOException("Unsupported cmd type: " + cmd);
         }
 
         dis.readByte();//0
