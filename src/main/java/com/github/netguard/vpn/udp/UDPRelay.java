@@ -3,6 +3,7 @@ package com.github.netguard.vpn.udp;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.thread.ThreadUtil;
 import com.github.netguard.Inspector;
+import com.github.netguard.proxy.socks5.Socks5DatagramPacketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.kwik.core.receive.Receiver;
@@ -34,6 +35,8 @@ public class UDPRelay implements Runnable, Closeable {
     );
     private final DatagramSocket serverSocket;
 
+    private final Socks5DatagramPacketHandler socks5DatagramPacketHandler = new Socks5DatagramPacketHandler();
+
     public UDPRelay(int port) throws SocketException {
         this.serverSocket = new DatagramSocket(port);
         this.executorService.submit(this);
@@ -44,7 +47,7 @@ public class UDPRelay implements Runnable, Closeable {
         private final SocketAddress clientAddress;
         private final SocketAddress serverAddress;
         public Relay(SocketAddress clientAddress, SocketAddress serverAddress, int receiveTimeoutSeconds) throws SocketException {
-            this.clientSocket = new DatagramSocket();
+            this.clientSocket = new DatagramSocket(0);
             this.clientSocket.setSoTimeout((receiveTimeoutSeconds > 60 || receiveTimeoutSeconds <= 0 ? 60 : receiveTimeoutSeconds) * 1000);
             this.clientAddress = clientAddress;
             this.serverAddress = serverAddress;
@@ -56,18 +59,18 @@ public class UDPRelay implements Runnable, Closeable {
             try {
                 while (true) {
                     try {
-                        packet.setLength(buffer.length);
+                        packet.setData(buffer);
                         clientSocket.receive(packet);
-                        packet.setSocketAddress(clientAddress);
-                        serverSocket.send(packet);
+                        log.debug("Relay received packet: {}", packet.getSocketAddress());
+                        serverSocket.send(socks5DatagramPacketHandler.encapsulate(packet, clientAddress));
                     } catch (IOException e) {
                         log.debug("relay {} => {}", clientAddress, serverAddress, e);
                         break;
                     }
                 }
             } finally {
-                IoUtil.close(clientSocket);
                 relayMap.remove(clientAddress);
+                IoUtil.close(clientSocket);
                 log.debug("exit relay: {}", clientAddress);
             }
         }
@@ -88,7 +91,7 @@ public class UDPRelay implements Runnable, Closeable {
     private static final byte[] CONNECT_MAGIC = "UDPR".getBytes();
 
     public static DatagramSocket createRelayProxySocket(InetSocketAddress udpProxy, InetSocketAddress serverAddress, long receiveTimeoutSeconds) throws IOException {
-        DatagramSocket socket = new DatagramSocket();
+        DatagramSocket socket = new DatagramSocket(0);
         byte[] setProxy = UDPRelay.createConnectUdpRelayRequest(serverAddress, (int) receiveTimeoutSeconds);
         DatagramPacket packet = new DatagramPacket(setProxy, setProxy.length);
         packet.setSocketAddress(udpProxy);
@@ -133,7 +136,7 @@ public class UDPRelay implements Runnable, Closeable {
                 Relay relay = relayMap.get(clientAddress);
                 log.debug("receive packet={}, clientAddress={}, relay={}, relaySize={}", packet, clientAddress, relay, relayMap.size());
                 if (log.isDebugEnabled()) {
-                    log.debug("{}", Inspector.inspectString(Arrays.copyOf(buffer, length), "receive packet"));
+                    log.debug("{}", Inspector.inspectString(Arrays.copyOf(buffer, length), "receive packet relay=" + relay));
                 }
                 if (relay != null) {
                     try {

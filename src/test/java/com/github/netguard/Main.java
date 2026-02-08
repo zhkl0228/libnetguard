@@ -52,13 +52,15 @@ public class Main {
         Replay.fakeReload4jServiceProvider();
     }
 
+    private static final int TEST_PORT = 20240;
+
     public static void main(String[] args) throws IOException {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
         Logger.getLogger(HttpFrameForward.class.getPackage().getName()).setLevel(Level.INFO);
         Logger.getLogger(DNSFilter.class.getPackage().getName()).setLevel(Level.DEBUG);
         File replayFile = new File("target/replay.json");
         VpnServerBuilder builder = VpnServerBuilder.create()
-                .withPort(20240)
+                .withPort(TEST_PORT)
                 .enablePreMasterSecretsLogFile()
                 .enableBroadcast(10)
                 .enableTransparentProxying()
@@ -181,7 +183,7 @@ public class Main {
         @Override
         public AcceptUdpResult acceptUdp(PacketRequest packetRequest) {
             if (packetRequest.dnsQuery != null) {
-                return AcceptUdpResult.rule(AcceptRule.Forward);
+                return AcceptUdpResult.rule(AcceptRule.Forward).setUdpProxy(new InetSocketAddress("127.0.0.1", TEST_PORT));
             }
             TlsSignature tlsSignature = packetRequest.getTlsSignature();
             if (tlsSignature != null) {
