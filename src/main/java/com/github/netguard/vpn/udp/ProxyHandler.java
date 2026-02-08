@@ -10,11 +10,11 @@ public interface ProxyHandler {
     /**
      * 客户端发出
      */
-    int handleUdpClient(InetSocketAddress clientAddress, byte[] packet, int length);
+    int handleUdpClient(InetSocketAddress toAddress, byte[] packet, int length);
 
     /**
      * 服务端收到
      */
-    int handleUdpServer(InetSocketAddress serverAddress, byte[] packet, int length);
+    int handleUdpServer(InetSocketAddress fromAddress, byte[] packet, int length);
 
 }

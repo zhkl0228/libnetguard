@@ -3,6 +3,8 @@ package com.github.netguard.proxy;
 import cn.hutool.core.io.IoUtil;
 import com.github.netguard.FallbackProxyVpn;
 import com.github.netguard.ProxyVpn;
+import com.github.netguard.proxy.socks5.SocksCommand;
+import com.github.netguard.proxy.socks5.UDPRelayServer;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.SSLProxyV2;
@@ -11,7 +13,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -56,7 +60,7 @@ public class SocksProxyVpn extends FallbackProxyVpn {
         }
 
         byte cmd = dis.readByte();
-        if(cmd != 1) {
+        if(cmd != SocksCommand.CONNECT.getValue() && cmd != SocksCommand.UDP_ASSOCIATE.getValue()) {
             throw new IOException("Unsupported cmd type: " + cmd);
         }
 
@@ -84,6 +88,10 @@ public class SocksProxyVpn extends FallbackProxyVpn {
             throw new IOException("Unsupported ipv6");
         } else {
             throw new IOException("Unsupported tcp address type: " + addrType);
+        }
+
+        if (cmd == SocksCommand.UDP_ASSOCIATE.getValue()) {
+            return doUDPAssociate(dis, dos, packet);
         }
 
         dos.writeInt(0x5000001);
@@ -159,6 +167,43 @@ public class SocksProxyVpn extends FallbackProxyVpn {
         } catch (Exception e) {
             log.warn("handle socks exception.", e);
             IoUtil.close(socket);
+        }
+    }
+
+    private Result doUDPAssociate(DataInputStream dis, DataOutputStream dos, Packet packet) throws IOException {
+        final InetSocketAddress clientSocketAddress = getRemoteSocketAddress();
+        final int clientPort = packet.dport;
+
+        UDPRelayServer udpRelayServer = null;
+        try {
+            udpRelayServer = new UDPRelayServer(clientSocketAddress, new InetSocketAddress(packet.daddr, packet.dport));
+            InetSocketAddress socketAddress = (InetSocketAddress) udpRelayServer.start();
+            log.debug("Create UDP relay server at [{}] for {}, clientPort={}", socketAddress, clientSocketAddress, clientPort);
+
+            if (!(socketAddress.getAddress() instanceof Inet4Address)) {
+                throw new UnsupportedOperationException("Only IPv4 addresses are supported");
+            }
+
+            dos.writeInt(0x5000001);
+            dos.write(socketAddress.getAddress().getAddress()); // ipv4
+            dos.writeShort(socketAddress.getPort());
+            dos.flush();
+
+            // The client should never send any more data on the control socket, so read() should hang
+            // until the client closes the socket (returning -1) or this thread is interrupted (throwing
+            // InterruptedIOException).
+            int nextByte = dis.read();
+            if (nextByte != -1) {
+                throw new IOException(String.format("Unexpected data on [%s]", clientSocketAddress));
+            } else {
+                throw new EOFException();
+            }
+        } finally {
+            log.debug("[{}] closed", clientSocketAddress);
+            if(udpRelayServer != null) {
+                udpRelayServer.stop();
+            }
+            log.debug("UDP relay server for [{}] is closed", clientSocketAddress);
         }
     }
 

@@ -56,6 +56,7 @@ public class UDPRelay implements Runnable, Closeable {
             try {
                 while (true) {
                     try {
+                        packet.setLength(buffer.length);
                         clientSocket.receive(packet);
                         packet.setSocketAddress(clientAddress);
                         serverSocket.send(packet);
@@ -125,6 +126,7 @@ public class UDPRelay implements Runnable, Closeable {
         log.debug("start udp relay serverSocket={}", serverSocket);
         while (true) {
             try {
+                packet.setLength(buffer.length);
                 serverSocket.receive(packet);
                 int length = packet.getLength();
                 SocketAddress clientAddress = packet.getSocketAddress();

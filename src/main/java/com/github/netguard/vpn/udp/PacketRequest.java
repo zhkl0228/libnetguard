@@ -109,12 +109,6 @@ public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
 
     @Override
     public String toString() {
-        return "PacketRequest{" +
-                "serverIp='" + serverIp + '\'' +
-                ", port=" + port +
-                ", hostName='" + hostName + '\'' +
-                ", isDNSQuery='" + (dnsQuery != null) + '\'' +
-                ", applicationLayerProtocols=" + applicationLayerProtocols +
-                '}';
+        return String.format("PacketRequest{%s:%d => %s:%d, hostName='%s', isDNSQuery='%s', applicationLayerProtocols=%s}", packet.saddr, packet.sport, serverIp, port, hostName, dnsQuery != null, applicationLayerProtocols);
     }
 }

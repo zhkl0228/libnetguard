@@ -389,7 +389,7 @@ public class UDProxy {
                         }
                     } else  {
                         if (dcidLength > 20) {
-                            if (initialWithUnspportedVersion(type, version, length)) {
+                            if (initialWithUnsupportedVersion(type, version, length)) {
                                 log.debug("initialWithUnspportedVersion dcidLength={}", dcidLength);
                                 // https://tools.ietf.org/html/draft-ietf-quic-transport-32#section-6
                                 // "A server sends a Version Negotiation packet in response to each packet that might initiate a new connection;"
@@ -407,7 +407,7 @@ public class UDProxy {
                                 bb.get(scid);
                                 bb.rewind();
 
-                                if (initialWithUnspportedVersion(type, version, length)) {
+                                if (initialWithUnsupportedVersion(type, version, length)) {
                                     if (log.isDebugEnabled()) {
                                         log.debug("initialWithUnspportedVersion dcid={}, scid={}", HexUtil.encodeHexStr(dcid), HexUtil.encodeHexStr(scid));
                                     }
@@ -467,7 +467,7 @@ public class UDProxy {
             }
         }
 
-        private boolean initialWithUnspportedVersion(int type, int version, int length) {
+        private boolean initialWithUnsupportedVersion(int type, int version, int length) {
             if (InitialPacket.isInitialType(type, Version.parse(version))) {
                 // https://tools.ietf.org/html/draft-ietf-quic-transport-32#section-14.1
                 // "A server MUST discard an Initial packet that is carried in a UDP
@@ -484,7 +484,7 @@ public class UDProxy {
             remoteSocket.send(packet);
         } else {
             byte[] buf = packet.getData();
-            int newLength = proxyHandler.handleUdpClient(clientAddress, buf, packet.getLength());
+            int newLength = proxyHandler.handleUdpClient((InetSocketAddress) packet.getSocketAddress(), buf, packet.getLength());
             sendProxyUdp(remoteSocket, packet, newLength);
         }
     }
@@ -494,7 +494,7 @@ public class UDProxy {
             localSocket.send(packet);
         } else {
             byte[] buf = packet.getData();
-            int newLength = proxyHandler.handleUdpServer(serverAddress, buf, packet.getLength());
+            int newLength = proxyHandler.handleUdpServer((InetSocketAddress) packet.getSocketAddress(), buf, packet.getLength());
             sendProxyUdp(localSocket, packet, newLength);
         }
     }
