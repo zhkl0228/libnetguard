@@ -116,7 +116,10 @@ void check_udp_socket(const struct arguments *args, const struct epoll_event *ev
             s->udp.time = time(NULL);
 
             uint8_t *buffer = ng_malloc(s->udp.mss, "udp recv");
-            ssize_t bytes = recv(s->socket, buffer, s->udp.mss, 0);
+            struct sockaddr_storage sender_addr;
+            socklen_t sender_addr_len = sizeof(sender_addr);
+            ssize_t bytes = recvfrom(s->socket, buffer, s->udp.mss, 0,
+                                     (struct sockaddr *) &sender_addr, &sender_addr_len);
             if (bytes < 0) {
                 // Socket error
                 log_android(ANDROID_LOG_WARN, "UDP recv error %d: %s",
@@ -145,7 +148,7 @@ void check_udp_socket(const struct arguments *args, const struct epoll_event *ev
                     parse_dns_response(args, s, buffer, (size_t *) &bytes);
 
                 // Forward to tun
-                if (write_udp(args, &s->udp, buffer, (size_t) bytes) < 0)
+                if (write_udp(args, &s->udp, buffer, (size_t) bytes, &sender_addr) < 0)
                     s->udp.state = UDP_FINISHING;
                 else {
                     // Prevent too many open files
@@ -522,13 +525,53 @@ int open_udp_socket(const struct arguments *args,
 }
 
 ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
-                  uint8_t *data, size_t datalen) {
+                  uint8_t *data, size_t datalen,
+                  const struct sockaddr_storage *actual_from) {
     size_t len;
     u_int8_t *buffer;
     struct udphdr *udp;
     uint16_t csum;
     char source[INET6_ADDRSTRLEN + 1];
     char dest[INET6_ADDRSTRLEN + 1];
+
+    // Determine effective source address (the address the app will see as sender)
+    int use_actual_sender = 0;
+    __be32 actual_ip4 = 0;
+    struct in6_addr actual_ip6;
+    __be16 actual_port = 0;
+    memset(&actual_ip6, 0, sizeof(actual_ip6));
+
+    if (actual_from != NULL) {
+        // Extract actual sender info (only when address family matches session version)
+        if (actual_from->ss_family == AF_INET && cur->version == 4) {
+            const struct sockaddr_in *sa4 = (const struct sockaddr_in *) actual_from;
+            actual_ip4 = sa4->sin_addr.s_addr;
+            actual_port = sa4->sin_port;
+        } else if (actual_from->ss_family == AF_INET6 && cur->version == 6) {
+            const struct sockaddr_in6 *sa6 = (const struct sockaddr_in6 *) actual_from;
+            memcpy(&actual_ip6, &sa6->sin6_addr, 16);
+            actual_port = sa6->sin6_port;
+        }
+
+        if (actual_port != 0) {
+            if (cur->redirect.rport > 0) {
+                // Has redirect, check if actual sender port matches redirect port
+                if (ntohs(actual_port) != cur->redirect.rport) {
+                    use_actual_sender = 1;
+                }
+            }
+        }
+    }
+
+    if (use_actual_sender) {
+        char actual_src[INET6_ADDRSTRLEN + 1];
+        if (cur->version == 4)
+            inet_ntop(AF_INET, &actual_ip4, actual_src, sizeof(actual_src));
+        else
+            inet_ntop(AF_INET6, &actual_ip6, actual_src, sizeof(actual_src));
+        log_android(ANDROID_LOG_DEBUG, "UDP using actual sender %s/%u instead of session dest",
+                    actual_src, ntohs(actual_port));
+    }
 
     // Build packet
     if (cur->version == 4) {
@@ -593,7 +636,7 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
     // Build UDP header
     memset(udp, 0, sizeof(struct udphdr));
 #if defined(__APPLE__)
-    udp->uh_sport = cur->dest;
+    udp->uh_sport = use_actual_sender ? actual_port : cur->dest;
     udp->uh_dport = cur->source;
     udp->uh_ulen = htons(sizeof(struct udphdr) + datalen);
 
@@ -602,7 +645,7 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
     csum = calc_checksum(csum, data, datalen);
     udp->uh_sum = ~csum;
 #else
-    udp->source = cur->dest;
+    udp->source = use_actual_sender ? actual_port : cur->dest;
     udp->dest = cur->source;
     udp->len = htons(sizeof(struct udphdr) + datalen);
 
@@ -621,10 +664,12 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
               dest,
               sizeof(dest));
 
+    __be16 effective_sport = use_actual_sender ? actual_port : cur->dest;
+
     // Send packet
     log_android(ANDROID_LOG_DEBUG,
                 "UDP sending to tun %d from %s/%u to %s/%u data %u",
-                args->tun, dest, ntohs(cur->dest), source, ntohs(cur->source), len);
+                args->tun, dest, ntohs(effective_sport), source, ntohs(cur->source), len);
 
     ssize_t res = write_tun(args->tun, buffer, len);
 
