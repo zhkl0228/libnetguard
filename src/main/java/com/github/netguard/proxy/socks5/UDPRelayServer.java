@@ -14,11 +14,13 @@
 
 package com.github.netguard.proxy.socks5;
 
+import cn.hutool.core.util.HexUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.*;
+import java.util.Arrays;
 
 /**
  * The class <code>UDPRelayServer</code> represents a UDP relay server.
@@ -84,13 +86,9 @@ public class UDPRelayServer implements Runnable {
    */
   public SocketAddress start() throws SocketException {
     running = true;
-    if (logger.isDebugEnabled()) {
-      server = new DatagramSocket(20270);
-    } else {
-      server = new DatagramSocket();
-    }
+    server = new DatagramSocket();
     SocketAddress socketAddress = server.getLocalSocketAddress();
-    thread = new Thread(this);
+    thread = new Thread(this, String.format("%s => %s", clientSocketAddress, serverSocketAddress));
     thread.setDaemon(true);
     thread.start();
     return socketAddress;
@@ -123,13 +121,19 @@ public class UDPRelayServer implements Runnable {
         boolean fromClient = isFromClient(packet);
         logger.debug("UDP relay server received packet [{}], fromClient={}", packet.getSocketAddress(), fromClient);
         if (fromClient) {
-          lastClientSocketAddress = (InetSocketAddress) packet.getSocketAddress();
+          if (lastClientSocketAddress == null) {
+            lastClientSocketAddress = (InetSocketAddress) packet.getSocketAddress();
+          }
           datagramPacketHandler.decapsulate(packet);
-          logger.debug("send from client packet [{}]", packet.getSocketAddress());
+          if (logger.isDebugEnabled()) {
+            logger.debug("send to server packet [{}][{}]", packet.getSocketAddress(), HexUtil.encodeHexStr(Arrays.copyOf(packet.getData(), Math.min(64, packet.getLength()))));
+          }
           server.send(packet);
         } else {
-          packet = datagramPacketHandler.encapsulate(packet, logger.isDebugEnabled() ? lastClientSocketAddress : clientSocketAddress);
-          logger.debug("send from server packet [{}]", packet.getSocketAddress());
+          packet = datagramPacketHandler.encapsulate(packet, lastClientSocketAddress);
+          if(logger.isDebugEnabled()) {
+            logger.debug("send to client packet [{}][{}]", packet.getSocketAddress(), HexUtil.encodeHexStr(Arrays.copyOf(packet.getData(), Math.min(64, packet.getLength()))));
+          }
           server.send(packet);
         }
       }
@@ -149,11 +153,6 @@ public class UDPRelayServer implements Runnable {
    * @return If the datagram packet is sent from client, it will return <code>true</code>.
    */
   protected boolean isFromClient(DatagramPacket packet) {
-    if (logger.isDebugEnabled()) {
-      if (packet.getAddress().getHostAddress().startsWith("127.")) {
-        return true;
-      }
-    }
     if (clientSocketAddress.equals(packet.getSocketAddress())) {
       return true;
     }

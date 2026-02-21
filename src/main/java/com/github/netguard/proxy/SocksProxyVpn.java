@@ -172,20 +172,20 @@ public class SocksProxyVpn extends FallbackProxyVpn {
 
     private Result doUDPAssociate(DataInputStream dis, DataOutputStream dos, Packet packet) throws IOException {
         final InetSocketAddress clientSocketAddress = getRemoteSocketAddress();
-        final int clientPort = packet.dport;
+        final int serverPort = packet.dport;
 
         UDPRelayServer udpRelayServer = null;
         try {
             udpRelayServer = new UDPRelayServer(clientSocketAddress, new InetSocketAddress(packet.daddr, packet.dport));
             InetSocketAddress socketAddress = (InetSocketAddress) udpRelayServer.start();
-            log.debug("Create UDP relay server at [{}] for {}, clientPort={}", socketAddress, clientSocketAddress, clientPort);
+            InetAddress bindAddress = InetAddress.getLocalHost();
+            log.debug("Create UDP relay server at [{}] for {}, bindAddress={}, serverPort={}", socketAddress, clientSocketAddress, bindAddress, serverPort);
 
-            if (!(socketAddress.getAddress() instanceof Inet4Address)) {
-                throw new UnsupportedOperationException("Only IPv4 addresses are supported");
+            if (!(bindAddress instanceof Inet4Address)) {
+                throw new UnsupportedOperationException("Only IPv4 addresses are supported: " + bindAddress);
             }
-
             dos.writeInt(0x5000001);
-            dos.write(socketAddress.getAddress().getAddress()); // ipv4
+            dos.write(bindAddress.getAddress()); // ipv4
             dos.writeShort(socketAddress.getPort());
             dos.flush();
 

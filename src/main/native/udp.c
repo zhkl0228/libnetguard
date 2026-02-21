@@ -589,7 +589,7 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
         ip4->tot_len = htons(len);
         ip4->ttl = IPDEFTTL;
         ip4->protocol = IPPROTO_UDP;
-        ip4->saddr = cur->daddr.ip4;
+        ip4->saddr = use_actual_sender ? actual_ip4 : cur->daddr.ip4;
         ip4->daddr = cur->saddr.ip4;
 
         // Calculate IP4 checksum
@@ -619,7 +619,10 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
         ip6->ip6_ctlun.ip6_un1.ip6_un1_nxt = IPPROTO_UDP;
         ip6->ip6_ctlun.ip6_un1.ip6_un1_hlim = IPDEFTTL;
         ip6->ip6_ctlun.ip6_un2_vfc = IPV6_VERSION;
-        memcpy(&(ip6->ip6_src), &cur->daddr.ip6, 16);
+        if (use_actual_sender)
+            memcpy(&(ip6->ip6_src), &actual_ip6, 16);
+        else
+            memcpy(&(ip6->ip6_src), &cur->daddr.ip6, 16);
         memcpy(&(ip6->ip6_dst), &cur->saddr.ip6, 16);
 
         // Calculate UDP6 checksum

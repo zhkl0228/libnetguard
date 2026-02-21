@@ -524,7 +524,7 @@ public class UDProxy {
             socket = new DatagramSocket(0);
             socket.setSoTimeout(READ_TIMEOUT);
             sockets.put(address, socket);
-            log.debug("Creating new socket for {}", address);
+            log.debug("Creating new socket for {} => {}", address, socket.getLocalPort());
             return socket;
         }
         @Override
