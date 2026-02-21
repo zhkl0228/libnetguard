@@ -559,6 +559,11 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
                 if (ntohs(actual_port) != cur->redirect.rport) {
                     use_actual_sender = 1;
                 }
+            } else {
+                // No redirect, check if actual sender port matches session dest port
+                if (actual_port != cur->dest) {
+                    use_actual_sender = 1;
+                }
             }
         }
     }
