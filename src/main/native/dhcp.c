@@ -133,7 +133,7 @@ int check_dhcp(const struct arguments *args, const struct udp_session *u,
             DHCP option 6: DNS servers 9.7.10.15
          */
 
-        write_udp(args, u, (uint8_t *) response, 500, NULL);
+        write_udp(args, u, (uint8_t *) response, 500, NULL, NULL);
 
         ng_free(response, __FILE__, __LINE__);
     }
