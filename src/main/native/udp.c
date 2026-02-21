@@ -569,31 +569,21 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
         }
     }
 
-    // Extract local socket address/port (destination of the received packet) for replacement
-    __be32 local_ip4 = 0;
-    struct in6_addr local_ip6;
+    // Extract local socket port for replacement (IP keeps using session daddr)
     __be16 local_port = 0;
-    memset(&local_ip6, 0, sizeof(local_ip6));
 
     if (use_actual_sender && local_addr != NULL) {
-        if (local_addr->ss_family == AF_INET && cur->version == 4) {
+        if (local_addr->ss_family == AF_INET) {
             const struct sockaddr_in *sa4 = (const struct sockaddr_in *) local_addr;
-            local_ip4 = sa4->sin_addr.s_addr;
             local_port = sa4->sin_port;
-        } else if (local_addr->ss_family == AF_INET6 && cur->version == 6) {
+        } else if (local_addr->ss_family == AF_INET6) {
             const struct sockaddr_in6 *sa6 = (const struct sockaddr_in6 *) local_addr;
-            memcpy(&local_ip6, &sa6->sin6_addr, 16);
             local_port = sa6->sin6_port;
         }
 
-        char local_src[INET6_ADDRSTRLEN + 1];
-        if (cur->version == 4)
-            inet_ntop(AF_INET, &local_ip4, local_src, sizeof(local_src));
-        else
-            inet_ntop(AF_INET6, &local_ip6, local_src, sizeof(local_src));
         log_android(ANDROID_LOG_DEBUG,
-                    "UDP using local socket addr %s/%u as source (sender port %u != expected)",
-                    local_src, ntohs(local_port), ntohs(sender_port));
+                    "UDP replacing source port %u -> %u (sender port %u != expected)",
+                    ntohs(cur->dest), ntohs(local_port), ntohs(sender_port));
     }
 
     // Build packet
@@ -612,7 +602,7 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
         ip4->tot_len = htons(len);
         ip4->ttl = IPDEFTTL;
         ip4->protocol = IPPROTO_UDP;
-        ip4->saddr = use_actual_sender ? local_ip4 : cur->daddr.ip4;
+        ip4->saddr = cur->daddr.ip4;
         ip4->daddr = cur->saddr.ip4;
 
         // Calculate IP4 checksum
@@ -642,10 +632,7 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
         ip6->ip6_ctlun.ip6_un1.ip6_un1_nxt = IPPROTO_UDP;
         ip6->ip6_ctlun.ip6_un1.ip6_un1_hlim = IPDEFTTL;
         ip6->ip6_ctlun.ip6_un2_vfc = IPV6_VERSION;
-        if (use_actual_sender)
-            memcpy(&(ip6->ip6_src), &local_ip6, 16);
-        else
-            memcpy(&(ip6->ip6_src), &cur->daddr.ip6, 16);
+        memcpy(&(ip6->ip6_src), &cur->daddr.ip6, 16);
         memcpy(&(ip6->ip6_dst), &cur->saddr.ip6, 16);
 
         // Calculate UDP6 checksum
