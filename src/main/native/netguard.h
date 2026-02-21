@@ -555,8 +555,7 @@ ssize_t write_icmp(const struct arguments *args, const struct icmp_session *cur,
 
 ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
                   uint8_t *data, size_t datalen,
-                  const struct sockaddr_storage *actual_from,
-                  const struct sockaddr_storage *local_addr);
+                  const struct sockaddr_storage *actual_from);
 
 ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
                   const uint8_t *data, size_t datalen,
