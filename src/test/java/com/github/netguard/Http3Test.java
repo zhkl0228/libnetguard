@@ -32,11 +32,13 @@ import tech.kwik.core.server.ServerConnectionConfig;
 import tech.kwik.core.server.ServerConnector;
 import tech.kwik.flupke.Http3Client;
 import tech.kwik.flupke.impl.Http3ClientConnectionImpl;
-import tech.kwik.flupke.sample.FileServer;
 import tech.kwik.flupke.server.Http3ApplicationProtocolFactory;
 
 import javax.net.ssl.SSLEngine;
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -301,7 +303,9 @@ public class Http3Test extends TestCase {
                 .withLogger(logger)
                 .withPort(8443)
                 .build()) {
-            serverConnector.registerApplicationProtocol("h3", new Http3ApplicationProtocolFactory(new FileServer(new File("target/"))));
+            serverConnector.registerApplicationProtocol("h3", new Http3ApplicationProtocolFactory((request, response) -> {
+                throw new UnsupportedOperationException("Not supported yet.");
+            }));
             serverConnector.start();
             TimeUnit.HOURS.sleep(1);
         }

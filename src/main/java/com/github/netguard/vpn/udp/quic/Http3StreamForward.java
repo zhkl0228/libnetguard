@@ -222,7 +222,7 @@ class Http3StreamForward extends QuicStreamForward {
     private long type = -1;
     private int payLoadLength = -1;
     private final Decoder decoder = new DecoderImpl();
-    private final Encoder encoder = new EncoderImpl();
+    private final Encoder encoder = new EncoderImpl(true);
 
     private boolean forwardHttp3Frame(DataOutputStream outputStream) throws IOException {
         {
