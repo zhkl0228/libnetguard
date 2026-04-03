@@ -1,11 +1,10 @@
 package com.legendsec.vpnclient;
 
-import cn.hutool.core.codec.Base64;
-import cn.hutool.core.io.IoUtil;
-import cn.hutool.core.net.DefaultTrustManager;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.*;
 import com.google.protobuf.ByteString;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.IOUtils;
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,7 +137,7 @@ class SSLVpnServer implements Runnable {
         } catch (Exception e) {
             log.debug("handle server socket", e);
         } finally {
-            IoUtil.close(serverSocket);
+            IOUtils.closeQuietly(serverSocket);
         }
     }
 
@@ -148,7 +147,7 @@ class SSLVpnServer implements Runnable {
         final Socket clientSocket;
         if (ssl) {
             SSLContext context = SSLContext.getInstance("TLSv1.2");
-            context.init(new KeyManager[0], new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
+            context.init(new KeyManager[0], new TrustManager[0], null);
             SSLSocketFactory factory = context.getSocketFactory();
 
             Socket app = new Socket();
@@ -228,7 +227,7 @@ class SSLVpnServer implements Runnable {
         @Override
         protected int notifyForward(byte[] buf, int read) {
             byte[] data = Arrays.copyOf(buf, read);
-            log.debug("{}", Inspector.inspectString(data, String.format("notifyForward socket=%s, server=%s, base64=%s", socket, server, Base64.encode(data))));
+            log.debug("{}", Inspector.inspectString(data, String.format("notifyForward socket=%s, server=%s, base64=%s", socket, server, Base64.encodeBase64String(data))));
             ByteString bs = ByteString.copyFrom(data);
             if (bs.isValidUtf8()) {
                 String str = bs.toStringUtf8();
@@ -246,6 +245,6 @@ class SSLVpnServer implements Runnable {
     }
 
     final void close() {
-        IoUtil.close(serverSocket);
+        IOUtils.closeQuietly(serverSocket);
     }
 }

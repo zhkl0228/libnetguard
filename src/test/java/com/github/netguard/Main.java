@@ -1,8 +1,5 @@
 package com.github.netguard;
 
-import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.net.DefaultTrustManager;
-import cn.hutool.crypto.digest.DigestUtil;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
@@ -25,12 +22,13 @@ import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
 import io.netty.handler.codec.http.*;
 import io.netty.util.ResourceLeakDetector;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.impl.HttpSession;
 import org.xbill.DNS.*;
 
-import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -81,7 +79,7 @@ public class Main {
         }
         System.out.printf("vpn server listen on: %s:%d%n", lanIp, vpnServer.getPort());
         vpnServer.waitShutdown();
-        FileUtil.del(replayFile);
+        FileUtils.deleteQuietly(replayFile);
     }
 
     static class MyPacketDecoder extends PacketDecoder {
@@ -137,14 +135,14 @@ public class Main {
             TlsSignature tlsSignature = connectRequest.getTlsSignature();
             if (tlsSignature != null) {
                 System.out.printf("acceptTcp extraData=%s, request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\", ScrapflyText=\"%s\", ScrapflyFP=%s%n", connectRequest.getExtraData(), connectRequest,
-                        DigestUtil.md5Hex(tlsSignature.getJa3Text()),
-                        DigestUtil.md5Hex(tlsSignature.getJa3nText()),
+                        DigestUtils.md5Hex(tlsSignature.getJa3Text()),
+                        DigestUtils.md5Hex(tlsSignature.getJa3nText()),
                         tlsSignature.getJa4Text(),
-                        DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
+                        DigestUtils.md5Hex(tlsSignature.getPeetPrintText()),
                         tlsSignature.getJa3Text(),
                         tlsSignature.getJa3nText(),
                         tlsSignature.getScrapflyFP(),
-                        DigestUtil.md5Hex(tlsSignature.getScrapflyFP()));
+                        DigestUtils.md5Hex(tlsSignature.getScrapflyFP()));
             }
             if (connectRequest.hostName != null && connectRequest.hostName.endsWith(".m.jd.com")) {
                 return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
@@ -173,7 +171,7 @@ public class Main {
             }
             if (connectRequest.isSSL() && connectRequest.hostName != null) {
                 return AcceptTcpResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
-                        .configClientSSLContext(ImpersonatorFactory.android().newSSLContext(null, new TrustManager[]{DefaultTrustManager.INSTANCE}))
+                        .configClientSSLContext(ImpersonatorFactory.android().newSSLContext(null, null))
                         .build();
             }
             Application[] applications = connectRequest.queryApplications();
@@ -188,10 +186,10 @@ public class Main {
             TlsSignature tlsSignature = packetRequest.getTlsSignature();
             if (tlsSignature != null) {
                 System.out.printf("acceptUdp request=%s, ja3_hash=%s, ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ja3_text=\"%s\", ja3n_text=\"%s\"%n", packetRequest,
-                        DigestUtil.md5Hex(tlsSignature.getJa3Text()),
-                        DigestUtil.md5Hex(tlsSignature.getJa3nText()),
+                        DigestUtils.md5Hex(tlsSignature.getJa3Text()),
+                        DigestUtils.md5Hex(tlsSignature.getJa3nText()),
                         tlsSignature.getJa4Text(),
-                        DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
+                        DigestUtils.md5Hex(tlsSignature.getPeetPrintText()),
                         tlsSignature.getJa3Text(),
                         tlsSignature.getJa3nText());
             }

@@ -1,7 +1,5 @@
 package com.github.netguard;
 
-import cn.hutool.core.codec.Base64;
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.ServerCertificate;
 import com.github.netguard.vpn.udp.quic.netty.QuicSslContextWrapper;
@@ -20,6 +18,8 @@ import io.netty.incubator.codec.quic.*;
 import io.netty.util.CharsetUtil;
 import io.netty.util.ReferenceCountUtil;
 import junit.framework.TestCase;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.IOUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import tech.kwik.core.QuicClientConnection;
@@ -288,7 +288,7 @@ public class Http3Test extends TestCase {
         SysOutLogger logger = new SysOutLogger();
         logger.logDebug(true);
         CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-        X509Certificate peerCertificate = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(Base64.decode(CERT)));
+        X509Certificate peerCertificate = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(Base64.decodeBase64(CERT)));
         RootCert rootCert = RootCert.load();
         ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
         ServerConnectionConfig serverConnectionConfig = ServerConnectionConfig.builder()
@@ -335,7 +335,7 @@ public class Http3Test extends TestCase {
         SysOutLogger logger = new SysOutLogger();
         logger.logDebug(true);
         CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-        X509Certificate peerCertificate = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(Base64.decode(CERT)));
+        X509Certificate peerCertificate = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(Base64.decodeBase64(CERT)));
         if (peerCertificate == null) {
             QuicClientConnection connection = QuicClientConnection.newBuilder()
                     .uri(URI.create("https://cloudflare-quic.com"))
@@ -346,7 +346,7 @@ public class Http3Test extends TestCase {
             connection.connect();
             List<X509Certificate> chain = connection.getServerCertificateChain();
             peerCertificate = chain.get(0);
-            System.out.println(Base64.encode(peerCertificate.getEncoded()));
+            System.out.println(Base64.encodeBase64String(peerCertificate.getEncoded()));
         }
         {
             RootCert rootCert = RootCert.load();
@@ -392,7 +392,7 @@ public class Http3Test extends TestCase {
             output.flush();
         }
         try (InputStream input = quicStream.getInputStream()) {
-            Inspector.inspect(IoUtil.readBytes(input), "Response");
+            Inspector.inspect(IOUtils.toByteArray(input), "Response");
         }
         connection.close();
     }
@@ -409,7 +409,7 @@ public class Http3Test extends TestCase {
             @Override
             public void run() {
                 try (InputStream inputStream = stream.getInputStream(); OutputStream outputStream = stream.getOutputStream()) {
-                    System.out.println(new String(IoUtil.readBytes(inputStream)));
+                    System.out.println(new String(IOUtils.toByteArray(inputStream)));
                     outputStream.write("Echo".getBytes());
                     outputStream.flush();
                 } catch (IOException e) {

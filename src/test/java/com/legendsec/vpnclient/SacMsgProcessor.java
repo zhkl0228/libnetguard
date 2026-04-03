@@ -1,11 +1,11 @@
 package com.legendsec.vpnclient;
 
-import cn.hutool.core.util.HexUtil;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.github.netguard.Inspector;
 import com.github.netguard.sslvpn.qianxin.QianxinVpn;
+import org.apache.commons.codec.binary.Hex;
 import org.krakenapps.pcap.decoder.tcp.DefaultTcpProcessor;
 import org.krakenapps.pcap.decoder.tcp.TcpProcessor;
 import org.krakenapps.pcap.decoder.tcp.TcpSessionKey;
@@ -110,7 +110,7 @@ class SacMsgProcessor extends DefaultTcpProcessor implements TcpProcessor {
                     byte[] json = new byte[buffer.remaining()];
                     buffer.get(json);
                     JSONObject obj = JSON.parseObject(new String(json, StandardCharsets.UTF_8).trim());
-                    logger.info("handleMsgResp: tag=0x{}, {}", Integer.toHexString(tag), obj == null ? "json=" + HexUtil.encodeHexStr(json) : obj.toString(SerializerFeature.PrettyFormat));
+                    logger.info("handleMsgResp: tag=0x{}, {}", Integer.toHexString(tag), obj == null ? "json=" + Hex.encodeHexString(json) : obj.toString(SerializerFeature.PrettyFormat));
                 } else {
                     logger.info("handleMsgResp: tag=0x{}", Integer.toHexString(tag));
                 }
