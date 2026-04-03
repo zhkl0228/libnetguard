@@ -1,9 +1,5 @@
 package com.github.netguard.handler;
 
-import cn.hutool.core.codec.Base64;
-import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.io.IoUtil;
-import cn.hutool.core.util.URLUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.handler.replay.Replay;
 import com.github.netguard.handler.session.*;
@@ -17,6 +13,8 @@ import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
 import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.krakenapps.pcap.Protocol;
 import org.krakenapps.pcap.decoder.ethernet.EthernetDecoder;
 import org.krakenapps.pcap.decoder.ethernet.EthernetFrame;
@@ -40,6 +38,7 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -65,7 +64,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
         try {
             if (delPcapFile) {
-                FileUtil.del(pcapFile);
+                FileUtils.deleteQuietly(pcapFile);
             }
             setOutputPcapFile(pcapFile);
         } catch (IOException e) {
@@ -245,7 +244,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             } else {
                 tmp = Arrays.copyOf(data, 256);
             }
-            log.debug(Inspector.inspectString(tmp, String.format("onSSLProxyTX %d bytes %s => %s, data=%s", data.length, client, server, Base64.encode(data))));
+            log.debug(Inspector.inspectString(tmp, String.format("onSSLProxyTX %d bytes %s => %s, data=%s", data.length, client, server, Base64.getEncoder().encodeToString(data))));
         }
         try {
             TcpSessionKey key = new TcpSessionKeyImpl(client.getAddress(), server.getAddress(), client.getPort(), server.getPort());
@@ -264,7 +263,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             } else {
                 tmp = Arrays.copyOf(data, 256);
             }
-            log.debug(Inspector.inspectString(tmp, String.format("onSSLProxyRX %d bytes %s => %s, data=%s", data.length, client, server, Base64.encode(data))));
+            log.debug(Inspector.inspectString(tmp, String.format("onSSLProxyRX %d bytes %s => %s, data=%s", data.length, client, server, Base64.getEncoder().encodeToString(data))));
         }
         try {
             TcpSessionKey key = new TcpSessionKeyImpl(client.getAddress(), server.getAddress(), client.getPort(), server.getPort());
@@ -356,7 +355,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     protected final void setOutputPcapFile(File pcapFile) throws IOException {
         if (pcapFileOutputStream != null) {
-            IoUtil.close(pcapFileOutputStream);
+            IOUtils.closeQuietly(pcapFileOutputStream);
         }
         pcapFileOutputStream = new PcapFileOutputStream(pcapFile);
     }
@@ -372,7 +371,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     @Override
     public void notifyVpnFinish() {
         if (pcapFileOutputStream != null) {
-            IoUtil.close(pcapFileOutputStream);
+            IOUtils.closeQuietly(pcapFileOutputStream);
             pcapFileOutputStream = null;
         }
     }
@@ -437,7 +436,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
             }
             String name = pair.substring(0, index);
             String value = pair.substring(index + 1);
-            map.put(name, URLUtil.decode(value, StandardCharsets.UTF_8));
+            map.put(name, URLDecoder.decode(value, StandardCharsets.UTF_8));
         }
         return map;
     }

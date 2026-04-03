@@ -32,7 +32,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.test.skip>true</maven.test.skip>
-        <netty.version>4.1.131.Final</netty.version>
+        <netty.version>4.1.132.Final</netty.version>
         <bc.version>1.82</bc.version>
     </properties>
     <build>
@@ -143,9 +143,14 @@
             <version>2.0.17</version>
         </dependency>
         <dependency>
-            <groupId>cn.hutool</groupId>
-            <artifactId>hutool-crypto</artifactId>
-            <version>5.8.44</version>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.21.0</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.21.0</version>
         </dependency>
         <dependency>
             <groupId>com.github.zhkl0228</groupId>

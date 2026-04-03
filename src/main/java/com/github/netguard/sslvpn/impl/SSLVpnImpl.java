@@ -1,9 +1,5 @@
 package com.github.netguard.sslvpn.impl;
 
-import cn.hutool.core.io.IoUtil;
-import cn.hutool.core.io.file.FileNameUtil;
-import cn.hutool.core.util.HexUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
@@ -22,6 +18,11 @@ import com.github.netguard.vpn.tcp.StreamForward;
 import eu.faircode.netguard.Packet;
 import eu.faircode.netguard.ServiceSinkhole;
 import io.netty.handler.codec.http.*;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -172,8 +173,8 @@ public class SSLVpnImpl extends SSLVpn {
                 }
             }
         } finally {
-            IoUtil.close(vpnOutputStream);
-            IoUtil.close(proxyOutputStream);
+            IOUtils.closeQuietly(vpnOutputStream);
+            IOUtils.closeQuietly(proxyOutputStream);
         }
     }
 
@@ -188,7 +189,7 @@ public class SSLVpnImpl extends SSLVpn {
                 if (in == null) {
                     return notFound();
                 } else {
-                    return fullResponse("image/png", IoUtil.readBytes(in));
+                    return fullResponse("image/png", IOUtils.toByteArray(in));
                 }
             }
         }
@@ -307,11 +308,11 @@ public class SSLVpnImpl extends SSLVpn {
             return notFound();
         }
         if(request.uri().startsWith("/portal/preset_icon/") && request.uri().endsWith(".png")) {
-            try (InputStream in = getClass().getResourceAsStream("/com/github/netguard/sslvpn/atrust/" + FileNameUtil.getName(request.uri()))) {
+            try (InputStream in = getClass().getResourceAsStream("/com/github/netguard/sslvpn/atrust/" + FilenameUtils.getName(request.uri()))) {
                 if (in == null) {
                     return notFound();
                 } else {
-                    return fullResponse("image/png", IoUtil.readBytes(in));
+                    return fullResponse("image/png", IOUtils.toByteArray(in));
                 }
             }
         }
@@ -369,7 +370,7 @@ public class SSLVpnImpl extends SSLVpn {
         }
         response.put("ios_mdm_status", "ios_setup_ok");
         response.put("iphost_list", Collections.emptyList());
-        String machineId = DigestUtil.md5Hex16(String.format("%s_%s", getClass().getSimpleName(), QianxinVpn.GATEWAY_VERSION));
+        String machineId = DigestUtils.md5Hex(String.format("%s_%s", getClass().getSimpleName(), QianxinVpn.GATEWAY_VERSION)).substring(8, 24);
         response.put("machineid", machineId.toUpperCase());
         JSONObject mpolicy = buildMPolicy();
         response.put("mpolicy", mpolicy);
@@ -398,19 +399,23 @@ public class SSLVpnImpl extends SSLVpn {
         response.put("subaccount_list", Collections.emptyList());
         response.put("use_gm_ssl", 0);
         response.put("userid", QianxinVpn.USER_ID);
-        String username;
-        String password;
-        byte[] ticketData = HexUtil.decodeHex(ticket);
-        try (ByteArrayInputStream bais = new ByteArrayInputStream(ticketData)) {
-            DataInput in = new DataInputStream(bais);
-            username = in.readUTF();
-            password = new String(bais.readAllBytes()).trim();
+        try {
+            String username;
+            String password;
+            byte[] ticketData = Hex.decodeHex(ticket);
+            try (ByteArrayInputStream bais = new ByteArrayInputStream(ticketData)) {
+                DataInput in = new DataInputStream(bais);
+                username = in.readUTF();
+                password = new String(bais.readAllBytes()).trim();
+            }
+            response.put("username", username);
+            response.put("userpass", password);
+            response.put("version", "1.0");
+            response.put("wol_list", "");
+            return buildResponse(tag, response);
+        } catch (DecoderException e) {
+            throw new IllegalStateException(e);
         }
-        response.put("username", username);
-        response.put("userpass", password);
-        response.put("version", "1.0");
-        response.put("wol_list", "");
-        return buildResponse(tag, response);
     }
 
     private void configServices(List<Service> services) {
@@ -665,7 +670,7 @@ public class SSLVpnImpl extends SSLVpn {
         }
         JSONObject response = new JSONObject(true);
         response.put("username", "FSXML");
-        response.put("access_token", DigestUtil.sha256Hex(msg));
+        response.put("access_token", DigestUtils.sha256Hex(msg));
         return buildResponse(tag, response);
     }
 
@@ -702,7 +707,7 @@ public class SSLVpnImpl extends SSLVpn {
             dataOutput.write((password == null ? "" : password).getBytes());
             ticket = baos.toByteArray();
         }
-        response.put("Ticket", HexUtil.encodeHexStr(Arrays.copyOf(ticket, 32)).toUpperCase());
+        response.put("Ticket", Hex.encodeHexString(Arrays.copyOf(ticket, 32)).toUpperCase());
         response.put("UserID", QianxinVpn.USER_ID);
         response.put("UserLang", 2);
         response.put("UserName", username);

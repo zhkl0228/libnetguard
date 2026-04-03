@@ -1,9 +1,5 @@
 package com.github.netguard.vpn.udp;
 
-import cn.hutool.core.codec.Base64;
-import cn.hutool.core.io.IoUtil;
-import cn.hutool.core.util.HexUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.proxy.socks5.Socks5DatagramPacketHandler;
 import com.github.netguard.vpn.AcceptUdpResult;
@@ -17,6 +13,9 @@ import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
 import com.github.netguard.vpn.udp.quic.QuicServer;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xbill.DNS.Message;
@@ -128,9 +127,9 @@ public class UDProxy {
                         if (log.isDebugEnabled()) {
                             byte[] data = Arrays.copyOf(buffer, length);
                             if (client.connection == null) {
-                                log.trace("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.encode(data)));
+                                log.trace("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.getEncoder().encodeToString(data)));
                             } else {
-                                log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.encode(data)));
+                                log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.getEncoder().encodeToString(data)));
                             }
                         }
                         if (firstPacket || continueQuic) {
@@ -204,7 +203,7 @@ public class UDProxy {
                             pendingPacket.setSocketAddress(forwardAddress);
                             sendToServer(pendingPacket);
                             if (log.isDebugEnabled()) {
-                                log.debug("pendingPacket={}, length={}, hash={}, forwardAddress={}", pendingPacket, data.length, DigestUtil.md5Hex(data), forwardAddress);
+                                log.debug("pendingPacket={}, length={}, hash={}, forwardAddress={}", pendingPacket, data.length, DigestUtils.md5Hex(data), forwardAddress);
                             }
                         }
                         pendingList.clear();
@@ -282,7 +281,7 @@ public class UDProxy {
                 client.quicServer = handshakeResult.startServer(vpn, http2Filter);
                 forwardAddress = client.quicServer.getForwardAddress();
             } catch (Exception e) {
-                IoUtil.close(client.connection);
+                IOUtils.closeQuietly(client.connection);
                 if (e instanceof IOException) {
                     log.debug("handleQuic packetRequest={}", packetRequest, e);
                 } else {
@@ -405,7 +404,7 @@ public class UDProxy {
 
                                 if (initialWithUnsupportedVersion(type, version, length)) {
                                     if (log.isDebugEnabled()) {
-                                        log.debug("initialWithUnspportedVersion dcid={}, scid={}", HexUtil.encodeHexStr(dcid), HexUtil.encodeHexStr(scid));
+                                        log.debug("initialWithUnspportedVersion dcid={}, scid={}", Hex.encodeHexString(dcid), Hex.encodeHexString(scid));
                                     }
                                     // https://tools.ietf.org/html/draft-ietf-quic-transport-32#section-6
                                     // "A server sends a Version Negotiation packet in response to each packet that might initiate a new connection;"
@@ -420,7 +419,7 @@ public class UDProxy {
                                 version == Version.IETF_draft_29.getId()) {
                             log.debug("detectQuicClientHello version=0x{}, length={}", Integer.toHexString(version), length);
                         } else {
-                            log.warn("detectQuicClientHello version=0x{}, length={}, buffer={}", Integer.toHexString(version), length, HexUtil.encodeHexStr(Arrays.copyOf(buffer, length)));
+                            log.warn("detectQuicClientHello version=0x{}, length={}, buffer={}", Integer.toHexString(version), length, Hex.encodeHexString(Arrays.copyOf(buffer, length)));
                         }
                     }
                 } else {
@@ -452,7 +451,7 @@ public class UDProxy {
                 VersionNegotiationPacket versionNegotiationPacket = new VersionNegotiationPacket(Version.QUIC_version_1, dcid, scid);
                 byte[] packetBytes = versionNegotiationPacket.generatePacketBytes(null);
                 if (log.isDebugEnabled()) {
-                    log.debug("sendVersionNegotiationPacket hash={}", DigestUtil.md5Hex(packetBytes));
+                    log.debug("sendVersionNegotiationPacket hash={}", DigestUtils.md5Hex(packetBytes));
                 }
                 DatagramPacket datagram = new DatagramPacket(packetBytes, packetBytes.length, clientAddress.getAddress(), clientAddress.getPort());
                 try {
@@ -590,12 +589,12 @@ public class UDProxy {
                 }
             } finally {
                 for(DatagramSocket socket : sockets.values()) {
-                    IoUtil.close(socket);
+                    IOUtils.closeQuietly(socket);
                 }
-                IoUtil.close(quicServer);
-                IoUtil.close(connection);
-                IoUtil.close(localSocket);
-                IoUtil.close(remoteSocket);
+                IOUtils.closeQuietly(quicServer);
+                IOUtils.closeQuietly(connection);
+                IOUtils.closeQuietly(localSocket);
+                IOUtils.closeQuietly(remoteSocket);
                 log.trace("udp proxy client exit: client={}, server={}", clientAddress, serverAddress);
             }
         }

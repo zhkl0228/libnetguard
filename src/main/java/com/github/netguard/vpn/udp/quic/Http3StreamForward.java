@@ -1,6 +1,5 @@
 package com.github.netguard.vpn.udp.quic;
 
-import cn.hutool.core.codec.Base64;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.h2.CancelResult;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
@@ -18,6 +17,7 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import org.apache.commons.codec.binary.Base64;
 import org.krakenapps.pcap.util.Buffer;
 import org.krakenapps.pcap.util.ChainBuffer;
 import org.slf4j.Logger;
@@ -326,7 +326,7 @@ class Http3StreamForward extends QuicStreamForward {
                     if (reservedFrameType) {
                         break;
                     }
-                    log.warn("{} forwardHttp3Frame type={}, length={}, data={}, from={}, to={}", (server ? "Server" : "Client"), type, data.length, Base64.encode(data), from, to);
+                    log.warn("{} forwardHttp3Frame type={}, length={}, data={}, from={}, to={}", (server ? "Server" : "Client"), type, data.length, Base64.encodeBase64(data), from, to);
                     break;
                 }
             }

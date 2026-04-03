@@ -1,8 +1,8 @@
 package com.github.netguard;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.RootCert;
+import org.apache.commons.io.IOUtils;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -19,7 +19,7 @@ public abstract class FallbackProxyVpn extends ProxyVpn {
 
     @Override
     protected final void stop() {
-        IoUtil.close(socket);
+        IOUtils.closeQuietly(socket);
     }
 
     @Override

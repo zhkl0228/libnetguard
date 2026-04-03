@@ -1,8 +1,8 @@
 package com.github.netguard;
 
-import cn.hutool.core.io.FileUtil;
 import com.github.netguard.vpn.VpnListener;
 import name.neykov.secrets.AgentAttach;
+import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -133,7 +133,7 @@ public class VpnServerBuilder {
 
     private void preparePreMasterSecretsLogFile(File preMasterSecretsLogFile) {
         String preMasterSecretsLogPath = preMasterSecretsLogFile.getAbsolutePath();
-        FileUtil.del(preMasterSecretsLogFile);
+        FileUtils.deleteQuietly(preMasterSecretsLogFile);
         CodeSource codeSource = AgentAttach.class.getProtectionDomain().getCodeSource();
         if (codeSource != null) {
             try {
@@ -143,9 +143,9 @@ public class VpnServerBuilder {
                 String pid = name.split("@")[0];
                 String jarPath = jarFile.getAbsolutePath();
                 System.out.printf("VM option: -javaagent:%s=%s%n", jarPath, preMasterSecretsLogPath);
-                System.out.printf("java -jar %s %s %s%n", jarPath.replace(FileUtil.getUserHomePath(), "~"),
+                System.out.printf("java -jar %s %s %s%n", jarPath.replace(FileUtils.getUserDirectoryPath(), "~"),
                         pid,
-                        preMasterSecretsLogPath.replace(FileUtil.getUserHomePath(), "~"));
+                        preMasterSecretsLogPath.replace(FileUtils.getUserDirectoryPath(), "~"));
             } catch (URISyntaxException e) {
                 throw new IllegalStateException(e);
             }

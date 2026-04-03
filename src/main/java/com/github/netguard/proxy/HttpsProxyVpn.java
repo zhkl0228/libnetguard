@@ -1,6 +1,5 @@
 package com.github.netguard.proxy;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.FallbackProxyVpn;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
@@ -9,6 +8,7 @@ import com.github.netguard.vpn.tcp.SSLProxyV2;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,7 +56,7 @@ public class HttpsProxyVpn extends FallbackProxyVpn {
             throw new UnsupportedOperationException("NOT support https proxy: request=" + request);
         } catch (Exception e) {
             log.warn("handle http proxy", e);
-            IoUtil.close(socket);
+            IOUtils.closeQuietly(socket);
         }
     }
 

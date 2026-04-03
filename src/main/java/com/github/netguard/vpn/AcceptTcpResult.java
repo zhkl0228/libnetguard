@@ -1,16 +1,16 @@
 package com.github.netguard.vpn;
 
-import cn.hutool.core.net.DefaultTrustManager;
 import com.github.netguard.vpn.tcp.CustomHandler;
 import com.github.netguard.vpn.tcp.ForwardHandler;
 
-import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509Certificate;
 
 public class AcceptTcpResult {
 
@@ -137,7 +137,11 @@ public class AcceptTcpResult {
         } else {
             try {
                 SSLContext context = SSLContext.getInstance("TLSv1.2");
-                context.init(new KeyManager[0], new TrustManager[]{DefaultTrustManager.INSTANCE}, null);
+                context.init(null, new TrustManager[]{new X509TrustManager() {
+                    public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+                    public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                }}, null);
                 return context;
             } catch (NoSuchAlgorithmException | KeyManagementException e) {
                 throw new IllegalStateException("newSSLContext", e);

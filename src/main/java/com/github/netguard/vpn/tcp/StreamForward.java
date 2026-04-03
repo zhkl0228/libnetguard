@@ -1,10 +1,10 @@
 package com.github.netguard.vpn.tcp;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -176,8 +176,8 @@ public class StreamForward implements Runnable {
             log.warn("stream forward exception: socket={}", socket, e);
         } finally {
             log.trace("finish stream forward: socket={}", socket);
-            IoUtil.close(inputStream);
-            IoUtil.close(outputStream);
+            IOUtils.closeQuietly(inputStream);
+            IOUtils.closeQuietly(outputStream);
             if (countDownLatch != null) {
                 countDownLatch.countDown();
             }

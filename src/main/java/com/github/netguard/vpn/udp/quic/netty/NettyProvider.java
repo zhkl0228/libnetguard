@@ -1,6 +1,5 @@
 package com.github.netguard.vpn.udp.quic.netty;
 
-import cn.hutool.core.thread.ThreadUtil;
 import com.github.netguard.vpn.udp.PacketRequest;
 import com.github.netguard.vpn.udp.UDPRelay;
 import com.github.netguard.vpn.udp.quic.ClientConnection;
@@ -31,7 +30,7 @@ public class NettyProvider extends QuicProxyProvider {
 
     @Override
     public ClientConnection newClientConnection(PacketRequest packetRequest, Duration connectTimeout, InetSocketAddress udpProxy) {
-        NioEventLoopGroup group = new NioEventLoopGroup(1, ThreadUtil.newNamedThreadFactory("netty-new-client-connection-nio-event-loop", true));
+        NioEventLoopGroup group = new NioEventLoopGroup(1);
 
         try {
             QuicSslContext context = QuicSslContextBuilder.forClient()

@@ -1,6 +1,6 @@
 package com.github.netguard.handler;
 
-import cn.hutool.core.io.IoUtil;
+import org.apache.commons.io.IOUtils;
 import org.krakenapps.pcap.decoder.http.HttpHeaders;
 import org.krakenapps.pcap.decoder.http.HttpResponse;
 import org.slf4j.Logger;
@@ -79,7 +79,7 @@ class KrakenHttpResponse implements com.github.netguard.handler.http.HttpRespons
             if(inputStream == null) {
                 return null;
             }
-            responseData = IoUtil.readBytes(inputStream);
+            responseData = IOUtils.toByteArray(inputStream);
             return responseData;
         } catch(Exception e) {
             log.warn(e.getMessage(), e);

@@ -10,6 +10,7 @@ import org.krakenapps.pcap.util.Buffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Date;
 
 public abstract class Replay implements TcpProcessor {
@@ -28,18 +29,20 @@ public abstract class Replay implements TcpProcessor {
         replayLogDate = new ThreadLocal<>();
         try {
             doReplayInternal(httpDecoder);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
         } finally {
             replayLogDate = null;
         }
     }
 
-    public abstract void doReplayInternal(HttpDecoder httpDecoder);
+    public abstract void doReplayInternal(HttpDecoder httpDecoder) throws IOException;
 
-    public abstract void writeTcpConnect(TcpSessionKey key, Protocol protocol);
-    public abstract void writeTcpClose(TcpSessionKey key);
-    public abstract void writeTcpSend(TcpSessionKey key, byte[] data);
-    public abstract void writeTcpReceive(TcpSessionKey key, byte[] data);
-    public abstract void writeLog(String log);
+    public abstract void writeTcpConnect(TcpSessionKey key, Protocol protocol) throws IOException;
+    public abstract void writeTcpClose(TcpSessionKey key) throws IOException;
+    public abstract void writeTcpSend(TcpSessionKey key, byte[] data) throws IOException;
+    public abstract void writeTcpReceive(TcpSessionKey key, byte[] data) throws IOException;
+    public abstract void writeLog(String log) throws IOException;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 

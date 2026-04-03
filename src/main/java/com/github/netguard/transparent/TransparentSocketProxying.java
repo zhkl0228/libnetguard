@@ -1,12 +1,12 @@
 package com.github.netguard.transparent;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.SSLProxyV2;
 import eu.faircode.netguard.Packet;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +47,7 @@ public class TransparentSocketProxying extends ProxyVpn implements InspectorVpn 
                 throw new IllegalStateException("exitCode=" + exitCode);
             }
             try (InputStream inputStream = process.getInputStream()) {
-                String output = IoUtil.read(inputStream, StandardCharsets.UTF_8);
+                String output = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
                 log.trace("output={}", output);
                 Matcher matcher = PATTERN.matcher(output);
                 while (matcher.find()) {
@@ -72,7 +72,7 @@ public class TransparentSocketProxying extends ProxyVpn implements InspectorVpn 
             }
         } catch (Exception e) {
             log.warn("execute command failed.", e);
-            IoUtil.close(socket);
+            IOUtils.closeQuietly(socket);
         }
     }
 

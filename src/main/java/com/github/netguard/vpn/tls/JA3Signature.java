@@ -5,8 +5,8 @@
  */
 package com.github.netguard.vpn.tls;
 
-import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.vpn.Vpn;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.kwik.agent15.TlsConstants;
@@ -519,7 +519,7 @@ public final class JA3Signature implements TlsSignature {
                 list.add(String.format("%04x", cipherSuite));
             }
             Collections.sort(list);
-            ja4.append(DigestUtil.sha256Hex(String.join(",", list)), 0, 12);
+            ja4.append(DigestUtils.sha256Hex(String.join(",", list)), 0, 12);
         }
         {
             ja4.append("_");
@@ -542,7 +542,7 @@ public final class JA3Signature implements TlsSignature {
                 content.append(String.join(",", list));
             }
             log.debug("signatureAlgorithms={}", content);
-            ja4.append(DigestUtil.sha256Hex(content.toString()), 0, 12);
+            ja4.append(DigestUtils.sha256Hex(content.toString()), 0, 12);
         }
         return ja4.toString();
     }

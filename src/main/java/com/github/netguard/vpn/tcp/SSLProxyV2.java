@@ -1,6 +1,5 @@
 package com.github.netguard.vpn.tcp;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.AcceptTcpResult;
 import com.github.netguard.vpn.AllowRule;
 import com.github.netguard.vpn.IPacketCapture;
@@ -13,6 +12,7 @@ import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import org.apache.commons.io.IOUtils;
 import org.krakenapps.pcap.decoder.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -196,8 +196,8 @@ public class SSLProxyV2 implements Runnable {
         } catch (Exception e) {
             log.warn("proxy failed: hostName={}, serverSocket={}, packet={}", hostName, serverSocket, packet, e);
         } finally {
-            IoUtil.close(secureSocket);
-            IoUtil.close(serverSocket);
+            IOUtils.closeQuietly(secureSocket);
+            IOUtils.closeQuietly(serverSocket);
         }
     }
 
@@ -469,8 +469,8 @@ public class SSLProxyV2 implements Runnable {
                 if (e instanceof SocketException && e.getMessage().contains("SOCKS")) {
                     log.info("SSL proxy for {} failed", socketProxy, e);
                 }
-                IoUtil.close(app);
-                IoUtil.close(secureSocket);
+                IOUtils.closeQuietly(app);
+                IOUtils.closeQuietly(secureSocket);
                 throw e;
             }
         } else {

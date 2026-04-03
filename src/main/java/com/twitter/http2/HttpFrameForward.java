@@ -1,16 +1,9 @@
 package com.twitter.http2;
 
-import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.io.IoUtil;
-import cn.hutool.core.util.HexUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.ForwardHandler;
 import com.github.netguard.vpn.tcp.StreamForward;
-import com.github.netguard.vpn.tcp.h2.CancelResult;
-import com.github.netguard.vpn.tcp.h2.Http2Filter;
-import com.github.netguard.vpn.tcp.h2.Http2Session;
-import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
+import com.github.netguard.vpn.tcp.h2.*;
 import com.github.netguard.vpn.tcp.h2.HttpHeaderBlockDecoder;
 import com.github.netguard.vpn.tcp.h2.HttpHeaderBlockEncoder;
 import edu.baylor.cs.csi5321.spdy.frames.H2FrameRstStream;
@@ -18,38 +11,21 @@ import edu.baylor.cs.csi5321.spdy.frames.H2Util;
 import eu.faircode.netguard.Packet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.DefaultHttpHeadersFactory;
-import io.netty.handler.codec.http.DefaultHttpRequest;
-import io.netty.handler.codec.http.DefaultHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpMessage;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.*;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.EOFException;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -146,7 +122,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 byte[] output = outputBuffer.toByteArray();
                 outputBuffer.reset();
                 if (input != null) {
-                    log.debug("forward server={}, inHash={}, outHash={}, output={}, input={}", server, DigestUtil.md5Hex(input), DigestUtil.md5Hex(output), HexUtil.encodeHexStr(output), HexUtil.encodeHexStr(input));
+                    log.debug("forward server={}, inHash={}, outHash={}, output={}, input={}", server, DigestUtils.md5Hex(input), DigestUtils.md5Hex(output), Hex.encodeHexString(output), Hex.encodeHexString(input));
                 }
                 if (log.isTraceEnabled()) {
                     String clientIp = clientSocketAddress.getAddress().getHostAddress();
@@ -157,13 +133,17 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     if (server) {
                         File outbound = new File("target/" + String.format("%s:%d_%s:%d_outbound.txt", clientIp, clientPort, serverIp, serverPort));
                         File forward = new File("target/" + String.format("%s:%d_%s:%d_outbound_forward.txt", clientIp, clientPort, serverIp, serverPort));
-                        FileUtil.appendUtf8Lines(Collections.singletonList(date + HexUtil.encodeHexStr(input)), outbound);
-                        FileUtil.appendUtf8Lines(Collections.singletonList(date + HexUtil.encodeHexStr(output)), forward);
+                        if (input != null) {
+                            FileUtils.write(outbound, date + Hex.encodeHexString(input), StandardCharsets.UTF_8, true);
+                        }
+                        FileUtils.write(forward, date + Hex.encodeHexString(output), StandardCharsets.UTF_8, true);
                     } else {
                         File inbound = new File("target/" + String.format("%s:%d_%s:%d_inbound.txt", clientIp, clientPort, serverIp, serverPort));
                         File forward = new File("target/" + String.format("%s:%d_%s:%d_inbound_forward.txt", clientIp, clientPort, serverIp, serverPort));
-                        FileUtil.appendUtf8Lines(Collections.singletonList(date + HexUtil.encodeHexStr(input)), inbound);
-                        FileUtil.appendUtf8Lines(Collections.singletonList(date + HexUtil.encodeHexStr(output)), forward);
+                        if (input != null) {
+                            FileUtils.write(inbound, date + Hex.encodeHexString(input), StandardCharsets.UTF_8, true);
+                        }
+                        FileUtils.write(forward, date + Hex.encodeHexString(output), StandardCharsets.UTF_8, true);
                     }
                 }
                 if (output.length > 0) {
@@ -387,7 +367,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     peer.handleResponse(fakeHeadersFrame, responseData, baos, true);
                     if (settingsReady) {
-                        IoUtil.copy(new ByteArrayInputStream(baos.toByteArray()), peer.outputStream);
+                        try {
+                            IOUtils.copy(new ByteArrayInputStream(baos.toByteArray()), peer.outputStream);
+                        } catch (IOException e) {
+                            throw new IllegalStateException(e);
+                        }
                     } else {
                         peer.delayResponseQueue.offer(baos.toByteArray());
                     }
@@ -658,7 +642,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         String akamaiText = akamai == null ? null : akamai.getText();
         if (akamaiText != null) {
             headers.set("x-akamai-text", akamaiText);
-            headers.set("x-akamai-hash", DigestUtil.md5Hex(akamaiText));
+            headers.set("x-akamai-hash", DigestUtils.md5Hex(akamaiText));
         }
     }
 

@@ -1,20 +1,15 @@
 package eu.faircode.netguard;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.RootCert;
+import org.apache.commons.io.IOUtils;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.FileDescriptor;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -128,7 +123,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
     private final Map<Integer, Application[]> applications = new HashMap<>();
 
-    private class ApplicationDiscoverHandler implements Runnable, AutoCloseable {
+    private class ApplicationDiscoverHandler implements Runnable, Closeable {
         private final DatagramSocket udp;
         private final SocketAddress socketAddress;
         public ApplicationDiscoverHandler() throws IOException {
@@ -168,14 +163,14 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
             } catch (Exception e) {
                 log.warn("handle udp", e);
             } finally {
-                IoUtil.close(this);
+                IOUtils.closeQuietly(this);
             }
         }
         private boolean canStop;
         @Override
         public void close() {
             canStop = true;
-            IoUtil.close(udp);
+            IOUtils.closeQuietly(udp);
         }
     }
 
@@ -191,7 +186,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
                     executorService.submit(applicationDiscoverHandler);
                 } catch (Exception e) {
                     log.debug("create udp failed.", e);
-                    IoUtil.close(applicationDiscoverHandler);
+                    IOUtils.closeQuietly(applicationDiscoverHandler);
                     applicationDiscoverHandler = null;
                 }
             }
@@ -202,10 +197,10 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
             log.debug("Running tunnel: fd={}", fd);
             jni_run(jni_context, fd, true, 3);
             log.debug("Tunnel exited");
-            IoUtil.close(applicationDiscoverHandler);
+            IOUtils.closeQuietly(applicationDiscoverHandler);
             applicationDiscoverHandler = null;
 
-            IoUtil.close(socket);
+            IOUtils.closeQuietly(socket);
             log.debug("Vpn thread shutting down");
             applications.clear();
 

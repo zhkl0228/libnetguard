@@ -1,11 +1,11 @@
 package com.github.netguard;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.PortRedirector;
 import com.github.netguard.vpn.tcp.RootCert;
 import eu.faircode.netguard.Allowed;
 import eu.faircode.netguard.Packet;
 import eu.faircode.netguard.ServiceSinkhole;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.ClientPacketWriter;
@@ -118,7 +118,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
             }
         }
 
-        IoUtil.close(socket);
+        IOUtils.closeQuietly(socket);
         log.debug("Vpn thread shutting down");
 
         clients.remove(this);
@@ -132,7 +132,7 @@ class ProxyVpnRunnable extends ProxyVpn implements PortRedirector {
     protected synchronized void stop() {
         if (running) {
             running = false;
-            IoUtil.close(vpnReadStream);
+            IOUtils.closeQuietly(vpnReadStream);
             nioService.shutdown();
             dataServiceThread.interrupt();
 

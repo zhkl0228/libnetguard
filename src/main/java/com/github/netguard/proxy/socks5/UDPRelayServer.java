@@ -14,7 +14,7 @@
 
 package com.github.netguard.proxy.socks5;
 
-import cn.hutool.core.util.HexUtil;
+import org.apache.commons.codec.binary.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,13 +126,13 @@ public class UDPRelayServer implements Runnable {
           }
           datagramPacketHandler.decapsulate(packet);
           if (logger.isDebugEnabled()) {
-            logger.debug("send to server packet [{}][{}]", packet.getSocketAddress(), HexUtil.encodeHexStr(Arrays.copyOf(packet.getData(), Math.min(64, packet.getLength()))));
+            logger.debug("send to server packet [{}][{}]", packet.getSocketAddress(), Hex.encodeHexString(Arrays.copyOf(packet.getData(), Math.min(64, packet.getLength()))));
           }
           server.send(packet);
         } else {
           packet = datagramPacketHandler.encapsulate(packet, lastClientSocketAddress);
           if(logger.isDebugEnabled()) {
-            logger.debug("send to client packet [{}][{}]", packet.getSocketAddress(), HexUtil.encodeHexStr(Arrays.copyOf(packet.getData(), Math.min(64, packet.getLength()))));
+            logger.debug("send to client packet [{}][{}]", packet.getSocketAddress(), Hex.encodeHexString(Arrays.copyOf(packet.getData(), Math.min(64, packet.getLength()))));
           }
           server.send(packet);
         }

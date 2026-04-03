@@ -1,10 +1,9 @@
 package com.github.netguard;
 
-import cn.hutool.core.codec.Base64;
-import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.io.IoUtil;
-import cn.hutool.core.util.ZipUtil;
 import junit.framework.TestCase;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 
@@ -12,6 +11,8 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.zip.Deflater;
+import java.util.zip.GZIPOutputStream;
 import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.Security;
@@ -44,8 +45,29 @@ public class CharlesTest extends TestCase {
 
         {
             byte[] data = rootCert.getEncoded();
-            String str = Base64.encode(data);
-            System.out.println("CA=" + str + ", length=" + str.length() + ", data.length=" + data.length + ", zlibLength=" + ZipUtil.zlib(str.getBytes(), 9).length + ", gzipLength=" + ZipUtil.gzip(str.getBytes()).length);
+            String str = Base64.encodeBase64String(data);
+            byte[] zlibData;
+            {
+                Deflater deflater = new Deflater(9);
+                deflater.setInput(str.getBytes());
+                deflater.finish();
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                byte[] buf = new byte[1024];
+                while (!deflater.finished()) {
+                    bos.write(buf, 0, deflater.deflate(buf));
+                }
+                deflater.end();
+                zlibData = bos.toByteArray();
+            }
+            byte[] gzipData;
+            {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (GZIPOutputStream gzip = new GZIPOutputStream(bos)) {
+                    gzip.write(str.getBytes());
+                }
+                gzipData = bos.toByteArray();
+            }
+            System.out.println("CA=" + str + ", length=" + str.length() + ", data.length=" + data.length + ", zlibLength=" + zlibData.length + ", gzipLength=" + gzipData.length);
             StringBuilder builder = new StringBuilder();
             builder.append("-----BEGIN CERTIFICATE-----\n");
             char[] cs = str.toCharArray();
@@ -68,7 +90,7 @@ public class CharlesTest extends TestCase {
             StringWriter writer = new StringWriter();
             exportPem(writer, certs);
             System.out.println(writer);
-            FileUtil.writeString(writer.toString(), new File("target/ca.pem"), StandardCharsets.UTF_8);
+            FileUtils.write(new File("target/ca.pem"), writer.toString(), StandardCharsets.UTF_8);
         }
     }
 
@@ -82,7 +104,7 @@ public class CharlesTest extends TestCase {
                 pw.flush();
             }
         } finally {
-            IoUtil.close(pw);
+            IOUtils.closeQuietly(pw);
         }
     }
 

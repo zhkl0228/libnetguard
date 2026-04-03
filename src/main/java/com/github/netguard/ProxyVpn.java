@@ -1,6 +1,5 @@
 package com.github.netguard;
 
-import cn.hutool.core.thread.ThreadUtil;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
@@ -21,7 +20,12 @@ import java.util.concurrent.Executors;
 public abstract class ProxyVpn implements Runnable, InspectorVpn {
 
     protected final ExecutorService executorService = Executors.newCachedThreadPool(
-            ThreadUtil.newNamedThreadFactory(getClass().getSimpleName(), true)
+            r -> {
+                Thread t = new Thread(r);
+                t.setDaemon(true);
+                t.setName(ProxyVpn.this.getClass().getSimpleName());
+                return t;
+            }
     );
 
     protected static ClientOS readOS(ProxyVpn vpn, DataInput vpnReadStream, int os) throws IOException {

@@ -1,6 +1,5 @@
 package com.github.netguard.proxy;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.FallbackProxyVpn;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.proxy.socks5.SocksCommand;
@@ -9,6 +8,7 @@ import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.tcp.SSLProxyV2;
 import eu.faircode.netguard.Packet;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -163,10 +163,10 @@ public class SocksProxyVpn extends FallbackProxyVpn {
             SSLProxyV2.create(this, result.packet, 10000, socket, result::notifyConnected);
         } catch (IOException e) {
             log.debug("handle socks failed.", e);
-            IoUtil.close(socket);
+            IOUtils.closeQuietly(socket);
         } catch (Exception e) {
             log.warn("handle socks exception.", e);
-            IoUtil.close(socket);
+            IOUtils.closeQuietly(socket);
         }
     }
 

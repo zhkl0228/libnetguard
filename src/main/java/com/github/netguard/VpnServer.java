@@ -1,7 +1,5 @@
 package com.github.netguard;
 
-import cn.hutool.core.codec.Base64;
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.handler.PacketDecoder;
 import com.github.netguard.handler.replay.FileReplay;
 import com.github.netguard.handler.replay.Replay;
@@ -14,6 +12,8 @@ import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.ExtensionServerName;
 import com.github.netguard.vpn.tcp.RootCert;
 import com.github.netguard.vpn.udp.UDPRelay;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,7 +84,7 @@ public class VpnServer {
             list.add(String.format("remarks=Dev_%s:%d", lanIp, port));
             list.add("udp=0");
             return String.format("socks://%s?%s",
-                    Base64.encodeUrlSafe((lanIp + ":" + port).getBytes()),
+                    Base64.encodeBase64URLSafeString((lanIp + ":" + port).getBytes()),
                     String.join("&", list));
         } catch (SocketException e) {
             throw new IllegalStateException("generateShadowRocketQRCode", e);
@@ -259,7 +259,7 @@ public class VpnServer {
                         socket.setSoTimeout((int) Duration.ofHours(1).toMillis());
                     } catch (IOException e) {
                         log.debug("accept detect protocol", e);
-                        IoUtil.close(socket);
+                        IOUtils.closeQuietly(socket);
                         continue;
                     }
                     final ProxyVpn vpn;
@@ -267,7 +267,7 @@ public class VpnServer {
                         vpn = proxyVpnFactory.newVpn(socket, clients, rootCert, inputStream);
                     } catch (IOException e) {
                         log.debug("accept newVpn", e);
-                        IoUtil.close(socket);
+                        IOUtils.closeQuietly(socket);
                         continue;
                     }
                     if (vpnListener != null) {
@@ -368,9 +368,9 @@ public class VpnServer {
             throw new IllegalStateException("Already shutdown.");
         }
         shutdown = true;
-        IoUtil.close(serverSocket);
-        IoUtil.close(transparentProxyingSocketServer);
-        IoUtil.close(udpRelay);
+        IOUtils.closeQuietly(serverSocket);
+        IOUtils.closeQuietly(transparentProxyingSocketServer);
+        IOUtils.closeQuietly(udpRelay);
         for (ProxyVpn vpn : clients.toArray(new ProxyVpn[0])) {
             vpn.stop();
         }

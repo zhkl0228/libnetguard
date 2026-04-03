@@ -1,7 +1,5 @@
 package com.github.netguard.sslvpn;
 
-import cn.hutool.core.io.IoUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import com.github.netguard.IPUtil;
 import com.github.netguard.ProxyVpn;
 import com.github.netguard.sslvpn.impl.SSLVpnImpl;
@@ -13,6 +11,8 @@ import com.github.netguard.vpn.tls.TlsSignature;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.*;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,10 +47,10 @@ public abstract class SSLVpn extends ProxyVpn {
         if (log.isDebugEnabled()) {
             log.debug("New SSLVpn client: clientHelloRecord={}", clientHelloRecord);
             log.debug("{}", String.format("newSSLVpn ja3n_hash=%s, ja4=%s, peetprint_hash=%s, ScrapflyFP=%s",
-                    DigestUtil.md5Hex(tlsSignature.getJa3nText()),
+                    DigestUtils.md5Hex(tlsSignature.getJa3nText()),
                     tlsSignature.getJa4Text(),
-                    DigestUtil.md5Hex(tlsSignature.getPeetPrintText()),
-                    DigestUtil.md5Hex(tlsSignature.getScrapflyFP())));
+                    DigestUtils.md5Hex(tlsSignature.getPeetPrintText()),
+                    DigestUtils.md5Hex(tlsSignature.getScrapflyFP())));
         }
         return new SSLVpnImpl(clients, rootCert, socket, inputStream, serverPort);
     }
@@ -168,7 +168,7 @@ public abstract class SSLVpn extends ProxyVpn {
         if (response instanceof HttpContent) {
             HttpContent httpContent = (HttpContent) response;
             try(InputStream in = new ByteBufInputStream(httpContent.content())) {
-                IoUtil.copy(in, outputStream);
+                IOUtils.copy(in, outputStream);
             }
         }
         outputStream.flush();
@@ -180,7 +180,7 @@ public abstract class SSLVpn extends ProxyVpn {
 
     @Override
     protected final void stop() {
-        IoUtil.close(socket);
+        IOUtils.closeQuietly(socket);
     }
 
     @Override

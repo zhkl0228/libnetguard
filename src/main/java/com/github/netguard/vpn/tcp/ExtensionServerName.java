@@ -1,9 +1,9 @@
 package com.github.netguard.vpn.tcp;
 
-import cn.hutool.core.util.HexUtil;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tls.CipherSuite;
 import com.github.netguard.vpn.tls.JA3Signature;
+import org.apache.commons.codec.binary.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,7 +123,7 @@ public class ExtensionServerName {
                     String name = new String(nameData, StandardCharsets.UTF_8);
                     serverNames.add(name);
                 } else {
-                    log.warn("Unsupported name type: {}, data={}, server={}", nameType, HexUtil.encodeHexStr(data), server);
+                    log.warn("Unsupported name type: {}, data={}, server={}", nameType, Hex.encodeHexString(data), server);
                 }
             } else if (type == 0x10) { // ALPN
                 ByteBuffer nb = ByteBuffer.wrap(data);

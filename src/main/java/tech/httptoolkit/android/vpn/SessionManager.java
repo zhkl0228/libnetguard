@@ -16,9 +16,9 @@
 
 package tech.httptoolkit.android.vpn;
 
-import cn.hutool.core.io.IoUtil;
 import com.github.netguard.vpn.PortRedirector;
 import eu.faircode.netguard.Allowed;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.httptoolkit.android.vpn.socket.DataConst;
@@ -102,7 +102,7 @@ public class SessionManager implements ICloseSession {
 
 		if(session != null){
 			AbstractSelectableChannel channel = session.getChannel();
-			IoUtil.close(channel);
+			IOUtils.closeQuietly(channel);
 			log.debug("closed session -> {}", key);
 		}
 	}
