@@ -1,23 +1,17 @@
 package com.github.netguard.vpn.tcp.h2;
 
 import com.alibaba.fastjson.JSONObject;
+import com.github.netguard.ZipUtil;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
-import org.apache.commons.io.IOUtils;
-import org.brotli.dec.BrotliInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.InflaterInputStream;
 
 @SuppressWarnings("unused")
 public abstract class AbstractHttp2Filter implements Http2Filter {
@@ -132,29 +126,7 @@ public abstract class AbstractHttp2Filter implements Http2Filter {
     }
 
     protected final byte[] decodeContent(String contentEncoding, byte[] data) {
-        if (contentEncoding == null) {
-            return data;
-        }
-        try {
-            switch (contentEncoding) {
-                case "deflate": {
-                    return IOUtils.toByteArray(new InflaterInputStream(new ByteArrayInputStream(data)));
-                }
-                case "gzip": {
-                    return IOUtils.toByteArray(new GZIPInputStream(new ByteArrayInputStream(data)));
-                }
-                case "br": {
-                    try (InputStream inputStream = new BrotliInputStream(new ByteArrayInputStream(data))) {
-                        return IOUtils.toByteArray(inputStream);
-                    }
-                }
-                default:
-                    throw new UnsupportedOperationException("contentEncoding=" + contentEncoding);
-            }
-        } catch (IOException e) {
-            log.debug("decodeContent failed: contentEncoding={}", contentEncoding, e);
-            return data;
-        }
+        return ZipUtil.decodeContent(contentEncoding, data);
     }
 
 }
