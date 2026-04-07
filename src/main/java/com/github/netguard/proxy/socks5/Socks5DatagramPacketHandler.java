@@ -14,7 +14,7 @@
 
 package com.github.netguard.proxy.socks5;
 
-import cn.hutool.core.util.HexUtil;
+import org.apache.commons.codec.binary.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,7 +90,7 @@ public class Socks5DatagramPacketHandler implements DatagramPacketEncapsulation,
 
     if (buffer.getShort() != 0) {
       // check reserved byte.
-      throw new IOException(String.format("SOCKS version error from=%s: %s", packet.getSocketAddress(), HexUtil.encodeHexStr(Arrays.copyOf(packet.getData(), packet.getLength()))));
+      throw new IOException(String.format("SOCKS version error from=%s: %s", packet.getSocketAddress(), Hex.encodeHexString(Arrays.copyOf(packet.getData(), packet.getLength()))));
     }
     if (buffer.get() != 0) {
       throw new IOException("SOCKS fragment is not supported");
