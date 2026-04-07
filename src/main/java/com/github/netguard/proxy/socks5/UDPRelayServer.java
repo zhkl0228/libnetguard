@@ -109,20 +109,22 @@ public class UDPRelayServer implements Runnable {
     }
   }
 
+  private InetSocketAddress lastClientSocketAddress;
+
   @Override
   public void run() {
     try {
         int bufferSize = 1024 * 1024 * 5;
         byte[] buffer = new byte[bufferSize];
-        InetSocketAddress lastClientSocketAddress = null;
       while (running) {
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
         server.receive(packet);
+        final SocketAddress originalAddress = packet.getSocketAddress();
         boolean fromClient = isFromClient(packet);
-        logger.debug("UDP relay server received packet [{}], fromClient={}", packet.getSocketAddress(), fromClient);
+        logger.debug("UDP relay server received packet [{}], fromClient={}", originalAddress, fromClient);
         if (fromClient) {
           if (lastClientSocketAddress == null) {
-            lastClientSocketAddress = (InetSocketAddress) packet.getSocketAddress();
+            lastClientSocketAddress = (InetSocketAddress) originalAddress;
           }
           datagramPacketHandler.decapsulate(packet);
           if (logger.isDebugEnabled()) {
@@ -141,7 +143,7 @@ public class UDPRelayServer implements Runnable {
       if (e.getMessage().equalsIgnoreCase("Socket closed") && !running) {
         logger.debug("UDP relay server stopped");
       } else {
-        logger.error(e.getMessage(), e);
+        logger.warn(e.getMessage(), e);
       }
     }
   }
@@ -153,6 +155,9 @@ public class UDPRelayServer implements Runnable {
    * @return If the datagram packet is sent from client, it will return <code>true</code>.
    */
   protected boolean isFromClient(DatagramPacket packet) {
+    if (lastClientSocketAddress != null) {
+      return lastClientSocketAddress.equals(packet.getSocketAddress());
+    }
     if (clientSocketAddress.equals(packet.getSocketAddress())) {
       return true;
     }
