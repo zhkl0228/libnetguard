@@ -1,7 +1,7 @@
 package com.github.netguard;
 
 import com.github.netguard.vpn.VpnListener;
-import name.neykov.secrets.AgentAttach;
+import name.neykov.secrets.cli.AgentAttach;
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
