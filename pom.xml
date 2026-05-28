@@ -249,7 +249,7 @@
         <dependency>
             <groupId>com.github.zhkl0228</groupId>
             <artifactId>impersonator-okhttp</artifactId>
-            <version>1.0.11</version>
+            <version>1.0.12</version>
             <scope>test</scope>
         </dependency>
         <dependency>
