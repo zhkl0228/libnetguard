@@ -274,7 +274,10 @@ public class SSLProxyV2 implements Runnable {
             IPacketCapture packetCapture = vpn.getPacketCapture();
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
             boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.filterHost(hostName, false);
-            doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, hostName, filterHttp2, applicationLayerProtocols, applicationProtocol, true, packet,
+            com.github.netguard.vpn.tcp.ws.WebSocketFilter wsFilter = packetCapture == null ? null : packetCapture.getWebSocketFilter();
+            // 仅 HTTP/1.1(经典 Upgrade)的 WebSocket;h2 协商时不进 WS 分支(不支持 RFC 8441 WS-over-h2)
+            boolean filterWebSocket = !filterHttp2 && !isHttp2(applicationProtocol) && wsFilter != null && wsFilter.filterHost(hostName);
+            doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, hostName, filterHttp2, filterWebSocket, applicationLayerProtocols, applicationProtocol, true, packet,
                     null, forwardHandler);
         }
     }
@@ -284,7 +287,7 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private static void doForward(InputStream localIn, OutputStream localOut, final Socket local, InputStream socketIn, OutputStream socketOut, final Socket socket, InspectorVpn vpn,
-                                  String hostName, boolean filterHttp2, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet,
+                                  String hostName, boolean filterHttp2, boolean filterWebSocket, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet,
                                   byte[] prologue, ForwardHandler forwardHandler) throws InterruptedException, IOException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
@@ -319,6 +322,22 @@ public class SSLProxyV2 implements Runnable {
                     session, packet, forwardHandler)
                     .setPeer(inboundForward);
             inbound = inboundForward;
+        } else if (filterWebSocket) {
+            com.github.netguard.vpn.tcp.ws.WebSocketFilter wsFilter = packetCapture.getWebSocketFilter();
+            com.github.netguard.vpn.tcp.ws.WebSocketSession wsSession = new com.github.netguard.vpn.tcp.ws.WebSocketSession(client, server, hostName);
+            com.github.netguard.vpn.tcp.ws.WebSocketStreamForward inboundWs = new com.github.netguard.vpn.tcp.ws.WebSocketStreamForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName,
+                    wsSession, wsFilter, packet, forwardHandler);
+            com.github.netguard.vpn.tcp.ws.WebSocketStreamForward outboundWs = new com.github.netguard.vpn.tcp.ws.WebSocketStreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName,
+                    wsSession, wsFilter, packet, forwardHandler);
+            outboundWs.setPeer(inboundWs);
+            com.github.netguard.vpn.tcp.ws.WebSocketInjector injector = com.github.netguard.vpn.tcp.ws.WebSocketStreamForward.newInjector(inboundWs, outboundWs, wsSession);
+            try {
+                wsFilter.onConnected(wsSession, injector);
+            } catch (Throwable t) {
+                log.warn("webSocket onConnected failed", t);
+            }
+            inbound = inboundWs;
+            outbound = outboundWs;
         } else {
             inbound = new StreamForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName, isSSL, packet, forwardHandler);
             outbound = new StreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName, isSSL, packet, forwardHandler);
@@ -461,7 +480,7 @@ public class SSLProxyV2 implements Runnable {
                             socketOut.write(record.prologue);
                             socketOut.flush();
                         }
-                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, record.hostName, false, null, null, false, packet,
+                        doForward(localIn, localOut, local, socketIn, socketOut, socket, null, record.hostName, false, false, null, null, false, packet,
                                 record.prologue, null);
                     }
                 }
@@ -488,7 +507,7 @@ public class SSLProxyV2 implements Runnable {
                             socketOut.flush();
                         }
                     }
-                    doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, record.hostName, false, null, null, false, packet,
+                    doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, record.hostName, false, false, null, null, false, packet,
                             record.prologue, forwardHandler);
                 }
             }

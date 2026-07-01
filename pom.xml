@@ -6,7 +6,7 @@
 
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.10</version>
+    <version>0.0.11</version>
     <packaging>jar</packaging>
     <name>VPN packet capture server</name>
     <description>VPN packet capture server</description>
@@ -32,7 +32,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.test.skip>true</maven.test.skip>
-        <netty.version>4.1.132.Final</netty.version>
+        <netty.version>4.1.135.Final</netty.version>
         <bc.version>1.84</bc.version>
     </properties>
     <build>
@@ -210,7 +210,7 @@
         <dependency>
             <groupId>dnsjava</groupId>
             <artifactId>dnsjava</artifactId>
-            <version>3.6.4</version>
+            <version>3.6.5</version>
         </dependency>
         <dependency>
             <groupId>name.neykov</groupId>
@@ -255,7 +255,7 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>4.34.1</version>
+            <version>4.35.1</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
