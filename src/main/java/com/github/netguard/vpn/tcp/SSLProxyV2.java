@@ -34,11 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -275,9 +271,12 @@ public class SSLProxyV2 implements Runnable {
             Http2Filter filter = packetCapture == null ? null : packetCapture.getH2Filter();
             boolean filterHttp2 = filter != null && isHttp2(applicationProtocol) && allowFilterH2 && filter.filterHost(hostName, false);
             com.github.netguard.vpn.tcp.ws.WebSocketFilter wsFilter = packetCapture == null ? null : packetCapture.getWebSocketFilter();
-            // 仅 HTTP/1.1(经典 Upgrade)的 WebSocket;h2 协商时不进 WS 分支(不支持 RFC 8441 WS-over-h2)
-            boolean filterWebSocket = !filterHttp2 && !isHttp2(applicationProtocol) && wsFilter != null && wsFilter.filterHost(hostName);
-            doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, hostName, filterHttp2, filterWebSocket, applicationLayerProtocols, applicationProtocol, true, packet,
+            // WebSocket over HTTP/2(RFC 8441)也需要进入 h2 帧管线才能拦截,由 HttpFrameForward 内部处理
+            boolean wsOverH2 = isHttp2(applicationProtocol) && wsFilter != null && wsFilter.filterHost(hostName);
+            boolean enterH2Pipeline = filterHttp2 || wsOverH2;
+            // 独立 WS 分支仅处理 HTTP/1.1 经典 Upgrade;h2 协商时交给 h2 管线
+            boolean filterWebSocket = !isHttp2(applicationProtocol) && wsFilter != null && wsFilter.filterHost(hostName);
+            doForward(localIn, localOut, local, socketIn, socketOut, socket, vpn, hostName, enterH2Pipeline, filterWebSocket, applicationLayerProtocols, applicationProtocol, true, packet,
                     null, forwardHandler);
         }
     }
@@ -287,7 +286,7 @@ public class SSLProxyV2 implements Runnable {
     }
 
     private static void doForward(InputStream localIn, OutputStream localOut, final Socket local, InputStream socketIn, OutputStream socketOut, final Socket socket, InspectorVpn vpn,
-                                  String hostName, boolean filterHttp2, boolean filterWebSocket, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet,
+                                  String hostName, boolean enterH2Pipeline, boolean filterWebSocket, Collection<String> applicationProtocols, String applicationProtocol, boolean isSSL, Packet packet,
                                   byte[] prologue, ForwardHandler forwardHandler) throws InterruptedException, IOException {
         log.debug("doForward local={}, socket={}, hostName={}", local, socket, hostName);
         InetSocketAddress client = (InetSocketAddress) local.getRemoteSocketAddress();
@@ -314,7 +313,7 @@ public class SSLProxyV2 implements Runnable {
         }
         CountDownLatch countDownLatch = new CountDownLatch(2);
         StreamForward inbound, outbound;
-        if (filterHttp2) {
+        if (enterH2Pipeline) {
             Http2Session session = new Http2Session(client.getAddress().getHostAddress(), server.getAddress().getHostAddress(), client.getPort(), server.getPort(), hostName);
             HttpFrameForward inboundForward = new HttpFrameForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName,
                     session, packet, forwardHandler);
@@ -323,13 +322,12 @@ public class SSLProxyV2 implements Runnable {
                     .setPeer(inboundForward);
             inbound = inboundForward;
         } else if (filterWebSocket) {
-            com.github.netguard.vpn.tcp.ws.WebSocketFilter wsFilter = packetCapture.getWebSocketFilter();
+            com.github.netguard.vpn.tcp.ws.WebSocketFilter wsFilter = Objects.requireNonNull(packetCapture).getWebSocketFilter();
             com.github.netguard.vpn.tcp.ws.WebSocketSession wsSession = new com.github.netguard.vpn.tcp.ws.WebSocketSession(client, server, hostName);
             com.github.netguard.vpn.tcp.ws.WebSocketStreamForward inboundWs = new com.github.netguard.vpn.tcp.ws.WebSocketStreamForward(localIn, socketOut, true, client, server, countDownLatch, local, vpn, hostName,
                     wsSession, wsFilter, packet, forwardHandler);
             com.github.netguard.vpn.tcp.ws.WebSocketStreamForward outboundWs = new com.github.netguard.vpn.tcp.ws.WebSocketStreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName,
                     wsSession, wsFilter, packet, forwardHandler);
-            outboundWs.setPeer(inboundWs);
             com.github.netguard.vpn.tcp.ws.WebSocketInjector injector = com.github.netguard.vpn.tcp.ws.WebSocketStreamForward.newInjector(inboundWs, outboundWs, wsSession);
             try {
                 wsFilter.onConnected(wsSession, injector);

@@ -17,16 +17,14 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.zip.DataFormatException;
-import java.util.zip.Inflater;
 
 /**
- * WebSocket 帧转发(MITM)。策略:
+ * WebSocket 帧转发(MITM,HTTP/1.1 经典 Upgrade)。策略:
  * - 每帧原始字节按位透传(保真,免掩码/压缩重编码的坑);
  * - 同时解码一份副本(解掩码 + permessage-deflate 解压)喂 {@link WebSocketFilter} 观测;
  * - filter 对"单帧完整消息"可替换/丢弃;分片消息仅观测(先透传)。
  * inbound(server=true):client-&gt;server;outbound(server=false):server-&gt;client。
+ * 帧编解码逻辑委托 {@link WebSocketCodec}(与 HTTP/2 RFC 8441 路径共用)。
  */
 public class WebSocketStreamForward extends StreamForward {
 
@@ -34,10 +32,8 @@ public class WebSocketStreamForward extends StreamForward {
 
     private final WebSocketFilter filter;
     private final WebSocketSession session;
+    private final WebSocketCodec codec;
     private final Object writeLock = new Object();
-
-    private WebSocketStreamForward peer;
-    private Inflater inflater; // 仅解码方向按需创建(context takeover 时跨消息复用)
 
     public WebSocketStreamForward(InputStream inputStream, OutputStream outputStream, boolean server,
                                   InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress,
@@ -46,17 +42,12 @@ public class WebSocketStreamForward extends StreamForward {
         super(inputStream, outputStream, server, clientSocketAddress, serverSocketAddress, countDownLatch, socket, vpn, hostName, true, packet, forwardHandler);
         this.session = session;
         this.filter = filter;
-    }
-
-    public WebSocketStreamForward setPeer(WebSocketStreamForward peer) {
-        this.peer = peer;
-        peer.peer = this;
-        return this;
+        this.codec = new WebSocketCodec(session, server);
     }
 
     /** 在该方向的输出流上写入编码后的帧(线程安全)。inbound 写向服务器,outbound 写向客户端。 */
     void writeFrame(WebSocketFrame frame, boolean mask) throws IOException {
-        byte[] encoded = encode(frame.getOpcode(), frame.isFin(), frame.getPayload(), mask);
+        byte[] encoded = WebSocketCodec.encode(frame.getOpcode(), frame.isFin(), frame.getPayload(), mask);
         synchronized (writeLock) {
             outputStream.write(encoded);
             outputStream.flush();
@@ -68,10 +59,6 @@ public class WebSocketStreamForward extends StreamForward {
             outputStream.write(raw);
             outputStream.flush();
         }
-    }
-
-    boolean isServerBound() {
-        return server; // inbound => 写向真实服务器
     }
 
     @Override
@@ -90,9 +77,9 @@ public class WebSocketStreamForward extends StreamForward {
         int msgOpcode = 0;
 
         while (true) {
-            RawFrame rf;
+            WebSocketCodec.Frame rf;
             try {
-                rf = readFrame(in);
+                rf = WebSocketCodec.readFrame(in);
             } catch (EOFException e) {
                 break;
             }
@@ -107,7 +94,7 @@ public class WebSocketStreamForward extends StreamForward {
             }
 
             if (singleComplete) {
-                byte[] plain = decode(rf, rf.rsv1);
+                byte[] plain = codec.decode(rf.unmaskedRaw(), rf.rsv1);
                 WebSocketFrame wf = new WebSocketFrame(rf.opcode, true, rf.rsv1, plain);
                 WebSocketFrame out;
                 try {
@@ -135,7 +122,7 @@ public class WebSocketStreamForward extends StreamForward {
                 if (msgBuf != null) {
                     msgBuf.write(rf.unmaskedRaw());
                     if (rf.fin) {
-                        byte[] plain = decodeBytes(msgBuf.toByteArray(), msgRsv1);
+                        byte[] plain = codec.decode(msgBuf.toByteArray(), msgRsv1);
                         try {
                             filter.onFrame(session, !server, new WebSocketFrame(msgOpcode, true, msgRsv1, plain));
                         } catch (Throwable t) {
@@ -146,9 +133,11 @@ public class WebSocketStreamForward extends StreamForward {
                 }
             }
         }
-        try {
-            filter.onClosed(session);
-        } catch (Throwable ignored) {
+        if (filter != null) {
+            try {
+                filter.onClosed(session);
+            } catch (Throwable ignored) {
+            }
         }
         return true;
     }
@@ -185,151 +174,9 @@ public class WebSocketStreamForward extends StreamForward {
             return;
         }
         int end = lower.indexOf("\r\n", idx);
-        String line = end < 0 ? lower.substring(idx) : lower.substring(idx, end);
-        if (line.contains("permessage-deflate")) {
-            session.permessageDeflate = true;
-            session.serverNoContextTakeover = line.contains("server_no_context_takeover");
-            session.clientNoContextTakeover = line.contains("client_no_context_takeover");
-        }
-    }
-
-    // ==== 帧读取 ====
-    private static class RawFrame {
-        boolean fin;
-        boolean rsv1;
-        int opcode;
-        boolean masked;
-        byte[] maskKey;
-        byte[] payload; // 原始(可能被掩码)
-        byte[] raw;     // 完整原始帧字节(透传用)
-
-        byte[] unmaskedRaw() {
-            if (!masked) {
-                return payload;
-            }
-            byte[] p = payload.clone();
-            for (int i = 0; i < p.length; i++) {
-                p[i] ^= maskKey[i & 3];
-            }
-            return p;
-        }
-    }
-
-    private RawFrame readFrame(DataInputStream in) throws IOException {
-        int b0 = in.read();
-        if (b0 < 0) {
-            return null;
-        }
-        int b1 = in.readUnsignedByte();
-        RawFrame f = new RawFrame();
-        f.fin = (b0 & 0x80) != 0;
-        f.rsv1 = (b0 & 0x40) != 0;
-        f.opcode = b0 & 0x0F;
-        f.masked = (b1 & 0x80) != 0;
-        long len = b1 & 0x7F;
-        ByteArrayOutputStream raw = new ByteArrayOutputStream();
-        raw.write(b0);
-        raw.write(b1);
-        if (len == 126) {
-            int hi = in.readUnsignedByte(), lo = in.readUnsignedByte();
-            len = (hi << 8) | lo;
-            raw.write(hi);
-            raw.write(lo);
-        } else if (len == 127) {
-            byte[] ext = new byte[8];
-            in.readFully(ext);
-            raw.write(ext);
-            len = 0;
-            for (byte b : ext) {
-                len = (len << 8) | (b & 0xFF);
-            }
-        }
-        if (f.masked) {
-            f.maskKey = new byte[4];
-            in.readFully(f.maskKey);
-            raw.write(f.maskKey);
-        }
-        if (len > Integer.MAX_VALUE - 16) {
-            throw new IOException("frame too large: " + len);
-        }
-        f.payload = new byte[(int) len];
-        in.readFully(f.payload);
-        raw.write(f.payload);
-        f.raw = raw.toByteArray();
-        return f;
-    }
-
-    // ==== 解码(解掩码 + 解压) ====
-    private byte[] decode(RawFrame f, boolean rsv1) throws IOException {
-        return decodeBytes(f.unmaskedRaw(), rsv1);
-    }
-
-    private byte[] decodeBytes(byte[] unmasked, boolean rsv1) throws IOException {
-        if (!rsv1 || !session.permessageDeflate) {
-            return unmasked;
-        }
-        if (inflater == null) {
-            inflater = new Inflater(true);
-        }
-        byte[] input = new byte[unmasked.length + 4];
-        System.arraycopy(unmasked, 0, input, 0, unmasked.length);
-        input[unmasked.length] = 0x00;
-        input[unmasked.length + 1] = 0x00;
-        input[unmasked.length + 2] = (byte) 0xFF;
-        input[unmasked.length + 3] = (byte) 0xFF;
-        inflater.setInput(input);
-        ByteArrayOutputStream out = new ByteArrayOutputStream(Math.max(64, unmasked.length * 4));
-        byte[] tmp = new byte[8192];
-        try {
-            while (!inflater.needsInput() && !inflater.finished()) {
-                int n = inflater.inflate(tmp);
-                if (n == 0) {
-                    break;
-                }
-                out.write(tmp, 0, n);
-            }
-        } catch (DataFormatException e) {
-            throw new IOException("inflate", e);
-        }
-        boolean noContext = server ? session.clientNoContextTakeover : session.serverNoContextTakeover;
-        if (noContext) {
-            inflater.reset();
-        }
-        return out.toByteArray();
-    }
-
-    // ==== 编码(未压缩;mask 由方向决定) ====
-    static byte[] encode(int opcode, boolean fin, byte[] payload, boolean mask) {
-        if (payload == null) {
-            payload = new byte[0];
-        }
-        ByteArrayOutputStream o = new ByteArrayOutputStream(payload.length + 14);
-        o.write((fin ? 0x80 : 0) | (opcode & 0x0F));
-        int len = payload.length;
-        int maskBit = mask ? 0x80 : 0;
-        if (len < 126) {
-            o.write(maskBit | len);
-        } else if (len < 65536) {
-            o.write(maskBit | 126);
-            o.write((len >>> 8) & 0xFF);
-            o.write(len & 0xFF);
-        } else {
-            o.write(maskBit | 127);
-            for (int i = 7; i >= 0; i--) {
-                o.write((int) ((((long) len) >>> (i * 8)) & 0xFF));
-            }
-        }
-        if (mask) {
-            byte[] key = new byte[4];
-            ThreadLocalRandom.current().nextBytes(key);
-            o.write(key, 0, 4);
-            for (int i = 0; i < payload.length; i++) {
-                o.write(payload[i] ^ key[i & 3]);
-            }
-        } else {
-            o.write(payload, 0, payload.length);
-        }
-        return o.toByteArray();
+        String value = end < 0 ? lower.substring(idx + "sec-websocket-extensions:".length())
+                : lower.substring(idx + "sec-websocket-extensions:".length(), end);
+        WebSocketCodec.parseExtensions(value, session);
     }
 
     // ==== 注入器 ====

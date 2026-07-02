@@ -6,6 +6,11 @@ import com.github.netguard.vpn.tcp.StreamForward;
 import com.github.netguard.vpn.tcp.h2.*;
 import com.github.netguard.vpn.tcp.h2.HttpHeaderBlockDecoder;
 import com.github.netguard.vpn.tcp.h2.HttpHeaderBlockEncoder;
+import com.github.netguard.vpn.tcp.ws.WebSocketCodec;
+import com.github.netguard.vpn.tcp.ws.WebSocketFilter;
+import com.github.netguard.vpn.tcp.ws.WebSocketFrame;
+import com.github.netguard.vpn.tcp.ws.WebSocketInjector;
+import com.github.netguard.vpn.tcp.ws.WebSocketSession;
 import edu.baylor.cs.csi5321.spdy.frames.H2FrameRstStream;
 import edu.baylor.cs.csi5321.spdy.frames.H2Util;
 import eu.faircode.netguard.Packet;
@@ -41,7 +46,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private final Http2Session session;
     private final Http2Filter filter;
+    private final WebSocketFilter wsFilter;
     private final String sessionKey;
+
+    /** 序列化输出流写入(转发循环刷盘 与 WebSocket 异步注入 竞争同一 outputStream)。 */
+    private final Object outputWriteLock = new Object();
 
     public HttpFrameForward(InputStream inputStream, OutputStream outputStream, boolean server, InetSocketAddress clientSocketAddress, InetSocketAddress serverSocketAddress, CountDownLatch countDownLatch, Socket socket, InspectorVpn vpn, String hostName,
                             Http2Session session, Packet packet, ForwardHandler forwardHandler) {
@@ -54,6 +63,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
         this.session = session;
         this.filter = packetCapture == null ? null : packetCapture.getH2Filter();
+        this.wsFilter = packetCapture == null ? null : packetCapture.getWebSocketFilter();
         this.sessionKey = String.valueOf(session);
     }
 
@@ -147,21 +157,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     }
                 }
                 if (output.length > 0) {
-                    outputStream.write(output);
-                    outputStream.flush();
-
-                    if (packetCapture != null) {
-                        if (server) {
-                            packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, output);
-                        } else {
-                            packetCapture.onSSLProxyRx(clientSocketAddress, serverSocketAddress, output);
-                        }
-                    }
+                    writeOutput(output);
                 }
                 byte[] response;
                 while ((response = delayResponseQueue.poll()) != null) {
-                    outputStream.write(response);
-                    outputStream.flush();
+                    writeLocked(response);
                 }
             }
             return true;
@@ -189,6 +189,12 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 return;
             }
             data.readBytes(stream.buffer, data.readableBytes());
+            if (stream.webSocket) {
+                byte[] chunk = stream.buffer.toByteArray();
+                stream.buffer.reset();
+                handleWebSocketData(stream, chunk, endStream);
+                return;
+            }
             if (stream.longPolling) {
                 if (server) {
                     handlePollingRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), endStream, false, streamId, false);
@@ -222,6 +228,162 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         } finally {
             data.release();
         }
+    }
+
+    // ==== WebSocket over HTTP/2 (RFC 8441):把该流的 DATA 载荷当作 RFC 6455 帧流处理 ====
+    private void handleWebSocketData(Stream stream, byte[] chunk, boolean endStream) {
+        WebSocketSession wsSession = stream.webSocketSession;
+        boolean fromServer = !server; // outbound(server=false) => server->client
+        List<WebSocketCodec.Frame> frames;
+        try {
+            frames = stream.codec.parse(chunk);
+        } catch (Exception e) {
+            log.warn("webSocket parse failed", e);
+            return;
+        }
+        for (WebSocketCodec.Frame rf : frames) {
+            boolean singleComplete = rf.fin && rf.opcode != WebSocketFrame.OPCODE_CONTINUATION;
+            if (singleComplete) {
+                byte[] plain;
+                try {
+                    plain = stream.codec.decode(rf.unmaskedRaw(), rf.rsv1);
+                } catch (IOException e) {
+                    log.warn("webSocket decode failed", e);
+                    writeWebSocketData(stream.httpHeadersFrame.getStreamId(), rf.raw);
+                    continue;
+                }
+                WebSocketFrame wf = new WebSocketFrame(rf.opcode, true, rf.rsv1, plain);
+                WebSocketFrame out;
+                try {
+                    out = wsFilter.onFrame(wsSession, fromServer, wf);
+                } catch (Throwable t) {
+                    log.warn("onFrame error", t);
+                    out = wf;
+                }
+                if (out == null) {
+                    continue; // 丢弃
+                }
+                if (out == wf) {
+                    writeWebSocketData(stream.httpHeadersFrame.getStreamId(), rf.raw); // 原样透传
+                } else {
+                    // 替换:未压缩重编码;client->server(server=true)方向加掩码
+                    byte[] encoded = WebSocketCodec.encode(out.getOpcode(), out.isFin(), out.getPayload(), server);
+                    writeWebSocketData(stream.httpHeadersFrame.getStreamId(), encoded);
+                }
+            } else {
+                // 分片:先透传,再累积观测
+                writeWebSocketData(stream.httpHeadersFrame.getStreamId(), rf.raw);
+                if (rf.opcode != WebSocketFrame.OPCODE_CONTINUATION) {
+                    stream.wsMsgBuf = new ByteArrayOutputStream();
+                    stream.wsMsgRsv1 = rf.rsv1;
+                    stream.wsMsgOpcode = rf.opcode;
+                }
+                if (stream.wsMsgBuf != null) {
+                    stream.wsMsgBuf.write(rf.unmaskedRaw(), 0, rf.unmaskedRaw().length);
+                    if (rf.fin) {
+                        try {
+                            byte[] plain = stream.codec.decode(stream.wsMsgBuf.toByteArray(), stream.wsMsgRsv1);
+                            wsFilter.onFrame(wsSession, fromServer, new WebSocketFrame(stream.wsMsgOpcode, true, stream.wsMsgRsv1, plain));
+                        } catch (Throwable t) {
+                            log.warn("onFrame(fragmented) error", t);
+                        }
+                        stream.wsMsgBuf = null;
+                    }
+                }
+            }
+        }
+        if (endStream) {
+            streamMap.remove(stream.httpHeadersFrame.getStreamId());
+            try {
+                wsFilter.onClosed(wsSession);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    /** 把已编码的 WebSocket 帧字节封进本方向的 h2 DATA 帧,经 outputBuffer 由转发循环刷盘。 */
+    private void writeWebSocketData(int streamId, byte[] wsBytes) {
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(wsBytes);
+        ByteBuf frame = frameEncoder.encodeDataFrame(streamId, false, byteBuf);
+        try {
+            forwardFrameBuf(frame, outputBuffer);
+        } finally {
+            frame.release();
+        }
+    }
+
+    /** 加锁写出并刷盘(转发循环刷盘 与 WebSocket 异步注入 竞争同一 outputStream)。 */
+    private void writeLocked(byte[] data) throws IOException {
+        synchronized (outputWriteLock) {
+            outputStream.write(data);
+            outputStream.flush();
+        }
+    }
+
+    /** 加锁写出并通知抓包回调(Tx/Rx 按方向)。 */
+    private void writeOutput(byte[] data) throws IOException {
+        writeLocked(data);
+        if (packetCapture != null) {
+            if (server) {
+                packetCapture.onSSLProxyTx(clientSocketAddress, serverSocketAddress, data);
+            } else {
+                packetCapture.onSSLProxyRx(clientSocketAddress, serverSocketAddress, data);
+            }
+        }
+    }
+
+    /**
+     * WebSocket 注入:把帧编码后封进 h2 DATA 帧,直接写本方向 outputStream(异步,来自 filter 线程)。
+     * 注意:注入的是非请求的额外 DATA,会消耗对端 h2 流量控制窗口——MITM 场景已知限制,不做窗口跟踪。
+     */
+    private void injectWebSocketFrame(int streamId, WebSocketFrame frame, boolean mask) {
+        byte[] payload = WebSocketCodec.encode(frame.getOpcode(), frame.isFin(), frame.getPayload(), mask);
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(payload);
+        ByteBuf h2 = frameEncoder.encodeDataFrame(streamId, false, byteBuf);
+        try {
+            byte[] out = new byte[h2.readableBytes()];
+            h2.readBytes(out);
+            writeOutput(out);
+        } catch (IOException e) {
+            log.warn("injectWebSocketFrame failed", e);
+        } finally {
+            h2.release();
+        }
+    }
+
+    /** inbound=写向真实服务器(加掩码);outbound=写向客户端(不加掩码)。 */
+    private static WebSocketInjector newWebSocketInjector(final HttpFrameForward inbound, final HttpFrameForward outbound,
+                                                          final int streamId, final WebSocketSession session) {
+        return new WebSocketInjector() {
+            @Override
+            public void sendToServer(WebSocketFrame frame) {
+                inbound.injectWebSocketFrame(streamId, frame, true);
+            }
+            @Override
+            public void sendToClient(WebSocketFrame frame) {
+                outbound.injectWebSocketFrame(streamId, frame, false);
+            }
+            @Override
+            public void sendTextToServer(String text) {
+                sendToServer(WebSocketFrame.text(text));
+            }
+            @Override
+            public void sendBinaryToServer(byte[] data) {
+                sendToServer(WebSocketFrame.binary(data));
+            }
+            @Override
+            public void sendTextToClient(String text) {
+                sendToClient(WebSocketFrame.text(text));
+            }
+            @Override
+            public void sendBinaryToClient(byte[] data) {
+                sendToClient(WebSocketFrame.binary(data));
+            }
+            @Override
+            public boolean isReady() {
+                return session.isEstablished();
+            }
+        };
     }
 
     private HttpHeadersFrame httpHeadersFrame;
@@ -446,10 +608,32 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 log.debug("readHeaderBlockEnd server={}, stream={}", server, stream);
             }
 
-            Stream peerStream;
-            if (!server &&
-                    (peerStream = peer.streamMap.get(httpHeadersFrame.getStreamId())) != null &&
-                    peerStream.longPolling) {
+            int streamId = httpHeadersFrame.getStreamId();
+            Stream peerStream = server ? null : peer.streamMap.get(streamId);
+
+            if (wsFilter != null && server && stream.detectWebSocketRequest() && wsFilter.filterHost(hostName)) {
+                // WebSocket over HTTP/2(RFC 8441)请求侧:扩展 CONNECT,转发头(不结束流),等待响应
+                stream.webSocket = true;
+                stream.webSocketSession = new WebSocketSession(clientSocketAddress, serverSocketAddress, hostName);
+                stream.codec = new WebSocketCodec(stream.webSocketSession, true);
+                writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
+                stream.headerWritten = true;
+            } else if (wsFilter != null && !server && peerStream != null && peerStream.webSocket && stream.detectWebSocketResponse()) {
+                // WebSocket over HTTP/2 响应侧::status=200 握手成功,登记会话并回调 onConnected
+                WebSocketSession wsSession = peerStream.webSocketSession;
+                stream.webSocket = true;
+                stream.webSocketSession = wsSession;
+                stream.codec = new WebSocketCodec(wsSession, false);
+                WebSocketCodec.parseExtensions(httpHeadersFrame.headers().get("sec-websocket-extensions"), wsSession);
+                wsSession.markEstablished();
+                writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
+                WebSocketInjector injector = newWebSocketInjector(peer, this, streamId, wsSession);
+                try {
+                    wsFilter.onConnected(wsSession, injector);
+                } catch (Throwable t) {
+                    log.warn("webSocket onConnected failed", t);
+                }
+            } else if (!server && peerStream != null && peerStream.longPolling) {
                 stream.longPolling = true;
                 writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
             } else {
@@ -493,7 +677,13 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         } finally {
             frame.release();
         }
-        streamMap.remove(streamId);
+        Stream stream = streamMap.remove(streamId);
+        if (stream != null && stream.webSocket && wsFilter != null) {
+            try {
+                wsFilter.onClosed(stream.webSocketSession);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     private HttpSettingsFrame httpSettingsFrame;

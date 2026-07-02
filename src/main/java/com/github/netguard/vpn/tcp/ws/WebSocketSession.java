@@ -43,6 +43,11 @@ public class WebSocketSession {
         return established;
     }
 
+    /** 供跨包(HTTP/2 RFC 8441 路径)标记握手完成。 */
+    public void markEstablished() {
+        this.established = true;
+    }
+
     @Override
     public String toString() {
         return "WebSocketSession{" + client + " => " + server + " (" + hostName + "), deflate=" + permessageDeflate + '}';
