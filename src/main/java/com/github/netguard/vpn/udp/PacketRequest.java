@@ -89,7 +89,8 @@ public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
                 } else if (extension instanceof ApplicationLayerProtocolNegotiationExtension) {
                     ApplicationLayerProtocolNegotiationExtension applicationLayerProtocolNegotiationExtension = (ApplicationLayerProtocolNegotiationExtension) extension;
                     applicationLayerProtocols = applicationLayerProtocolNegotiationExtension.getProtocols();
-                    if (!applicationLayerProtocols.contains("h3")) {
+                    if (!applicationLayerProtocols.contains("h3") &&
+                            !applicationLayerProtocols.contains("h3-alias-02")) {
                         throw new IllegalStateException("applicationLayerProtocols=" + applicationLayerProtocols);
                     }
                 }
