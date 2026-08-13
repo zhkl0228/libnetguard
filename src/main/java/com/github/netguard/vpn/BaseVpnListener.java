@@ -19,7 +19,11 @@ public abstract class BaseVpnListener implements VpnListener {
     @Override
     public void initializeReplay(Replay replay) {
         if (packetCapture != null) {
-            packetCapture.replay(replay);
+            try {
+                packetCapture.replay(replay);
+            } catch (Exception e) {
+                log.warn("initializeReplay failed: replay={}", replay, e);
+            }
         }
     }
 
