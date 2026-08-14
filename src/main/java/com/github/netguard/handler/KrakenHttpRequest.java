@@ -34,13 +34,16 @@ class KrakenHttpRequest implements com.github.netguard.handler.http.HttpRequest 
         if(request.getQueryString() != null) {
             buffer.append('?').append(request.getQueryString());
         }
-        buffer.append(' ');
         switch (request.getHttpVersion()) {
             case HTTP_1_0:
-                buffer.append("HTTP/1.0");
+                buffer.append(" HTTP/1.0");
                 break;
             case HTTP_1_1:
-                buffer.append("HTTP/1.1");
+                buffer.append(" HTTP/1.1");
+                break;
+            case HTTP_2_0:
+                // 2.0 不出现在线上，HTTP/2 才是 RFC 9113 的写法
+                buffer.append(" HTTP/2");
                 break;
         }
         return buffer.toString();
