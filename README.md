@@ -66,6 +66,25 @@ vpnServer.waitShutdown();
 - [MacVPN](https://github.com/zhkl0228/SwiftConnect)
 - [WindowsVPN](https://github.com/zhkl0228/jna-wintun)
 
+## 装根证书
+
+MITM 要解 HTTPS，设备上得先信任本服务端的根证书。**连上 VPN 之后**用设备浏览器打开：
+
+```
+http://88.88.88.88:88
+```
+
+这是个假地址，只在隧道里可达（走不出去也不会真的发到公网），任何到它的连接都会被直接
+应答成根证书本身：`application/x-pem-file`，带 `Content-Disposition`，浏览器会当文件下载
+（`NetGuard.pem`）。装完再按各系统的规矩**手动打开信任开关**——iOS 在「设置 → 通用 →
+关于本机 → 证书信任设置」，Android 装到「用户凭据」，只装不信任是不生效的。
+
+不装证书也能跑：TCP、UDP、DNS 照常抓，只是 HTTPS 那部分解不开。
+
+另外别把 `enablePreMasterSecretsLogFile()` 当成免装证书的替代品，它管的是另一段：
+通过 javaagent 把**本 JVM**（也就是代理连上游那条腿）的 pre-master secret 落盘，
+好让 Wireshark 解开 pcap 里那段密文。启动时会把要加的 `-javaagent:` 参数打印出来。
+
 ## 写自己的解码器
 
 继承 `PacketDecoder`，覆写关心的回调。构造函数可以顺带落一份 pcap：
@@ -92,16 +111,19 @@ static class MyPacketDecoder extends PacketDecoder {
 `PacketDecoder` 的默认实现**先打 body 的原始字节**（文本原样打，二进制走 hex+ASCII），
 然后才是解析出来的头和参数。覆写时请保留 `super` 那一步。
 
-这不是洁癖，是踩出来的。分析 DeepL 的接口时，它的反爬校验看两样东西：`"method":`
-后面有几个空格，以及 JSON 的键序。而解码器当时打印的是**解析后重新序列化**的 JSON——
-空格被吃掉、键序被重排，于是自己构造的请求和真机抓到的**打印出来一模一样**，
-怎么比都比不出差异，白白卡了很久。改成打原始字节，一眼就看见了：
+这不是洁癖，是踩出来的。有的服务端会拿 JSON 的**空白和键序**当校验依据——同一段 JSON
+解析再序列化之后，这两样就都没了。当时解码器打印的正是解析后的视图，于是自己构造的请求
+和真机抓到的**打印出来一模一样**，怎么比都比不出差异，白白卡了很久。改成打原始字节，
+一眼就看见了：
 
 ```
 request body (271 bytes)
-{"jsonrpc":"2.0","method": "LMT_split_text","id":2907,...}
-                         ^ 就这一个空格
+{"jsonrpc":"2.0","method": "some_method","id":2907,...}
+                        ^ 差别就在这一个空格
 ```
+
+同类的还有：header 的大小写和顺序、多部分表单的 boundary、chunked 的分块边界、
+protobuf 里字段的实际排列——凡是「解析后就还原不回去」的信息，都只能从原始字节看到。
 
 抓包工具最不该做的事，就是把自己的解释当成观测递给你。所以：**原始字节是默认，
 解析视图是补充**，顺序不要反。
