@@ -39,6 +39,10 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.URLDecoder;
+import java.util.Arrays;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -284,6 +288,57 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
         }
     }
 
+    /**
+     * 打印原始字节时最多打这么多，再多就截断——抓包里一个响应体几 MB 是常事
+     */
+    private static final int MAX_RAW_BODY = 16384;
+
+    /**
+     * 请求/响应体的<b>原始字节</b>。
+     * <p>
+     * <b>为什么默认打原始字节而不是解析后的视图</b>：抓包工具最不该做的就是把解释当成观测。
+     * 同一段 JSON 解析再序列化之后，空格和键序全没了，而有些服务端恰恰拿这两样当反爬校验
+     * ——真踩过：打印成解析后的样子，自己构造的请求和真机抓到的看起来一模一样，差异根本
+     * 无从发现，查了很久才想到去看字节。
+     * <p>
+     * 所以这里的默认实现是<b>先原始、后解析</b>。想要更好读的视图就覆写
+     * {@link #onRequest(HttpSession, com.github.netguard.handler.http.HttpRequest)} 之类
+     * 自己加一段，但<b>别把原始那段换掉</b>。
+     *
+     * @return 没有 body 时返回空串，可以直接拼进日志
+     */
+    protected static String rawBody(String label, byte[] data) {
+        if (data == null || data.length == 0) {
+            return "";
+        }
+        boolean truncated = data.length > MAX_RAW_BODY;
+        byte[] shown = truncated ? Arrays.copyOf(data, MAX_RAW_BODY) : data;
+        String suffix = truncated ? "\n... truncated, " + data.length + " bytes total" : "";
+        String title = label + " (" + data.length + " bytes)";
+        // 文本就原样打，那样空格、键序、缩进都看得见；二进制走 hex+ASCII
+        return (isText(shown) ? "\n" + title + "\n" + new String(shown, StandardCharsets.UTF_8)
+                : Inspector.inspectString(shown, title)) + suffix;
+    }
+
+    /**
+     * 能按 UTF-8 严格解出来、且没有除 CR/LF/TAB 之外的控制字符，才当文本。
+     * 截断截在多字节字符中间时严格解码会失败，那就退回 hex——宁可难看也别打出乱码。
+     */
+    private static boolean isText(byte[] data) {
+        try {
+            CharBuffer chars = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(data));
+            for (int i = 0; i < chars.length(); i++) {
+                char c = chars.charAt(i);
+                if (c < 0x20 && c != '\n' && c != '\r' && c != '\t') {
+                    return false;
+                }
+            }
+            return true;
+        } catch (CharacterCodingException e) {
+            return false;
+        }
+    }
+
     @Override
     public final void onRequest(HttpSession session, HttpRequest request) {
         onRequest(session, new KrakenHttpRequest(request));
@@ -292,7 +347,8 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onRequest(HttpSession session, com.github.netguard.handler.http.HttpRequest request) {
         if (log.isDebugEnabled()) {
             byte[] data = request.getPostData();
-            log.debug("onRequest {} bytes session={}, application={}, request={}\n{}{}\n", data == null ? 0 : data.length, session, session.getApplication(), request, request.getHeaderString(), parseParameters(request.getRequestUri()));
+            log.debug("onRequest {} bytes session={}, application={}, request={}{}\n{}{}\n", data == null ? 0 : data.length, session, session.getApplication(), request,
+                    rawBody("request body", data), request.getHeaderString(), parseParameters(request.getRequestUri()));
         }
     }
 
@@ -309,15 +365,16 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onPollingResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
-            log.debug("onPollingResponse {} bytes session={}, application={}, requestUri={}, request={}, response={}\n{}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), request, response,
-                    request.getHeaderString(), response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
+            log.debug("onPollingResponse {} bytes session={}, application={}, requestUri={}, request={}, response={}{}\n{}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), request, response,
+                    rawBody("response body", data), request.getHeaderString(), response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
         }
     }
 
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
-            log.debug("onResponse {} bytes session={}, application={}, requestUri={}, response={}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), response, response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
+            log.debug("onResponse {} bytes session={}, application={}, requestUri={}, response={}{}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), response,
+                    rawBody("response body", data), response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
         }
     }
 
