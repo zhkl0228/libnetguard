@@ -2,9 +2,9 @@ package com.github.netguard.vpn.udp.quic.netty;
 
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.ApplicationProtocolNegotiator;
-import io.netty.incubator.codec.quic.QuicSslContext;
-import io.netty.incubator.codec.quic.QuicSslEngine;
-import io.netty.incubator.codec.quic.QuicSslSessionContext;
+import io.netty.handler.codec.quic.QuicSslContext;
+import io.netty.handler.codec.quic.QuicSslEngine;
+import io.netty.handler.codec.quic.QuicSslSessionContext;
 
 import java.util.List;
 

@@ -4,10 +4,10 @@ import com.github.netguard.vpn.tcp.h2.Http2Session;
 import com.github.netguard.vpn.udp.quic.ClientConnection;
 import com.github.netguard.vpn.udp.quic.HandshakeResult;
 import io.netty.channel.Channel;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.incubator.codec.http3.Http3ClientConnectionHandler;
-import io.netty.incubator.codec.quic.QuicChannel;
-import io.netty.incubator.codec.quic.QuicChannelBootstrap;
+import io.netty.channel.EventLoopGroup;
+import io.netty.handler.codec.http3.Http3ClientConnectionHandler;
+import io.netty.handler.codec.quic.QuicChannel;
+import io.netty.handler.codec.quic.QuicChannelBootstrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,11 +20,11 @@ class NettyClientConnection implements ClientConnection {
 
     private static final Logger log = LoggerFactory.getLogger(NettyClientConnection.class);
 
-    private final NioEventLoopGroup group;
+    private final EventLoopGroup group;
     private final Channel channel;
     private final QuicChannelBootstrap bootstrap;
 
-    NettyClientConnection(NioEventLoopGroup group, Channel channel, QuicChannelBootstrap bootstrap) {
+    NettyClientConnection(EventLoopGroup group, Channel channel, QuicChannelBootstrap bootstrap) {
         this.group = group;
         this.channel = channel;
         this.bootstrap = bootstrap;

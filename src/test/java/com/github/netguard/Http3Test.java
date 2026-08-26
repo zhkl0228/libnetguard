@@ -9,12 +9,15 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
-import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.MultiThreadIoEventLoopGroup;
+import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.handler.codec.http3.*;
+import io.netty.handler.codec.quic.*;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import io.netty.handler.ssl.util.SelfSignedCertificate;
-import io.netty.incubator.codec.http3.*;
-import io.netty.incubator.codec.quic.*;
+import io.netty.pkitesting.CertificateBuilder;
+import io.netty.pkitesting.X509Bundle;
 import io.netty.util.CharsetUtil;
 import io.netty.util.ReferenceCountUtil;
 import junit.framework.TestCase;
@@ -56,9 +59,12 @@ public class Http3Test extends TestCase {
     private static final byte[] CONTENT = "Hello World!\r\n".getBytes(CharsetUtil.US_ASCII);
 
     public void testNettyServer() throws Exception {
-        NioEventLoopGroup group = new NioEventLoopGroup(1);
-        SelfSignedCertificate cert = new SelfSignedCertificate();
-        QuicSslContext sslContext = QuicSslContextBuilder.forServer(cert.key(), "", cert.cert())
+        EventLoopGroup group = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
+        X509Bundle cert = new CertificateBuilder()
+                .subject("CN=localhost")
+                .setIsCertificateAuthority(true)
+                .buildSelfSigned();
+        QuicSslContext sslContext = QuicSslContextBuilder.forServer(cert.getKeyPair().getPrivate(), "", cert.getCertificate())
                 .applicationProtocols(Http3.supportedApplicationProtocols()).build();
         ChannelHandler codec = Http3.newQuicServerCodecBuilder()
                 .sslContext(sslContext)
@@ -120,7 +126,7 @@ public class Http3Test extends TestCase {
     }
 
     public void testHttp3ClientExample() throws Exception {
-        NioEventLoopGroup group = new NioEventLoopGroup(1);
+        EventLoopGroup group = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
 
         try {
             QuicSslContext context = QuicSslContextBuilder.forClient()
@@ -192,7 +198,7 @@ public class Http3Test extends TestCase {
             port = Http3ClientConnectionImpl.DEFAULT_HTTP3_PORT;
         }
         String ipAddress = InetAddress.getByName(uri.getHost()).getHostAddress();
-        NioEventLoopGroup group = new NioEventLoopGroup(1);
+        EventLoopGroup group = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
 
         try {
             QuicSslContext context = QuicSslContextBuilder.forClient()

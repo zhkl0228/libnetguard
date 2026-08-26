@@ -5,19 +5,9 @@ import com.github.netguard.proxy.socks5.Socks5DatagramPacketHandler;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tech.kwik.core.receive.Receiver;
 
-import java.io.ByteArrayOutputStream;
-import java.io.Closeable;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.net.SocketException;
+import java.io.*;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
@@ -51,7 +41,7 @@ public class UDPRelay implements Runnable, Closeable {
         }
         @Override
         public void run() {
-            byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
+            byte[] buffer = new byte[UDProxy.MAX_DATAGRAM_SIZE];
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
             try {
                 while (true) {
@@ -106,7 +96,7 @@ public class UDPRelay implements Runnable, Closeable {
             dataOutput.writeShort(serverAddress.getPort());
             dataOutput.writeByte(receiveTimeoutSeconds);
             byte[] newPacket = baos.toByteArray();
-            if(newPacket.length > Receiver.MAX_DATAGRAM_SIZE) {
+            if(newPacket.length > UDProxy.MAX_DATAGRAM_SIZE) {
                 throw new IllegalStateException("UDP relay packet exceeds maximum UDP packet size");
             } else {
                 return newPacket;
@@ -118,7 +108,7 @@ public class UDPRelay implements Runnable, Closeable {
 
     @Override
     public void run() {
-        byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
+        byte[] buffer = new byte[UDProxy.MAX_DATAGRAM_SIZE];
         final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
         byte[] magic = new byte[4];
         byte[] ipv4 = new byte[4];

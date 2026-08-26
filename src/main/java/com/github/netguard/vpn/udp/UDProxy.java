@@ -34,7 +34,6 @@ import tech.kwik.core.log.SysOutLogger;
 import tech.kwik.core.packet.InitialPacket;
 import tech.kwik.core.packet.LongHeaderPacket;
 import tech.kwik.core.packet.VersionNegotiationPacket;
-import tech.kwik.core.receive.Receiver;
 import tech.kwik.core.stream.ReceiveBuffer;
 import tech.kwik.core.stream.ReceiveBufferImpl;
 import tech.kwik.core.stream.StreamElement;
@@ -100,6 +99,8 @@ public class UDProxy {
 
     private boolean serverClosed;
 
+    public static final int MAX_DATAGRAM_SIZE = 1500;
+
     private class Server implements Runnable, ProxyContext {
         private final Client client;
         private final Packet packet;
@@ -115,7 +116,7 @@ public class UDProxy {
         public void run() {
             IPacketCapture packetCapture = vpn.getPacketCapture();
             try {
-                final byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
+                final byte[] buffer = new byte[MAX_DATAGRAM_SIZE];
                 final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 boolean firstPacket = true;
                 List<byte[]> pendingList = new ArrayList<>(10);
@@ -529,7 +530,7 @@ public class UDProxy {
         @Override
         public void run() {
             try {
-                final byte[] buffer = new byte[Receiver.MAX_DATAGRAM_SIZE];
+                final byte[] buffer = new byte[MAX_DATAGRAM_SIZE];
                 final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 while (true) {
                     try {

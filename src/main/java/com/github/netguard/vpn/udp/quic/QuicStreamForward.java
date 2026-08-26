@@ -3,9 +3,9 @@ package com.github.netguard.vpn.udp.quic;
 import com.github.netguard.Inspector;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2SessionKey;
+import com.github.netguard.vpn.udp.UDProxy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tech.kwik.core.receive.Receiver;
 
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -56,7 +56,7 @@ public class QuicStreamForward implements Runnable {
     public void run() {
         try (InputStream inputStream = from.openInputStream();
              DataOutputStream outputStream = new DataOutputStream(to.openOutputStream())) {
-            byte[] buf = new byte[Receiver.MAX_DATAGRAM_SIZE];
+            byte[] buf = new byte[UDProxy.MAX_DATAGRAM_SIZE];
             while (true) {
                 try {
                     int read = inputStream.read(buf);
