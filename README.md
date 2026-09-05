@@ -13,7 +13,7 @@
 <dependency>
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.12</version>
+    <version>0.0.14</version>
 </dependency>
 ```
 
