@@ -50,7 +50,7 @@ public class FileReplay extends Replay {
     private void writeLog(ReplayLog replayLog) throws IOException {
         log.debug("writeLog: {}", replayLog);
         synchronized (server) {
-            FileUtils.write(logFile, JSON.toJSONString(replayLog), StandardCharsets.UTF_8, true);
+            FileUtils.write(logFile, JSON.toJSONString(replayLog) + "\n", StandardCharsets.UTF_8, true);
         }
     }
 
