@@ -6,7 +6,7 @@
 
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.13</version>
+    <version>0.0.14</version>
     <packaging>jar</packaging>
     <name>VPN packet capture server</name>
     <description>VPN packet capture server</description>
@@ -33,7 +33,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.test.skip>true</maven.test.skip>
         <netty.version>4.2.17.Final</netty.version>
-        <bc.version>1.84</bc.version>
+        <bc.version>1.85</bc.version>
     </properties>
     <build>
         <extensions>
@@ -142,7 +142,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>2.0.18</version>
+            <version>2.0.19</version>
         </dependency>
         <dependency>
             <groupId>commons-io</groupId>
@@ -233,12 +233,12 @@
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
-            <version>1.2.84</version>
+            <version>2.0.65</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-reload4j</artifactId>
-            <version>2.0.18</version>
+            <version>2.0.19</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -256,13 +256,13 @@
         <dependency>
             <groupId>com.github.zhkl0228</groupId>
             <artifactId>impersonator-okhttp</artifactId>
-            <version>1.0.13</version>
+            <version>1.5.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>4.35.1</version>
+            <version>4.36.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
