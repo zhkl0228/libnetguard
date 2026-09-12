@@ -15,8 +15,6 @@ import com.github.netguard.vpn.tls.TlsSignature;
 import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
-import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
-import com.github.netguard.vpn.udp.quic.kwik.KwikProvider;
 import com.github.zhkl0228.impersonator.ImpersonatorFactory;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
@@ -32,7 +30,6 @@ import org.xbill.DNS.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -63,7 +60,6 @@ public class Main {
                 .enableBroadcast(10)
                 .enableTransparentProxying()
                 .enableProxy()
-                .enableUdpRelay()
                 .withReplayLogFile(replayFile)
                 .withVpnListener(new BaseVpnListener() {
                     @Override
@@ -127,10 +123,6 @@ public class Main {
             return new MyVpnFilter();
         }
         @Override
-        public QuicProxyProvider getQuicProxyProvider() {
-            return new KwikProvider();
-        }
-        @Override
         public AcceptTcpResult acceptTcp(ConnectRequest connectRequest) {
             TlsSignature tlsSignature = connectRequest.getTlsSignature();
             if (tlsSignature != null) {
@@ -181,7 +173,7 @@ public class Main {
         @Override
         public AcceptUdpResult acceptUdp(PacketRequest packetRequest) {
             if (packetRequest.dnsQuery != null) {
-                return AcceptUdpResult.rule(AcceptRule.Forward).setUdpProxy(new InetSocketAddress("127.0.0.1", TEST_PORT));
+                return AcceptUdpResult.rule(AcceptRule.Forward);
             }
             TlsSignature tlsSignature = packetRequest.getTlsSignature();
             if (tlsSignature != null) {
@@ -193,11 +185,7 @@ public class Main {
                         tlsSignature.getJa3Text(),
                         tlsSignature.getJa3nText());
             }
-            AcceptUdpResult result = AcceptUdpResult.rule(AcceptRule.FILTER_H3);
-            if (tlsSignature != null && "http3.is".equals(packetRequest.hostName)) {
-                result.setUdpProxy(new InetSocketAddress("8.217.195.104", 20270));
-            }
-            return result;
+            return AcceptUdpResult.rule(AcceptRule.FILTER_H3);
         }
     }
 

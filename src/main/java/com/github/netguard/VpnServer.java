@@ -11,7 +11,6 @@ import com.github.netguard.vpn.VpnListener;
 import com.github.netguard.vpn.tcp.ClientHelloRecord;
 import com.github.netguard.vpn.tcp.ExtensionServerName;
 import com.github.netguard.vpn.tcp.RootCert;
-import com.github.netguard.vpn.udp.UDPRelay;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
@@ -131,13 +130,6 @@ public class VpnServer {
         this.transparentProxyingPort = port;
     }
 
-    private boolean enableUdpRelay;
-    private UDPRelay udpRelay;
-
-    final void enableUdpRelay() {
-        this.enableUdpRelay = true;
-    }
-
     private Replay replay;
 
     boolean enableProxy;
@@ -165,13 +157,6 @@ public class VpnServer {
         }
         if (broadcast) {
             sendBroadcast();
-        }
-        try {
-            if (enableUdpRelay) {
-                udpRelay = new UDPRelay(getPort());
-            }
-        } catch(IOException e) {
-            log.warn("start udp relay failed.", e);
         }
         if (transparentProxyingPort > 0) {
             try {
@@ -370,7 +355,6 @@ public class VpnServer {
         shutdown = true;
         IOUtils.closeQuietly(serverSocket);
         IOUtils.closeQuietly(transparentProxyingSocketServer);
-        IOUtils.closeQuietly(udpRelay);
         for (ProxyVpn vpn : clients.toArray(new ProxyVpn[0])) {
             vpn.stop();
         }

@@ -475,7 +475,7 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
 
     @Override
     public QuicProxyProvider getQuicProxyProvider() {
-        return QuicProxyProvider.netty();
+        return QuicProxyProvider.kwik();
     }
 
     public static Map<String, String> parseParameters(String parameters) {

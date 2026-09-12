@@ -1,7 +1,6 @@
 package com.github.netguard.vpn.udp;
 
 import com.github.netguard.Inspector;
-import com.github.netguard.proxy.socks5.Socks5DatagramPacketHandler;
 import com.github.netguard.vpn.AcceptUdpResult;
 import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
@@ -173,7 +172,6 @@ public class UDProxy {
                                 PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, client.dnsQuery, serverAddress, vpn, this.packet);
                                 AcceptUdpResult acceptUdpResult = packetCapture.acceptUdp(packetRequest);
                                 AcceptRule rule = acceptUdpResult == null ? null : acceptUdpResult.acceptRule;
-                                InetSocketAddress udpProxy = acceptUdpResult == null ? null : acceptUdpResult.udpProxy;
                                 if (rule == null) {
                                     rule = AcceptRule.Forward;
                                 }
@@ -182,7 +180,7 @@ public class UDProxy {
                                     case Discard:
                                         throw new SocketTimeoutException("discard");
                                     case Forward: {
-                                        setUdpProxy(packetRequest, udpProxy, acceptUdpResult == null ? null : acceptUdpResult.proxyHandler);
+                                        initForwardContext(acceptUdpResult == null ? null : acceptUdpResult.proxyHandler);
                                         break;
                                     }
                                     case FILTER_H3:
@@ -190,11 +188,11 @@ public class UDProxy {
                                         if (packetRequest.hostName == null ||
                                                 packetRequest.hostName.isEmpty() ||
                                                 packetRequest.applicationLayerProtocols.isEmpty()) {
-                                            setUdpProxy(packetRequest, udpProxy, acceptUdpResult.proxyHandler);
+                                            initForwardContext(acceptUdpResult.proxyHandler);
                                             break; // forward traffic
                                         }
                                         Http2Filter http2Filter = rule == AcceptRule.FILTER_H3 ? UDProxy.this.http2Filter : null;
-                                        handleQuicProxy(packetRequest, http2Filter, clientHello, packetCapture.getQuicProxyProvider(), udpProxy);
+                                        handleQuicProxy(packetRequest, http2Filter, clientHello, packetCapture.getQuicProxyProvider());
                                     }
                                 }
                             }
@@ -226,15 +224,7 @@ public class UDProxy {
             }
         }
 
-        private void setUdpProxy(PacketRequest packetRequest, InetSocketAddress udpProxy, ProxyHandler proxyHandler) throws IOException {
-            UDProxy.this.udpProxy = udpProxy;
-            if (udpProxy != null) {
-                byte[] connect = UDPRelay.createConnectUdpRelayRequest(new InetSocketAddress(packetRequest.serverIp, packetRequest.port), 60);
-                forwardAddress = udpProxy;
-                DatagramPacket packet = new DatagramPacket(connect, connect.length);
-                packet.setSocketAddress(forwardAddress);
-                remoteSocket.send(packet);
-            }
+        private void initForwardContext(ProxyHandler proxyHandler) {
             if (proxyHandler != null) {
                 proxyHandler.initContext(this);
                 UDProxy.this.proxyHandler = proxyHandler;
@@ -261,7 +251,7 @@ public class UDProxy {
             return remoteSocket;
         }
 
-        private void handleQuicProxy(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello, QuicProxyProvider quicProxyProvider, InetSocketAddress udpProxy) throws SocketTimeoutException {
+        private void handleQuicProxy(PacketRequest packetRequest, Http2Filter http2Filter, ClientHello clientHello, QuicProxyProvider quicProxyProvider) throws SocketTimeoutException {
             try {
                 Duration connectTimeout = Duration.ofSeconds(60);
                 for (Extension extension : clientHello.getExtensions()) {
@@ -274,7 +264,7 @@ public class UDProxy {
                         break;
                     }
                 }
-                client.connection = quicProxyProvider.newClientConnection(packetRequest, connectTimeout, udpProxy);
+                client.connection = quicProxyProvider.newClientConnection(packetRequest, connectTimeout);
                 log.debug("handleQuic applicationLayerProtocols={}", packetRequest.applicationLayerProtocols);
                 Http2Session session = new Http2Session(clientAddress.getHostString(), serverAddress.getHostString(), clientAddress.getPort(), serverAddress.getPort(), packetRequest.hostName);
                 HandshakeResult handshakeResult = client.connection.handshake(session);
@@ -503,9 +493,6 @@ public class UDProxy {
     }
 
     private ProxyHandler proxyHandler;
-    private InetSocketAddress udpProxy;
-
-    private final Socks5DatagramPacketHandler socks5DatagramPacketHandler = new Socks5DatagramPacketHandler();
 
     private class Client implements Runnable {
         private InetSocketAddress forwardAddress;
@@ -536,11 +523,8 @@ public class UDProxy {
                     try {
                         packet.setData(buffer);
                         remoteSocket.receive(packet);
-                        if (udpProxy != null) {
-                            socks5DatagramPacketHandler.decapsulate(packet);
-                        }
                         DatagramSocket socket = selectSocket(packet.getSocketAddress());
-                        log.debug("Received packet: {}, udpProxy={}, serverAddress={}, localSocket={}, socket={}", packet.getSocketAddress(), udpProxy, serverAddress, localSocket, socket);
+                        log.debug("Received packet: {}, serverAddress={}, localSocket={}, socket={}", packet.getSocketAddress(), serverAddress, localSocket, socket);
                         final int length = packet.getLength();
                         if (log.isDebugEnabled()) {
                             byte[] data = new byte[length];

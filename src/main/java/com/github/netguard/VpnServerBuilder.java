@@ -67,13 +67,6 @@ public class VpnServerBuilder {
         return this;
     }
 
-    private boolean enableUdpRelay;
-
-    public VpnServerBuilder enableUdpRelay() {
-        this.enableUdpRelay = true;
-        return this;
-    }
-
     private File replayLogFile;
 
     public VpnServerBuilder withReplayLogFile(File replayLogFile) {
@@ -98,9 +91,6 @@ public class VpnServerBuilder {
 
     public VpnServer startServer() throws IOException {
         VpnServer server = createVpnServer();
-        if (enableUdpRelay) {
-            server.enableUdpRelay();
-        }
         if(replayLogFile != null) {
             server.setReplayLogFile(replayLogFile);
         }

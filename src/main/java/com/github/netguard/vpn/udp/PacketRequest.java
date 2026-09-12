@@ -27,6 +27,13 @@ public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
 
     private static final Logger log = LoggerFactory.getLogger(PacketRequest.class);
 
+    /**
+     * MITM 能接手的 HTTP/3 ALPN 标识，逐条对应抓到过的样本："h3" 是 RFC 9114 的正式标识，
+     * "h3-alias-02" 见 fdf13f6 的实测样本。KwikProvider 从客户端提供的列表里挑其中一个
+     * 转发给真实服务端，再把同一个值回给客户端，所以往这里加一项之前必须先有样本。
+     */
+    public static final List<String> HTTP3_APPLICATION_LAYER_PROTOCOLS = Collections.unmodifiableList(Arrays.asList("h3", "h3-alias-02"));
+
     public final String serverIp;
     public final int port;
     public final String hostName;
@@ -89,8 +96,7 @@ public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
                 } else if (extension instanceof ApplicationLayerProtocolNegotiationExtension) {
                     ApplicationLayerProtocolNegotiationExtension applicationLayerProtocolNegotiationExtension = (ApplicationLayerProtocolNegotiationExtension) extension;
                     applicationLayerProtocols = applicationLayerProtocolNegotiationExtension.getProtocols();
-                    if (!applicationLayerProtocols.contains("h3") &&
-                            !applicationLayerProtocols.contains("h3-alias-02")) {
+                    if (Collections.disjoint(applicationLayerProtocols, HTTP3_APPLICATION_LAYER_PROTOCOLS)) {
                         throw new IllegalStateException("applicationLayerProtocols=" + applicationLayerProtocols);
                     }
                 }
