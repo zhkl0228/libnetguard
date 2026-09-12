@@ -365,16 +365,16 @@ public class PacketDecoder implements IPacketCapture, HttpProcessor {
     protected void onPollingResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
-            log.debug("onPollingResponse {} bytes session={}, application={}, requestUri={}, request={}, response={}{}\n{}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), request, response,
-                    rawBody("response body", data), request.getHeaderString(), response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
+            log.debug("onPollingResponse {} bytes session={}, application={}, requestUri={}, request={}, response={}{}\n{}\nResponse code: {} {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), request, response,
+                    rawBody("response body", data), request.getHeaderString(), response.getRequestVersion(), response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
         }
     }
 
     protected void onResponse(HttpSession session, com.github.netguard.handler.http.HttpRequest request, com.github.netguard.handler.http.HttpResponse response) {
         if (log.isDebugEnabled()) {
             byte[] data = response.getResponseData();
-            log.debug("onResponse {} bytes session={}, application={}, requestUri={}, response={}{}\nResponse code: {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), response,
-                    rawBody("response body", data), response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
+            log.debug("onResponse {} bytes session={}, application={}, requestUri={}, response={}{}\nResponse code: {} {} {}\n{}", data == null ? 0 : data.length, session, session.getApplication(), request.getRequestUri(), response,
+                    rawBody("response body", data), response.getRequestVersion(), response.getResponseCode(), response.getResponseCodeMsg(), response.getHeaderString());
         }
     }
 
