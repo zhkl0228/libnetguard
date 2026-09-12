@@ -802,6 +802,18 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
+    /**
+     * 交给 {@link com.github.netguard.vpn.tcp.h2.Http2Filter} 的请求与响应的协议版本。这条路径只在
+     * SSLProxyV2 的 enterH2Pipeline 分支里用，跑的就是 HTTP/2，写成 HTTP/1.1 等于告诉 filter 一件假事。
+     * <p>
+     * 带上 minor 是 netty 的要求：HttpVersion 的 VERSION_PATTERN 是 {@code (\S+)/(\d+)\.(\d+)}，
+     * "HTTP/2" 会被拒（invalid version format）。
+     * <p>
+     * 只影响 filter 看到的和日志打印的内容：回写线上的字节来自 headersFrame.headers()，
+     * 没有任何地方读这两个对象的 protocolVersion()。
+     */
+    private static final HttpVersion HTTP_2_0 = HttpVersion.valueOf("HTTP/2.0");
+
     private static HttpRequest createHttpRequest(HttpHeadersFrame headersFrame, String sessionKey, Akamai akamai) {
         HttpHeaders headers = headersFrame.headers().copy();
         HttpMethod method = HttpMethod.valueOf(headers.get(":method"));
@@ -811,7 +823,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         headers.remove(":path");
 
 
-        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, uri, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
+        DefaultHttpRequest request = new DefaultHttpRequest(HTTP_2_0, method, uri, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
 
         // Remove the scheme header
         headers.remove(":scheme");
@@ -841,7 +853,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         // Create the first line of the request from the name/value pairs
         HttpResponseStatus status = HttpResponseStatus.valueOf(headers.getInt(":status"));
         headers.remove(":status");
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
+        HttpResponse response = new DefaultHttpResponse(HTTP_2_0, status, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
         addNetGuardHeaders(headers, headersFrame, sessionKey, akamai);
         addHeaders(response, headers);
         return response;

@@ -182,9 +182,22 @@ class Http3StreamForward extends QuicStreamForward {
         }
     }
 
+    /**
+     * 交给 {@link Http2Filter} 的请求与响应的协议版本。这条路径上跑的是 HTTP/3，写成 HTTP/1.1
+     * 等于告诉 filter 一件假事——它连 HTTP/2 和 HTTP/3 都分不出来。
+     * <p>
+     * 带上 minor 是 netty 的要求：HttpVersion 的 VERSION_PATTERN 是 {@code (\S+)/(\d+)\.(\d+)}，
+     * "HTTP/3" 会被拒（invalid version format），所以只能是 "HTTP/3.0"——和 netty 自己给 HTTP/2
+     * 用的 "HTTP/2.0" 一致。
+     * <p>
+     * 只影响 filter 看到的和日志打印的内容：回写线上的字节是从 NetGuardHttp2Headers 重新压缩的
+     * （见 onEOF 里的 headerList），没有任何地方读这两个对象的 protocolVersion()。
+     */
+    private static final HttpVersion HTTP_3_0 = HttpVersion.valueOf("HTTP/3.0");
+
     private static HttpResponse createHttpResponse(Map<String, String> headers, String sessionKey, int streamId) {
         HttpResponseStatus status = HttpResponseStatus.valueOf(Integer.parseInt(headers.get(":status")));
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
+        HttpResponse response = new DefaultHttpResponse(HTTP_3_0, status, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
         addNetGuardHeaders(headers, sessionKey, streamId);
         addHeaders(response, headers);
         return response;
@@ -194,7 +207,7 @@ class Http3StreamForward extends QuicStreamForward {
         HttpMethod method = HttpMethod.valueOf(headers.get(":method"));
         String uri = headers.get(":path");
 
-        DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, uri, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
+        DefaultHttpRequest request = new DefaultHttpRequest(HTTP_3_0, method, uri, DefaultHttpHeadersFactory.headersFactory().withValidation(false));
 
         // Replace the H2 host header with the HTTP host header
         String host = headers.get(":authority");
