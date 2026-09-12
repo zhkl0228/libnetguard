@@ -41,8 +41,8 @@ class KwikHandshakeResult implements HandshakeResult {
         }
         ServerCertificate serverCertificate = new ServerCertificate(peerCertificate);
         ServerConnectionConfig serverConnectionConfig = ServerConnectionConfig.builder()
-                .maxOpenPeerInitiatedBidirectionalStreams(Short.MAX_VALUE)
-                .maxOpenPeerInitiatedUnidirectionalStreams(Short.MAX_VALUE)
+                .maxOpenPeerInitiatedBidirectionalStreams(KwikProxy.MAX_CONCURRENT_PEER_INITIATED_STREAMS)
+                .maxOpenPeerInitiatedUnidirectionalStreams(KwikProxy.MAX_CONCURRENT_PEER_INITIATED_STREAMS)
                 .build();
         ServerConnector.Builder builder = ServerConnector.builder();
         ServerCertificate.ServerContext serverContext = serverCertificate.getServerContext(vpn.getRootCert());
@@ -51,6 +51,7 @@ class KwikHandshakeResult implements HandshakeResult {
         if (log.isDebugEnabled()) {
             serverLogger = new PrintStreamLogger(System.out);
             serverLogger.logDebug(true);
+            serverLogger.logWarning(true); // BaseLogger 里默认 false，不开就连 kwik 的协议告警都收不到
         } else {
             serverLogger = new NullLogger();
         }
@@ -61,10 +62,13 @@ class KwikHandshakeResult implements HandshakeResult {
                 .withConfiguration(serverConnectionConfig)
                 .withLogger(serverLogger)
                 .build();
+        // 先注册再 start：ALPN 表是解析 ClientHello 时查的（ApplicationProtocolRegistry
+        // #selectSupportedApplicationProtocol），空表会让 kwik 抛 NoApplicationProtocolAlert，
+        // 在握手阶段就关掉连接——连 createConnection 都不会调，症状是完全收不到流。
+        serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new KwikProxy(vpn.getExecutorService(), connection, session, http2Filter));
         serverConnector.start();
         int listenPort = socket.getLocalPort();
         log.debug("handshakeApplicationProtocol={}, listenPort={}, filterHttp3={}", handshakeApplicationProtocol, listenPort, http2Filter);
-        serverConnector.registerApplicationProtocol(handshakeApplicationProtocol, new KwikProxy(vpn.getExecutorService(), connection, session, http2Filter));
         InetSocketAddress forwardAddress = new InetSocketAddress("127.0.0.1", listenPort);
         return new KwikServer(serverConnector, forwardAddress);
     }

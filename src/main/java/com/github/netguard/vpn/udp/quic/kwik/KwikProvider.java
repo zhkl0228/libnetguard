@@ -26,6 +26,7 @@ public class KwikProvider extends QuicProxyProvider {
         if (log.isDebugEnabled()) {
             clientLogger = new PrintStreamLogger(System.err);
             clientLogger.logDebug(true);
+            clientLogger.logWarning(true); // BaseLogger 里默认 false，不开就连 kwik 的协议告警都收不到
         } else {
             clientLogger = new NullLogger();
         }
