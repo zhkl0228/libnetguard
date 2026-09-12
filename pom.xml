@@ -6,7 +6,7 @@
 
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.14</version>
+    <version>0.0.15</version>
     <packaging>jar</packaging>
     <name>VPN packet capture server</name>
     <description>VPN packet capture server</description>
@@ -34,6 +34,7 @@
         <maven.test.skip>true</maven.test.skip>
         <netty.version>4.2.17.Final</netty.version>
         <bc.version>1.85</bc.version>
+        <impersonator.version>1.10.1</impersonator.version>
     </properties>
     <build>
         <extensions>
@@ -193,25 +194,35 @@
             <version>${netty.version}</version>
         </dependency>
         <dependency>
-            <groupId>tech.kwik</groupId>
-            <artifactId>agent15</artifactId>
-            <version>3.3</version>
+            <groupId>com.github.zhkl0228</groupId>
+            <artifactId>impersonator-agent15</artifactId>
+            <version>${impersonator.version}</version>
         </dependency>
         <dependency>
-            <groupId>tech.kwik</groupId>
-            <artifactId>kwik</artifactId>
-            <version>0.11</version>
+            <groupId>com.github.zhkl0228</groupId>
+            <artifactId>impersonator-kwik</artifactId>
+            <version>${impersonator.version}</version>
         </dependency>
         <dependency>
-            <groupId>tech.kwik</groupId>
-            <artifactId>qpack</artifactId>
-            <version>2.1</version>
+            <groupId>com.github.zhkl0228</groupId>
+            <artifactId>impersonator-qpack</artifactId>
+            <version>${impersonator.version}</version>
         </dependency>
         <dependency>
             <groupId>tech.kwik</groupId>
             <artifactId>flupke</artifactId>
             <version>0.9.4</version>
             <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>tech.kwik</groupId>
+                    <artifactId>kwik</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>tech.kwik</groupId>
+                    <artifactId>qpack</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>dnsjava</groupId>
@@ -255,7 +266,7 @@
         <dependency>
             <groupId>com.github.zhkl0228</groupId>
             <artifactId>impersonator-okhttp</artifactId>
-            <version>1.5.2</version>
+            <version>${impersonator.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
