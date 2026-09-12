@@ -142,18 +142,15 @@ public class Main {
             }
             if ("legy.line-apps.com".equals(connectRequest.hostName)) {
                 return AcceptTcpResult.builder(AllowRule.CONNECT_TCP)
-                        .enableSocksProxy("127.0.0.1", 20230)
                         .build();
             }
             if ("tls.browserleaks.com".equals(connectRequest.hostName)) {
                 return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
-                        .enableSocksProxy("127.0.0.1", 20230)
                         .configClientSSLContext(ImpersonatorFactory.macFirefox().newSSLContext(null, null))
                         .build();
             }
             if ("tools.scrapfly.io".equals(connectRequest.hostName)) {
                 return AcceptTcpResult.builder(AllowRule.CONNECT_SSL)
-                        .enableSocksProxy("127.0.0.1", 20230)
                         .configClientSSLContext(ImpersonatorFactory.macChrome().newSSLContext(null, null))
                         .build();
             }
@@ -163,7 +160,7 @@ public class Main {
             }
             if (connectRequest.isSSL() && connectRequest.hostName != null) {
                 return AcceptTcpResult.builder(connectRequest.hostName.contains("google") ? AllowRule.CONNECT_TCP : AllowRule.CONNECT_SSL)
-                        .configClientSSLContext(ImpersonatorFactory.android().newSSLContext(null, null))
+                        .configClientSSLContext(ImpersonatorFactory.android().newTrustAnyCertificateSSLContext())
                         .build();
             }
             Application[] applications = connectRequest.queryApplications();
