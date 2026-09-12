@@ -41,7 +41,6 @@ VpnServer vpnServer = VpnServerBuilder.create()
         .withPort(20240)
         .enableTransparentProxying()
         .enableProxy()
-        .enableUdpRelay()
         .enablePreMasterSecretsLogFile()
         .withVpnListener(new BaseVpnListener() {
             @Override
