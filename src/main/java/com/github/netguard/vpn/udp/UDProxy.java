@@ -475,13 +475,40 @@ public class UDProxy {
         }
     }
 
-    private void sendToClient(DatagramSocket socket, DatagramPacket packet) throws IOException {
+    /**
+     * 回客户端的包必须从 {@link #localSocket} 发出，不管它是从哪里收上来的：
+     * {@link #redirect()} 把 localSocket 的端口作为 redirect 目标交给 VPN，两边的转发层都拿
+     * 「回包的源端口是不是这个 redirect 端口」来判断该给客户端伪造成什么源地址。
+     * <p>
+     * native tun 引擎（ServiceSinkhole）在 udp.c 里是这么写的：
+     * <pre>
+     * if (cur-&gt;redirect.rport &gt; 0 &amp;&amp; ntohs(actual_port) != cur-&gt;redirect.rport)
+     *     use_actual_sender = 1;
+     * ...
+     * ip4-&gt;saddr   = use_actual_sender ? actual_ip4  : cur-&gt;daddr.ip4;
+     * udp-&gt;source  = use_actual_sender ? actual_port : cur-&gt;dest;
+     * </pre>
+     * 源端口对得上 redirect 端口，写进 tun 的包源地址才是真实服务端（8.x.x.x:443），客户端才认；
+     * 对不上就原样透传成 127.0.0.1:&lt;临时端口&gt;，客户端的 socket 直接丢弃。
+     * httptoolkit 那条路径（SessionManager#createNewUDPSession）更干脆：
+     * {@code channel.connect(127.0.0.1:localSocket.port)}，connected 的 UDP socket 连收都不会收。
+     * <p>
+     * 之前这里按来源地址选 socket：来自 serverAddress 的走 localSocket，其余的现建一个
+     * {@code new DatagramSocket(0)}。QUIC MITM 时回包来自本地 kwik 服务端（127.0.0.1:listenPort）
+     * 而不是 serverAddress，于是服务端的每一个包都被伪造成来自 127.0.0.1 而被客户端丢掉：
+     * 客户端收不到 ServerHello，只能一遍遍重传同一个 Initial（服务端侧表现为
+     * "Discarding CryptoFrame[0,259], because stream already parsed to 259"，且客户端的 DCID
+     * 始终是最初那个随机值），服务端则因为只收到 Initial 而卡在 3 倍放大限制上
+     * （"Sending data may be limited by remaining anti-amplification limit"），
+     * 握手永远完不成，KwikProxy 自然一条流都收不到。
+     */
+    private void sendToClient(DatagramPacket packet) throws IOException {
         if (proxyHandler == null) {
-            socket.send(packet);
+            localSocket.send(packet);
         } else {
             byte[] buf = packet.getData();
             int newLength = proxyHandler.handleUdpServer((InetSocketAddress) packet.getSocketAddress(), buf, packet.getLength());
-            sendProxyUdp(socket, packet, newLength);
+            sendProxyUdp(localSocket, packet, newLength);
         }
     }
 
@@ -499,21 +526,6 @@ public class UDProxy {
         private Message dnsQuery;
         private ClientConnection connection;
         private QuicServer quicServer;
-        private final Map<SocketAddress, DatagramSocket> sockets = new HashMap<>();
-        private DatagramSocket selectSocket(SocketAddress address) throws IOException {
-            if(serverAddress.equals(address)) {
-                return localSocket;
-            }
-            DatagramSocket socket = sockets.get(address);
-            if (socket != null) {
-                return socket;
-            }
-            socket = new DatagramSocket(0);
-            socket.setSoTimeout(READ_TIMEOUT);
-            sockets.put(address, socket);
-            log.debug("Creating new socket for {} => {}", address, socket.getLocalPort());
-            return socket;
-        }
         @Override
         public void run() {
             try {
@@ -523,8 +535,7 @@ public class UDProxy {
                     try {
                         packet.setData(buffer);
                         remoteSocket.receive(packet);
-                        DatagramSocket socket = selectSocket(packet.getSocketAddress());
-                        log.debug("Received packet: {}, serverAddress={}, localSocket={}, socket={}", packet.getSocketAddress(), serverAddress, localSocket, socket);
+                        log.debug("Received packet: {}, serverAddress={}, localSocket={}", packet.getSocketAddress(), serverAddress, localSocket);
                         final int length = packet.getLength();
                         if (log.isDebugEnabled()) {
                             byte[] data = new byte[length];
@@ -561,7 +572,7 @@ public class UDProxy {
                             }
                         }
                         packet.setSocketAddress(forwardAddress);
-                        sendToClient(socket, packet);
+                        sendToClient(packet);
                     } catch (SocketTimeoutException e) {
                         log.trace("client", e);
                         if (serverClosed) {
@@ -573,9 +584,6 @@ public class UDProxy {
                     }
                 }
             } finally {
-                for(DatagramSocket socket : sockets.values()) {
-                    IOUtils.closeQuietly(socket);
-                }
                 IOUtils.closeQuietly(quicServer);
                 IOUtils.closeQuietly(connection);
                 IOUtils.closeQuietly(localSocket);
