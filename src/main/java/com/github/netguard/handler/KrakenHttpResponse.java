@@ -50,8 +50,7 @@ class KrakenHttpResponse implements com.github.netguard.handler.http.HttpRespons
             case HTTP_1_1:
                 return "HTTP/1.1";
             case HTTP_2_0:
-                // 2.0 不出现在线上，HTTP/2 才是 RFC 9113 的写法
-                return "HTTP/2";
+                return "HTTP/2.0";
         }
         throw new UnsupportedOperationException("Unsupported http version: " + response.getHttpVersion());
     }
