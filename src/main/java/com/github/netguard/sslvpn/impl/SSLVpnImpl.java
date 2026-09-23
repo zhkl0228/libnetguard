@@ -215,7 +215,7 @@ public class SSLVpnImpl extends SSLVpn {
     private HttpResponse handleATrust(HttpRequest request) throws IOException {
         if ("/".equals(request.uri())) {
             String userAgent = request.headers().get("User-Agent");
-            if (userAgent.contains("aTrustAPP")) {
+            if (userAgent != null && userAgent.contains("aTrustAPP")) {
                 HttpHeaders headers = new DefaultHttpHeaders();
                 headers.add("Location", "/portal/");
                 headers.add("Connection", "close");
