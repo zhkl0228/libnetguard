@@ -6,7 +6,7 @@
 
     <groupId>com.github.zhkl0228</groupId>
     <artifactId>netguard</artifactId>
-    <version>0.0.15</version>
+    <version>0.0.16</version>
     <packaging>jar</packaging>
     <name>VPN packet capture server</name>
     <description>VPN packet capture server</description>
@@ -33,8 +33,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.test.skip>true</maven.test.skip>
         <netty.version>4.2.18.Final</netty.version>
-        <bc.version>1.85</bc.version>
-        <impersonator.version>1.10.2</impersonator.version>
+        <bc.version>1.86</bc.version>
+        <impersonator.version>1.11.0</impersonator.version>
     </properties>
     <build>
         <extensions>
