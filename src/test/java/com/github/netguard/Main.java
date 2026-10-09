@@ -15,6 +15,9 @@ import com.github.netguard.vpn.tls.TlsSignature;
 import com.github.netguard.vpn.udp.AcceptRule;
 import com.github.netguard.vpn.udp.DNSFilter;
 import com.github.netguard.vpn.udp.PacketRequest;
+import com.github.netguard.vpn.udp.dns.DnsQuery;
+import com.github.netguard.vpn.udp.dns.DnsRecord;
+import com.github.netguard.vpn.udp.dns.DnsResponse;
 import com.github.zhkl0228.impersonator.ImpersonatorFactory;
 import com.twitter.http2.HttpFrameForward;
 import eu.faircode.netguard.Application;
@@ -25,16 +28,15 @@ import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.krakenapps.pcap.decoder.http.impl.HttpSession;
-import org.xbill.DNS.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -244,41 +246,30 @@ public class Main {
         }
 
         @Override
-        public Message cancelDnsQuery(Message dnsQuery) {
-            List<Record> list = dnsQuery.getSection(0);
-            if (list.size() == 1) {
-                Record record = list.get(0);
-                if (record.getName().toString().startsWith("qq.com")) {
-                    try {
-                        Message dnsResponse = new Message(dnsQuery.getHeader().getID());
-                        Header header = dnsResponse.getHeader();
-                        header.setFlag(Flags.QR);
-                        header.setFlag(Flags.RD);
-                        header.setFlag(Flags.RA);
-                        dnsResponse.addRecord(new ARecord(new Name("qq.com."), DClass.IN, 3600, InetAddress.getByName("192.168.31.88")), 1);
-                        return dnsResponse;
-                    } catch (Exception e) {
-                        throw new IllegalStateException("cancelDnsQuery", e);
-                    }
+        public DnsResponse cancelDnsQuery(DnsQuery dnsQuery) {
+            if ("qq.com".equals(dnsQuery.getName()) && dnsQuery.getType() == DnsRecord.TYPE_A) {
+                try {
+                    DnsResponse dnsResponse = dnsQuery.reply();
+                    dnsResponse.getAnswers().add(DnsRecord.a("qq.com", 3600, (Inet4Address) InetAddress.getByName("192.168.31.88")));
+                    return dnsResponse;
+                } catch (Exception e) {
+                    throw new IllegalStateException("cancelDnsQuery", e);
                 }
             }
             return null;
         }
 
         @Override
-        public Message filterDnsResponse(Message dnsQuery, Message dnsResponse) {
-            List<Record> list = dnsQuery.getSection(0);
-            if (list.size() == 1) {
-                Record record = list.get(0);
-                if (record.getName().toString().startsWith("baidu.com")) {
-                    try {
-                        dnsResponse.addRecord(new ARecord(new Name("baidu.com."), DClass.IN, 3600, InetAddress.getByName("192.168.31.88")), 1);
-                    } catch (Exception e) {
-                        throw new IllegalStateException("filterDnsResponse", e);
-                    }
+        public DnsResponse filterDnsResponse(DnsQuery dnsQuery, DnsResponse dnsResponse) {
+            if ("baidu.com".equals(dnsQuery.getName()) && dnsQuery.getType() == DnsRecord.TYPE_A) {
+                try {
+                    dnsResponse.getAnswers().add(DnsRecord.a("baidu.com", 3600, (Inet4Address) InetAddress.getByName("192.168.31.88")));
+                    return dnsResponse;
+                } catch (Exception e) {
+                    throw new IllegalStateException("filterDnsResponse", e);
                 }
             }
-            return dnsResponse;
+            return null;
         }
     }
 

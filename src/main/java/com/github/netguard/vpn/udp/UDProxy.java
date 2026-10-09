@@ -6,6 +6,8 @@ import com.github.netguard.vpn.IPacketCapture;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.h2.Http2Filter;
 import com.github.netguard.vpn.tcp.h2.Http2Session;
+import com.github.netguard.vpn.udp.dns.DnsQuery;
+import com.github.netguard.vpn.udp.dns.DnsResponse;
 import com.github.netguard.vpn.udp.quic.ClientConnection;
 import com.github.netguard.vpn.udp.quic.HandshakeResult;
 import com.github.netguard.vpn.udp.quic.QuicProxyProvider;
@@ -17,7 +19,6 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.xbill.DNS.Message;
 import tech.kwik.agent15.TlsConstants;
 import tech.kwik.agent15.alert.DecodeErrorException;
 import tech.kwik.agent15.extension.Extension;
@@ -40,10 +41,10 @@ import tech.kwik.core.tls.QuicTransportParametersExtension;
 
 import java.io.IOException;
 import java.net.*;
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 
 public class UDProxy {
@@ -51,6 +52,8 @@ public class UDProxy {
     private static final Logger log = LoggerFactory.getLogger(UDProxy.class);
 
     private static final int READ_TIMEOUT = 60000;
+
+    private static final int DNS_PORT = 53;
 
     public static Allowed redirect(InspectorVpn vpn, Packet packet) {
         if ("255.255.255.255".equals(packet.daddr)) {
@@ -72,6 +75,11 @@ public class UDProxy {
     private final DatagramSocket localSocket;
     private final Http2Filter http2Filter;
     private final DNSFilter dnsFilter;
+    /**
+     * 目的端口 53 即认定为 DNS：此后每个客户端包都必须能按查询解码、每个上游包都必须能按应答解码，
+     * 解不了就抛异常结束这条流。只在有 IPacketCapture 时才解码，没人用就不碰。
+     */
+    private final boolean dnsFlow;
 
     private UDProxy(InspectorVpn vpn, Packet packet) throws SocketException {
         this.vpn = vpn;
@@ -85,6 +93,7 @@ public class UDProxy {
         IPacketCapture packetCapture = vpn.getPacketCapture();
         this.http2Filter = packetCapture == null ? null : packetCapture.getH2Filter();
         this.dnsFilter = packetCapture == null ? null : packetCapture.getDNSFilter();
+        this.dnsFlow = packetCapture != null && serverAddress.getPort() == DNS_PORT;
 
         ExecutorService executorService = vpn.getExecutorService();
         Client client = new Client();
@@ -132,12 +141,30 @@ public class UDProxy {
                                 log.debug("{}", Inspector.inspectString(data, "ServerReceived: " + clientAddress + " => " + serverAddress + ", base64=" + Base64.getEncoder().encodeToString(data)));
                             }
                         }
-                        if (firstPacket || continueQuic) {
-                            if (firstPacket) {
-                                client.forwardAddress = (InetSocketAddress) packet.getSocketAddress();
+                        if (firstPacket) {
+                            client.forwardAddress = (InetSocketAddress) packet.getSocketAddress();
+                        }
+                        DnsQuery dnsQuery = null;
+                        if (dnsFlow) {
+                            // 同一个 socket 上可能连发多条查询（比如 A 和 AAAA），每条都解码、按 ID 记下
+                            dnsQuery = DnsQuery.decode(buffer, 0, length);
+                            log.trace("dnsQuery={}", dnsQuery);
+                            if (dnsFilter != null) {
+                                DnsResponse fake = dnsFilter.cancelDnsQuery(dnsQuery);
+                                if (fake != null) {
+                                    log.trace("cancelDnsQuery: {}", fake);
+                                    byte[] fakeResponse = fake.encode();
+                                    DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
+                                    fakePacket.setSocketAddress(client.forwardAddress);
+                                    localSocket.send(fakePacket);
+                                    continue;
+                                }
+                                client.pendingDnsQueries.put(dnsQuery.getId(), dnsQuery);
                             }
+                        }
+                        if (firstPacket || continueQuic) {
                             ClientHello clientHello = null;
-                            if (client.dnsQuery == null || continueQuic) {
+                            if (!dnsFlow) {
                                 try {
                                     clientHello = detectQuicClientHello(buffer, length);
                                     if (clientHello == null && continueQuic) {
@@ -153,23 +180,8 @@ public class UDProxy {
                                     continue;
                                 }
                             }
-                            if (firstPacket) {
-                                client.dnsQuery = detectDnsQuery(buffer, length);
-                                log.trace("dnsQuery={}", client.dnsQuery);
-                            }
-                            Message fake;
-                            if (dnsFilter != null &&
-                                    client.dnsQuery != null &&
-                                    (fake = dnsFilter.cancelDnsQuery(client.dnsQuery)) != null) {
-                                log.trace("cancelDnsQuery: {}", fake);
-                                byte[] fakeResponse = fake.toWire();
-                                DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
-                                fakePacket.setSocketAddress(client.forwardAddress);
-                                localSocket.send(fakePacket);
-                                continue;
-                            }
                             if (packetCapture != null) {
-                                PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, client.dnsQuery, serverAddress, vpn, this.packet);
+                                PacketRequest packetRequest = new PacketRequest(buffer, length, clientHello, dnsQuery, serverAddress, vpn, this.packet);
                                 AcceptUdpResult acceptUdpResult = packetCapture.acceptUdp(packetRequest);
                                 AcceptRule rule = acceptUdpResult == null ? null : acceptUdpResult.acceptRule;
                                 if (rule == null) {
@@ -282,21 +294,6 @@ public class UDProxy {
             }
         }
 
-        private Message detectDnsQuery(byte[] buffer, int length) {
-            try {
-                ByteBuffer bb = ByteBuffer.wrap(buffer);
-                bb.limit(length);
-                Message message = new Message(bb);
-                if (!message.getSection(0).isEmpty()) {
-                    return message;
-                }
-            } catch (IOException | BufferUnderflowException e) {
-                log.trace("detectDnsQuery", e);
-            } catch (Exception e) {
-                log.warn("detectDnsQuery", e);
-            }
-            return null;
-        }
         private ClientHello detectQuicClientHello(byte[] buffer, int length) throws ReassembleException {
             try {
                 ByteBuffer bb = ByteBuffer.wrap(buffer);
@@ -523,7 +520,8 @@ public class UDProxy {
 
     private class Client implements Runnable {
         private InetSocketAddress forwardAddress;
-        private Message dnsQuery;
+        /** 按 ID 记下已发往上游的查询，只在有 DNSFilter 时用。不在收到应答时删除：客户端重传会收到同一 ID 的多份应答。 */
+        private final Map<Integer, DnsQuery> pendingDnsQueries = new ConcurrentHashMap<>();
         private ClientConnection connection;
         private QuicServer quicServer;
         @Override
@@ -549,26 +547,17 @@ public class UDProxy {
                         if (forwardAddress == null) {
                             throw new IllegalStateException("vpnAddress is null");
                         }
-                        if (dnsQuery != null) {
-                            try {
-                                ByteBuffer bb = ByteBuffer.wrap(packet.getData(), 0, packet.getLength());
-                                bb.limit(length);
-                                Message dnsResponse = new Message(bb);
-                                log.trace("client={}, server={}, dnsQuery={}\ndnsResponse={}", clientAddress, serverAddress, dnsQuery, dnsResponse);
-
-                                if (dnsFilter != null) {
-                                    Message fake = dnsFilter.filterDnsResponse(dnsQuery, dnsResponse);
-                                    if (fake != null) {
-                                        log.trace("filterDnsResponse: {}", fake);
-                                        byte[] fakeResponse = fake.toWire();
-                                        DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
-                                        fakePacket.setSocketAddress(forwardAddress);
-                                        localSocket.send(fakePacket);
-                                        continue;
-                                    }
-                                }
-                            } catch (Exception e) {
-                                log.warn("decode dns response, query={}", dnsQuery, e);
+                        if (dnsFlow && dnsFilter != null) {
+                            DnsResponse dnsResponse = DnsResponse.decode(buffer, 0, length, pendingDnsQueries::get);
+                            log.trace("client={}, server={}, dnsResponse={}", clientAddress, serverAddress, dnsResponse);
+                            DnsResponse fake = dnsFilter.filterDnsResponse(dnsResponse.getQuery(), dnsResponse);
+                            if (fake != null) {
+                                log.trace("filterDnsResponse: {}", fake);
+                                byte[] fakeResponse = fake.encode();
+                                DatagramPacket fakePacket = new DatagramPacket(fakeResponse, fakeResponse.length);
+                                fakePacket.setSocketAddress(forwardAddress);
+                                localSocket.send(fakePacket);
+                                continue;
                             }
                         }
                         packet.setSocketAddress(forwardAddress);

@@ -7,11 +7,11 @@ import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tls.JA3Signature;
 import com.github.netguard.vpn.tls.QuicClientHello;
 import com.github.netguard.vpn.tls.TlsSignature;
+import com.github.netguard.vpn.udp.dns.DnsQuery;
 import eu.faircode.netguard.Application;
 import eu.faircode.netguard.Packet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.xbill.DNS.Message;
 import tech.kwik.agent15.extension.ApplicationLayerProtocolNegotiationExtension;
 import tech.kwik.agent15.extension.Extension;
 import tech.kwik.agent15.extension.ServerNameExtension;
@@ -38,7 +38,7 @@ public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
     public final int port;
     public final String hostName;
     public final List<String> applicationLayerProtocols;
-    public final Message dnsQuery;
+    public final DnsQuery dnsQuery;
     private final TlsSignature tlsSignature;
 
     @Override
@@ -77,7 +77,7 @@ public class PacketRequest implements ConnectRequest<AcceptUdpResult> {
         return AcceptUdpResult.rule(AcceptRule.Discard);
     }
 
-    public PacketRequest(byte[] buffer, int length, ClientHello clientHello, Message dnsQuery, InetSocketAddress serverAddress, InspectorVpn vpn, Packet packet) {
+    public PacketRequest(byte[] buffer, int length, ClientHello clientHello, DnsQuery dnsQuery, InetSocketAddress serverAddress, InspectorVpn vpn, Packet packet) {
         this.serverIp = serverAddress.getAddress().getHostAddress();
         this.port = serverAddress.getPort();
         this.dnsQuery = dnsQuery;
