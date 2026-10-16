@@ -579,7 +579,7 @@ int protect_socket(const struct arguments *args, int socket);
 
 uint16_t calc_checksum(uint16_t start, const uint8_t *buffer, size_t length);
 
-jobject jniGlobalRef(JNIEnv *env, jobject cls);
+jobject jniWeakGlobalRef(JNIEnv *env, jobject cls);
 
 jclass jniFindClass(JNIEnv *env, const char *name);
 

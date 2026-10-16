@@ -78,25 +78,29 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved) {
     jclass cFileDescriptor = jniFindClass(env, "java/io/FileDescriptor");
     mDescriptor = (*env)->GetFieldID(env, cFileDescriptor, "fd", "I");
 
+    // Weak global refs: a global ref to a class keeps its class loader alive, and JNI_OnUnload only runs once that
+    // loader is collected, so with global refs a webapp that loaded this library could never be unloaded (hot redeploy
+    // in Tomcat kept every such version). The classes are only used from native methods of ServiceSinkhole, i.e. while
+    // their class loader is on the stack, so the referents are always alive when used.
     const char *packet = "eu/faircode/netguard/Packet";
-    clsPacket = jniGlobalRef(env, jniFindClass(env, packet));
+    clsPacket = jniWeakGlobalRef(env, jniFindClass(env, packet));
     ng_add_alloc(clsPacket, "clsPacket");
 
     const char *allowed = "eu/faircode/netguard/Allowed";
-    clsAllowed = jniGlobalRef(env, jniFindClass(env, allowed));
+    clsAllowed = jniWeakGlobalRef(env, jniFindClass(env, allowed));
     ng_add_alloc(clsAllowed, "clsAllowed");
 
     const char *rr = "eu/faircode/netguard/ResourceRecord";
-    clsRR = jniGlobalRef(env, jniFindClass(env, rr));
+    clsRR = jniWeakGlobalRef(env, jniFindClass(env, rr));
     ng_add_alloc(clsRR, "clsRR");
 
     const char *usage = "eu/faircode/netguard/Usage";
-    clsUsage = jniGlobalRef(env, jniFindClass(env, usage));
+    clsUsage = jniWeakGlobalRef(env, jniFindClass(env, usage));
     ng_add_alloc(clsUsage, "clsUsage");
 
     const char *connected = "eu/faircode/netguard/Connected";
-    clsConnected = jniGlobalRef(env, jniFindClass(env, connected));
-    ng_add_alloc(clsUsage, "clsConnected");
+    clsConnected = jniWeakGlobalRef(env, jniFindClass(env, connected));
+    ng_add_alloc(clsConnected, "clsConnected");
 
     // Raise file number limit to maximum
     struct rlimit rlim;
@@ -121,14 +125,16 @@ void JNI_OnUnload(JavaVM *vm, void *reserved) {
     if ((*vm)->GetEnv(vm, (void **) &env, JNI_VERSION_1_6) != JNI_OK)
         log_android(ANDROID_LOG_WARN, "JNI load GetEnv failed");
     else {
-        (*env)->DeleteGlobalRef(env, clsPacket);
-        (*env)->DeleteGlobalRef(env, clsAllowed);
-        (*env)->DeleteGlobalRef(env, clsRR);
-        (*env)->DeleteGlobalRef(env, clsUsage);
+        (*env)->DeleteWeakGlobalRef(env, clsPacket);
+        (*env)->DeleteWeakGlobalRef(env, clsAllowed);
+        (*env)->DeleteWeakGlobalRef(env, clsRR);
+        (*env)->DeleteWeakGlobalRef(env, clsUsage);
+        (*env)->DeleteWeakGlobalRef(env, clsConnected);
         ng_delete_alloc(clsPacket, __FILE__, __LINE__);
         ng_delete_alloc(clsAllowed, __FILE__, __LINE__);
         ng_delete_alloc(clsRR, __FILE__, __LINE__);
         ng_delete_alloc(clsUsage, __FILE__, __LINE__);
+        ng_delete_alloc(clsConnected, __FILE__, __LINE__);
     }
 }
 
@@ -512,10 +518,10 @@ int protect_socket(const struct arguments *args, int socket) {
 // http://docs.oracle.com/javase/7/docs/technotes/guides/jni/spec/functions.html
 // http://journals.ecs.soton.ac.uk/java/tutorial/native1.1/implementing/index.html
 
-jobject jniGlobalRef(JNIEnv *env, jobject cls) {
-    jobject gcls = (*env)->NewGlobalRef(env, cls);
+jobject jniWeakGlobalRef(JNIEnv *env, jobject cls) {
+    jobject gcls = (*env)->NewWeakGlobalRef(env, cls);
     if (gcls == NULL)
-        log_android(ANDROID_LOG_ERROR, "Global ref failed (out of memory?)");
+        log_android(ANDROID_LOG_ERROR, "Weak global ref failed (out of memory?)");
     return gcls;
 }
 
