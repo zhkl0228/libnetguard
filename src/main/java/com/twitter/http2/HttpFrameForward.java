@@ -562,10 +562,6 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         if (data == null) {
             throw new IllegalStateException();
         }
-        HttpHeaders headers = headersFrame.headers();
-        headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
-        headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
-        headers.set("x-netguard-session", sessionKey);
         writeMessage(headersFrame, requestData == null && data.length == 0 ? null : data, true, outputBuffer);
     }
 
