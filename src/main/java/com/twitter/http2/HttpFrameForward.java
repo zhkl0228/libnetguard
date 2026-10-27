@@ -188,7 +188,23 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 log.warn("readDataFrame not exists stream: {}", streamId);
                 return;
             }
-            data.readBytes(stream.buffer, data.readableBytes());
+            int readableBytes = data.readableBytes();
+            data.readBytes(stream.buffer, readableBytes);
+            if (!endStream && readableBytes > 0 && peer != null) {
+                ByteBuf streamUpdate = frameEncoder.encodeWindowUpdateFrame(streamId, readableBytes);
+                ByteBuf connUpdate = frameEncoder.encodeWindowUpdateFrame(0, readableBytes);
+                try {
+                    byte[] b1 = new byte[streamUpdate.readableBytes()];
+                    streamUpdate.readBytes(b1);
+                    byte[] b2 = new byte[connUpdate.readableBytes()];
+                    connUpdate.readBytes(b2);
+                    peer.writeLocked(b1);
+                    peer.writeLocked(b2);
+                } finally {
+                    streamUpdate.release();
+                    connUpdate.release();
+                }
+            }
             if (stream.webSocket) {
                 byte[] chunk = stream.buffer.toByteArray();
                 stream.buffer.reset();
@@ -546,6 +562,10 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         if (data == null) {
             throw new IllegalStateException();
         }
+        HttpHeaders headers = headersFrame.headers();
+        headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
+        headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
+        headers.set("x-netguard-session", sessionKey);
         writeMessage(headersFrame, requestData == null && data.length == 0 ? null : data, true, outputBuffer);
     }
 
