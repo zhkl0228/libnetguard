@@ -20,7 +20,6 @@ import io.netty.handler.codec.http.*;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +31,6 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedBlockingQueue;
 
 public class HttpFrameForward extends StreamForward implements HttpFrameDecoderDelegate {
 
@@ -77,8 +75,12 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private boolean canStop;
 
+    /** The thread running {@link #forward(byte[])}; frames written from any other thread take the cross-thread path. */
+    private volatile Thread forwardThread;
+
     @Override
     protected boolean forward(byte[] buf) throws IOException {
+        forwardThread = Thread.currentThread();
         DataInputStream dataInput;
         ByteBuf byteBuf = Unpooled.buffer();
         try {
@@ -125,47 +127,28 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 while (byteBuf.isReadable()) {
                     frameDecoder.decode(byteBuf);
                 }
+                // The decoder copies what it keeps, so reuse the buffer instead of growing it for the whole connection
+                byteBuf.clear();
                 if (dataInput.available() > 0) {
                     continue;
                 }
 
-                byte[] output = outputBuffer.toByteArray();
-                outputBuffer.reset();
                 if (input != null) {
-                    log.debug("forward server={}, inHash={}, outHash={}, output={}, input={}", server, DigestUtils.md5Hex(input), DigestUtils.md5Hex(output), Hex.encodeHexString(output), Hex.encodeHexString(input));
-                }
-                if (log.isTraceEnabled()) {
-                    String clientIp = clientSocketAddress.getAddress().getHostAddress();
-                    int clientPort = clientSocketAddress.getPort();
-                    String serverIp = serverSocketAddress.getAddress().getHostAddress();
-                    int serverPort = serverSocketAddress.getPort();
-                    String date = new SimpleDateFormat("[HH:mm:ss SSS]").format(new Date());
-                    if (server) {
-                        File outbound = new File("target/" + String.format("%s:%d_%s:%d_outbound.txt", clientIp, clientPort, serverIp, serverPort));
-                        File forward = new File("target/" + String.format("%s:%d_%s:%d_outbound_forward.txt", clientIp, clientPort, serverIp, serverPort));
-                        if (input != null) {
-                            FileUtils.write(outbound, date + Hex.encodeHexString(input), StandardCharsets.UTF_8, true);
-                        }
-                        FileUtils.write(forward, date + Hex.encodeHexString(output), StandardCharsets.UTF_8, true);
-                    } else {
-                        File inbound = new File("target/" + String.format("%s:%d_%s:%d_inbound.txt", clientIp, clientPort, serverIp, serverPort));
-                        File forward = new File("target/" + String.format("%s:%d_%s:%d_inbound_forward.txt", clientIp, clientPort, serverIp, serverPort));
-                        if (input != null) {
-                            FileUtils.write(inbound, date + Hex.encodeHexString(input), StandardCharsets.UTF_8, true);
-                        }
-                        FileUtils.write(forward, date + Hex.encodeHexString(output), StandardCharsets.UTF_8, true);
+                    log.debug("forward server={}, inHash={}, input={}", server, DigestUtils.md5Hex(input), Hex.encodeHexString(input));
+                    if (log.isTraceEnabled()) {
+                        trace(server ? "outbound" : "inbound", input);
                     }
                 }
-                if (output.length > 0) {
-                    writeOutput(output);
-                }
-                byte[] response;
-                while ((response = delayResponseQueue.poll()) != null) {
-                    writeLocked(response);
-                }
+                writeWindowUpdates();
+                byte[] output = outputBuffer.toByteArray();
+                outputBuffer.reset();
+                writeBuffered(output);
             }
             return true;
         } catch (SocketTimeoutException ignored) {
+        } catch (UncheckedIOException e) {
+            // Socket writes made inside frame callbacks; let doForward treat them like any other socket error
+            throw e.getCause();
         } finally {
             byteBuf.release();
             this.peer = null;
@@ -184,27 +167,12 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         Stream stream = streamMap.get(streamId);
         log.debug("readDataFrame server={}, streamId={}, endStream={}, endSegment={}, longPolling={}, data={}", server, streamId, endStream, endSegment, (stream == null ? null : stream.longPolling), data);
         try {
+            onDataRead(streamId, endStream, data.readableBytes());
             if (stream == null) {
                 log.warn("readDataFrame not exists stream: {}", streamId);
                 return;
             }
-            int readableBytes = data.readableBytes();
-            data.readBytes(stream.buffer, readableBytes);
-            if (!endStream && readableBytes > 0 && peer != null) {
-                ByteBuf streamUpdate = frameEncoder.encodeWindowUpdateFrame(streamId, readableBytes);
-                ByteBuf connUpdate = frameEncoder.encodeWindowUpdateFrame(0, readableBytes);
-                try {
-                    byte[] b1 = new byte[streamUpdate.readableBytes()];
-                    streamUpdate.readBytes(b1);
-                    byte[] b2 = new byte[connUpdate.readableBytes()];
-                    connUpdate.readBytes(b2);
-                    peer.writeLocked(b1);
-                    peer.writeLocked(b2);
-                } finally {
-                    streamUpdate.release();
-                    connUpdate.release();
-                }
-            }
+            data.readBytes(stream.buffer, data.readableBytes());
             if (stream.webSocket) {
                 byte[] chunk = stream.buffer.toByteArray();
                 stream.buffer.reset();
@@ -225,7 +193,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 if (server) {
                     handleRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), streamId);
                 } else {
-                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), outputBuffer, false);
+                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), false);
                 }
                 stream.buffer.reset();
             } else {
@@ -317,18 +285,12 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
-    /** 把已编码的 WebSocket 帧字节封进本方向的 h2 DATA 帧,经 outputBuffer 由转发循环刷盘。 */
+    /** Sends encoded WebSocket frame bytes as h2 DATA on this direction. */
     private void writeWebSocketData(int streamId, byte[] wsBytes) {
-        ByteBuf byteBuf = Unpooled.wrappedBuffer(wsBytes);
-        ByteBuf frame = frameEncoder.encodeDataFrame(streamId, false, byteBuf);
-        try {
-            forwardFrameBuf(frame, outputBuffer);
-        } finally {
-            frame.release();
-        }
+        sendData(streamId, wsBytes, false);
     }
 
-    /** 加锁写出并刷盘(转发循环刷盘 与 WebSocket 异步注入 竞争同一 outputStream)。 */
+    /** Writes and flushes under the lock: the forward loop, the peer thread and filter threads share this outputStream. */
     private void writeLocked(byte[] data) throws IOException {
         synchronized (outputWriteLock) {
             outputStream.write(data);
@@ -336,7 +298,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
     }
 
-    /** 加锁写出并通知抓包回调(Tx/Rx 按方向)。 */
+    /** Writes under the lock and reports the bytes to the packet capture (Tx or Rx by direction). */
     private void writeOutput(byte[] data) throws IOException {
         writeLocked(data);
         if (packetCapture != null) {
@@ -346,24 +308,32 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 packetCapture.onSSLProxyRx(clientSocketAddress, serverSocketAddress, data);
             }
         }
+        if (log.isTraceEnabled()) {
+            trace(server ? "outbound_forward" : "inbound_forward", data);
+        }
+    }
+
+    /** Appends the bytes as hex to this connection's trace file under target/. */
+    private void trace(String direction, byte[] data) throws IOException {
+        String clientIp = clientSocketAddress.getAddress().getHostAddress();
+        int clientPort = clientSocketAddress.getPort();
+        String serverIp = serverSocketAddress.getAddress().getHostAddress();
+        int serverPort = serverSocketAddress.getPort();
+        String date = new SimpleDateFormat("[HH:mm:ss SSS]").format(new Date());
+        File file = new File("target/" + String.format("%s:%d_%s:%d_%s.txt", clientIp, clientPort, serverIp, serverPort, direction));
+        FileUtils.write(file, date + Hex.encodeHexString(data), StandardCharsets.UTF_8, true);
     }
 
     /**
-     * WebSocket 注入:把帧编码后封进 h2 DATA 帧,直接写本方向 outputStream(异步,来自 filter 线程)。
-     * 注意:注入的是非请求的额外 DATA,会消耗对端 h2 流量控制窗口——MITM 场景已知限制,不做窗口跟踪。
+     * WebSocket injection: encodes the frame and sends it as h2 DATA on this direction (asynchronously, from a filter
+     * thread). It goes through the same flow-control queue as forwarded DATA, so it stays within the receiver's windows.
      */
     private void injectWebSocketFrame(int streamId, WebSocketFrame frame, boolean mask) {
         byte[] payload = WebSocketCodec.encode(frame.getOpcode(), frame.isFin(), frame.getPayload(), mask);
-        ByteBuf byteBuf = Unpooled.wrappedBuffer(payload);
-        ByteBuf h2 = frameEncoder.encodeDataFrame(streamId, false, byteBuf);
         try {
-            byte[] out = new byte[h2.readableBytes()];
-            h2.readBytes(out);
-            writeOutput(out);
-        } catch (IOException e) {
+            sendData(streamId, payload, false);
+        } catch (UncheckedIOException e) {
             log.warn("injectWebSocketFrame failed", e);
-        } finally {
-            h2.release();
         }
     }
 
@@ -434,49 +404,25 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
 
     private static final int DEFAULT_CHUNK_SIZE = 0x1000;
 
-    private void writeMessage(HttpHeadersFrame headersFrame, byte[] data, boolean endStreamOnFlush, ByteArrayOutputStream outputBuffer) {
-        log.debug("writeMessage settingsReady={}, headersFrame={}, endStreamOnFlush={}", settingsReady, headersFrame, endStreamOnFlush);
-        ByteBuf byteBuf = data == null || data.length == 0 ? Unpooled.EMPTY_BUFFER : Unpooled.wrappedBuffer(data);
-        try {
-            {
-                ByteBuf headerBlock = headerEncoder.encode(headersFrame);
-                ByteBuf frame = frameEncoder.encodeHeadersFrame(
-                        headersFrame.getStreamId(),
-                        headersFrame.isLast(),
-                        headersFrame.isExclusive(),
-                        headersFrame.getDependency(),
-                        headersFrame.getWeight(),
-                        headerBlock
-                );
-                try {
-                    // Writes of compressed data must occur in order
-                    forwardFrameBuf(frame, outputBuffer);
-                } finally {
-                    frame.release();
-                }
-            }
-
-            if (byteBuf.isReadable()) {
-                while (byteBuf.isReadable()) {
-                    ByteBuf partialDataFrame = byteBuf.readSlice(Math.min(byteBuf.readableBytes(), DEFAULT_CHUNK_SIZE));
-                    log.debug("writeMessage server={}, partialDataFrame={}, byteBuf={}", server, partialDataFrame, byteBuf);
-                    boolean endStream = !byteBuf.isReadable() && endStreamOnFlush;
-                    ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStream, partialDataFrame);
-                    forwardFrameBuf(frame, outputBuffer);
-                }
-            } else if (data != null) {
-                ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
-                forwardFrameBuf(frame, outputBuffer);
-            }
-        } catch (IOException e) {
-            log.warn("writeMessage server={}", server, e);
-        } finally {
-            byteBuf.release();
-        }
+    /** Sends HEADERS, then the body as DATA when data is not null (an empty body is a single empty DATA frame). */
+    private void writeMessage(HttpHeadersFrame headersFrame, byte[] data, boolean endStreamOnFlush) {
+        log.debug("writeMessage server={}, headersFrame={}, endStreamOnFlush={}", server, headersFrame, endStreamOnFlush);
+        sendFrames(headersFrame.getStreamId(), headersFrame, data, endStreamOnFlush);
     }
 
+    /** Resets the stream toward this direction's receiver; runs on the peer thread when the filter cancels a request. */
     private void writeCancelStreamFrame(int streamId) {
-        readRstStreamFrame(streamId, H2FrameRstStream.ErrorCode.CANCEL.ordinal());
+        ByteBuf frame = frameEncoder.encodeRstStreamFrame(streamId, H2FrameRstStream.ErrorCode.CANCEL.ordinal());
+        try {
+            ByteArrayOutputStream rstStream = new ByteArrayOutputStream();
+            forwardFrameBuf(frame, rstStream);
+            synchronized (flowLock) {
+                sendStreams.remove(streamId);
+                writeDirect(rstStream.toByteArray());
+            }
+        } finally {
+            frame.release();
+        }
     }
 
     private void handlePollingRequest(HttpHeadersFrame headersFrame, byte[] requestData, boolean endStreamOnFlush, boolean newStream, int streamId, boolean writeHeaders) {
@@ -485,6 +431,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             CancelResult result = filter.cancelRequest(request, requestData == null ? new byte[0] : requestData, true);
             if (result != null) {
                 if (result.cancel) {
+                    closeRecvStream(streamId);
                     peer.writeCancelStreamFrame(streamId);
                 } else {
                     throw new UnsupportedOperationException("response=" + result.response);
@@ -494,38 +441,24 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
         byte[] data = filter == null ? requestData : filter.filterPollingRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request, requestData, newStream);
         if (writeHeaders) {
-            writeMessage(headersFrame, data, endStreamOnFlush, outputBuffer);
+            writeMessage(headersFrame, data, endStreamOnFlush);
         }
-
-        ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
-        ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
-        try {
-            forwardFrameBuf(frame, outputBuffer);
-        } finally {
-            frame.release();
-        }
+        sendData(headersFrame.getStreamId(), data, endStreamOnFlush);
     }
 
     private void handlePollingResponse(HttpHeadersFrame headersFrame, byte[] responseData, boolean endStreamOnFlush) {
         byte[] data = filter == null ? responseData : filter.filterPollingResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
                 createHttpResponse(headersFrame, sessionKey, akamai),
                 responseData, endStreamOnFlush);
-        ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
-        ByteBuf frame = frameEncoder.encodeDataFrame(headersFrame.getStreamId(), endStreamOnFlush, byteBuf);
-        try {
-            forwardFrameBuf(frame, outputBuffer);
-        } finally {
-            frame.release();
-        }
+        sendData(headersFrame.getStreamId(), data, endStreamOnFlush);
     }
-
-    private final Queue<byte[]> delayResponseQueue = new LinkedBlockingQueue<>();
 
     private void handleRequest(HttpHeadersFrame headersFrame, byte[] requestData, int streamId) {
         HttpRequest request = filter == null ? null : createHttpRequest(headersFrame, sessionKey, akamai);
         if (filter != null) {
             CancelResult result = filter.cancelRequest(request, requestData == null ? new byte[0] : requestData, false);
             if (result != null) {
+                skipStreamOpen(streamId);
                 if (result.cancel) {
                     peer.writeCancelStreamFrame(streamId);
                 } else {
@@ -542,37 +475,30 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                     }
                     headers.set("x-netguard-fake-response", sessionKey);
 //                    filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request, headersFrame.headers(), requestData == null ? new byte[0] : requestData);
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    peer.handleResponse(fakeHeadersFrame, responseData, baos, true);
-                    if (settingsReady) {
-                        try {
-                            IOUtils.copy(new ByteArrayInputStream(baos.toByteArray()), peer.outputStream);
-                        } catch (IOException e) {
-                            throw new IllegalStateException(e);
-                        }
-                    } else {
-                        peer.delayResponseQueue.offer(baos.toByteArray());
-                    }
+                    // Runs on this thread but writes through the peer's queue, which keeps it behind the server's SETTINGS
+                    peer.handleResponse(fakeHeadersFrame, responseData, true);
                 }
                 return;
             }
         }
-        byte[] data = filter == null ? requestData : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request,
-                headersFrame.headers(), requestData == null ? new byte[0] : requestData);
+        byte[] body = requestData == null ? new byte[0] : requestData;
+        byte[] data = filter == null ? body : filter.filterRequest(new Http2SessionKey(session, headersFrame.getStreamId(), false), request,
+                headersFrame.headers(), body);
         if (data == null) {
             throw new IllegalStateException();
         }
-        writeMessage(headersFrame, requestData == null && data.length == 0 ? null : data, true, outputBuffer);
+        writeMessage(headersFrame, requestData == null && data.length == 0 ? null : data, true);
     }
 
-    private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData, ByteArrayOutputStream outputBuffer, boolean fakeResponse) {
+    private void handleResponse(HttpHeadersFrame headersFrame, byte[] responseData, boolean fakeResponse) {
         byte[] data;
         if (fakeResponse) {
             data = responseData;
         } else {
-            data = filter == null ? responseData : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
+            byte[] body = responseData == null ? new byte[0] : responseData;
+            data = filter == null ? body : filter.filterResponse(new Http2SessionKey(session, headersFrame.getStreamId(), false),
                     createHttpResponse(headersFrame, sessionKey, akamai),
-                    headersFrame.headers(), responseData == null ? new byte[0] : responseData);
+                    headersFrame.headers(), body);
         }
         if (data == null) {
             throw new IllegalStateException();
@@ -581,7 +507,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         headers.setInt("x-http2-stream-id", headersFrame.getStreamId());
         headers.setInt("x-http2-stream-weight", headersFrame.getWeight());
         headers.set("x-netguard-session", sessionKey);
-        writeMessage(headersFrame, responseData == null && data.length == 0 ? null : data, true, outputBuffer);
+        writeMessage(headersFrame, responseData == null && data.length == 0 ? null : data, true);
     }
 
     @Override
@@ -601,18 +527,20 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             Stream stream = streamMap.get(httpHeadersFrame.getStreamId());
             if (stream != null) {
                 streamMap.remove(httpHeadersFrame.getStreamId());
+                closeRecvStream(httpHeadersFrame.getStreamId());
                 stream.httpHeadersFrame.headers().setAll(httpHeadersFrame.headers());
                 if (server) {
                     handleRequest(stream.httpHeadersFrame, stream.buffer.toByteArray(), httpHeadersFrame.getStreamId());
                 } else {
-                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), outputBuffer, false);
+                    handleResponse(stream.httpHeadersFrame, stream.buffer.toByteArray(), false);
                 }
                 stream.buffer.reset();
             } else {
                 if (server) {
+                    onClientStream(httpHeadersFrame.getStreamId());
                     handleRequest(httpHeadersFrame, null, httpHeadersFrame.getStreamId());
                 } else {
-                    handleResponse(httpHeadersFrame, null, outputBuffer, false);
+                    handleResponse(httpHeadersFrame, null, false);
                 }
             }
         } else {
@@ -625,6 +553,10 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             }
 
             int streamId = httpHeadersFrame.getStreamId();
+            openRecvStream(streamId);
+            if (server) {
+                onClientStream(streamId);
+            }
             Stream peerStream = server ? null : peer.streamMap.get(streamId);
 
             if (wsFilter != null && server && stream.detectWebSocketRequest() && wsFilter.filterHost(hostName)) {
@@ -632,7 +564,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 stream.webSocket = true;
                 stream.webSocketSession = new WebSocketSession(clientSocketAddress, serverSocketAddress, hostName);
                 stream.codec = new WebSocketCodec(stream.webSocketSession, true);
-                writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
+                writeMessage(stream.httpHeadersFrame, null, false);
                 stream.headerWritten = true;
             } else if (wsFilter != null && !server && peerStream != null && peerStream.webSocket && stream.detectWebSocketResponse()) {
                 // WebSocket over HTTP/2 响应侧::status=200 握手成功,登记会话并回调 onConnected
@@ -642,7 +574,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 stream.codec = new WebSocketCodec(wsSession, false);
                 WebSocketCodec.parseExtensions(httpHeadersFrame.headers().get("sec-websocket-extensions"), wsSession);
                 wsSession.markEstablished();
-                writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
+                writeMessage(stream.httpHeadersFrame, null, false);
                 WebSocketInjector injector = newWebSocketInjector(peer, this, streamId, wsSession);
                 try {
                     wsFilter.onConnected(wsSession, injector);
@@ -651,14 +583,14 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 }
             } else if (!server && peerStream != null && peerStream.longPolling) {
                 stream.longPolling = true;
-                writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
+                writeMessage(stream.httpHeadersFrame, null, false);
             } else {
                 log.debug("readHeaderBlockEnd server={}, httpHeadersFrame={}, streamMap={}", server, httpHeadersFrame, peer.streamMap);
 
                 if (server) {
                     if (stream.detectLongPolling()) {
                         stream.longPolling = true;
-                        writeMessage(stream.httpHeadersFrame, null, false, outputBuffer);
+                        writeMessage(stream.httpHeadersFrame, null, false);
                         stream.headerWritten = true;
                         stream.buffer.reset();
                     }
@@ -687,11 +619,19 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
     @Override
     public void readRstStreamFrame(int streamId, int errorCode) {
         log.debug("readRstStreamFrame server={}, streamId={}, errorCode={}", server, streamId, errorCode);
-        ByteBuf frame = frameEncoder.encodeRstStreamFrame(streamId, errorCode);
-        try {
-            forwardFrameBuf(frame, outputBuffer);
-        } finally {
-            frame.release();
+        // The stream is gone on both connections: drop what is still queued for it and stop acknowledging its DATA
+        closeStream(streamId);
+        peer.closeStream(streamId);
+        if (skipStreamOpen(streamId)) {
+            // The server never saw this stream, and RST_STREAM on an idle stream is a connection error (RFC 9113 §5.1)
+            log.debug("readRstStreamFrame drop RST_STREAM of a stream never opened toward the server streamId={}", streamId);
+        } else {
+            ByteBuf frame = frameEncoder.encodeRstStreamFrame(streamId, errorCode);
+            try {
+                forwardFrameBuf(frame, outputBuffer);
+            } finally {
+                frame.release();
+            }
         }
         Stream stream = streamMap.remove(streamId);
         if (stream != null && stream.webSocket && wsFilter != null) {
@@ -718,15 +658,6 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         httpSettingsFrame.setValue(id, value);
     }
 
-    private boolean settingsReady;
-
-    private void onPeerSettingsEnd(HttpSettingsFrame httpSettingsFrame) {
-        log.debug("onPeerSettingsEnd server={}, settingsReady={}, frame={}", server, settingsReady, httpSettingsFrame);
-        if (httpSettingsFrame.isAck()) {
-            settingsReady = true;
-        }
-    }
-
     @Override
     public void readSettingsEnd() {
         log.debug("readSettingsEnd server={}, frame={}", server, httpSettingsFrame);
@@ -736,6 +667,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
 
         peer.onPeerSettingsEnd(httpSettingsFrame);
+        if (!httpSettingsFrame.isAck()) {
+            settingsBuffered = true;
+        }
         ByteBuf frame = frameEncoder.encodeSettingsFrame(httpSettingsFrame);
         try {
             forwardFrameBuf(frame, outputBuffer);
@@ -753,6 +687,385 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             byteBuf.readBytes(outputBuffer, byteBuf.readableBytes());
         } catch (IOException e) {
             throw new IllegalStateException("forwardFrameBuf", e);
+        }
+    }
+
+    /** Frames other threads wrote before this direction forwarded its first SETTINGS; guarded by outputWriteLock. */
+    private final List<byte[]> earlyWrites = new ArrayList<>();
+    /** Whether the first SETTINGS frame, which must open the connection (RFC 9113 §3.4), is written; guarded by outputWriteLock. */
+    private boolean settingsWritten;
+    /** Whether outputBuffer has received the first SETTINGS frame; forward thread only. */
+    private boolean settingsBuffered;
+
+    /** Writes what this thread put in outputBuffer so far; the first SETTINGS frame among it releases earlyWrites. */
+    private void writeBuffered(byte[] output) throws IOException {
+        synchronized (outputWriteLock) {
+            if (output.length > 0) {
+                writeOutput(output);
+            }
+            if (settingsBuffered && !settingsWritten) {
+                settingsWritten = true;
+                for (byte[] data : earlyWrites) {
+                    writeOutput(data);
+                }
+                earlyWrites.clear();
+            }
+        }
+    }
+
+    private void flushOutputBuffer() {
+        byte[] output = outputBuffer.toByteArray();
+        outputBuffer.reset();
+        try {
+            writeBuffered(output);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /** Writes frames straight to the socket; frames from other threads wait in earlyWrites until SETTINGS is out. */
+    private void writeDirect(byte[] data) {
+        synchronized (outputWriteLock) {
+            try {
+                if (settingsWritten || Thread.currentThread() == forwardThread) {
+                    writeOutput(data);
+                } else {
+                    earlyWrites.add(data);
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+    }
+
+    // ==== Flow control ====
+    // The filter needs whole message bodies, so this proxy buffers DATA and cannot stay transparent to HTTP/2 flow
+    // control: the sender would run out of window while the receiver has not seen a byte. Each forward therefore
+    // takes over flow control on both of its connections:
+    // - every DATA byte read from the sender is acknowledged with our own WINDOW_UPDATE when the read batch ends.
+    //   The receiver's WINDOW_UPDATEs are still forwarded (the client's first connection WINDOW_UPDATE is part of its
+    //   Akamai fingerprint), minus the bytes our acks already returned, so the sender's windows never grow beyond
+    //   what the receiver advertised;
+    // - HEADERS and DATA for the receiver wait in per-stream queues, and DATA is written only within the receiver's
+    //   connection and stream windows. The peer thread reads the receiver's WINDOW_UPDATE and SETTINGS frames and
+    //   writes what they unblock.
+
+    private static final int DEFAULT_WINDOW_SIZE = 0xffff;
+
+    /** Guards the flow-control state below; taken before outputWriteLock, never while holding the peer's flowLock. */
+    private final Object flowLock = new Object();
+
+    /** Receiver's connection window for the DATA we write. */
+    private long sendConnectionWindow = DEFAULT_WINDOW_SIZE;
+    /** Receiver's SETTINGS_INITIAL_WINDOW_SIZE. */
+    private int sendInitialWindow = DEFAULT_WINDOW_SIZE;
+    /** Streams we may still write to, oldest (lowest id) first. */
+    private final Map<Integer, SendStream> sendStreams = new TreeMap<>();
+    /**
+     * Client streams not yet opened toward the server. The request HEADERS wait until the body has passed the filter,
+     * so requests can become ready out of order, but a server rejects a stream id lower than one it has already seen
+     * (RFC 9113 §5.1.1): a stream is opened only once every lower one is opened or will never be.
+     */
+    private final TreeSet<Integer> unopenedStreams = new TreeSet<>();
+
+    /** DATA bytes read from the sender in the current batch, not yet acknowledged. */
+    private long recvConnectionUnacked;
+    /** DATA bytes read from the sender that no connection WINDOW_UPDATE from the receiver has matched yet. */
+    private long recvConnectionUnmatched;
+    /** Streams the sender may still send DATA on. */
+    private final Map<Integer, RecvStream> recvStreams = new HashMap<>();
+
+    private static class SendStream {
+        long window;
+        final Deque<PendingFrame> pending = new ArrayDeque<>();
+
+        SendStream(long window) {
+            this.window = window;
+        }
+    }
+
+    /**
+     * A HEADERS frame or a DATA payload waiting for the receiver. HEADERS are encoded only when written: HPACK
+     * requires header blocks on the wire in the order they were encoded.
+     */
+    private static class PendingFrame {
+        final HttpHeadersFrame headersFrame;
+        final byte[] data;
+        final boolean endStream;
+        int offset;
+
+        PendingFrame(HttpHeadersFrame headersFrame, byte[] data, boolean endStream) {
+            this.headersFrame = headersFrame;
+            this.data = data;
+            this.endStream = endStream;
+        }
+    }
+
+    private static class RecvStream {
+        long unacked;
+        long unmatched;
+    }
+
+    /** The client opened this stream: it waits for its turn toward the server, and we will answer the client on it. */
+    private void onClientStream(int streamId) {
+        synchronized (flowLock) {
+            unopenedStreams.add(streamId);
+        }
+        peer.openSendStream(streamId);
+    }
+
+    /**
+     * This client stream will not be opened toward the server (the filter cancelled or faked its request, or the client
+     * reset it), so the streams after it stop waiting. Returns whether it was still waiting.
+     */
+    private boolean skipStreamOpen(int streamId) {
+        synchronized (flowLock) {
+            if (!unopenedStreams.remove(streamId)) {
+                return false;
+            }
+            drain();
+            return true;
+        }
+    }
+
+    /** The client opened this stream; from now on its WINDOW_UPDATEs count toward the response we write on it. */
+    private void openSendStream(int streamId) {
+        synchronized (flowLock) {
+            sendStreams.putIfAbsent(streamId, new SendStream(sendInitialWindow));
+        }
+    }
+
+    private void openRecvStream(int streamId) {
+        synchronized (flowLock) {
+            recvStreams.putIfAbsent(streamId, new RecvStream());
+        }
+    }
+
+    private void closeRecvStream(int streamId) {
+        synchronized (flowLock) {
+            recvStreams.remove(streamId);
+        }
+    }
+
+    private void closeStream(int streamId) {
+        synchronized (flowLock) {
+            sendStreams.remove(streamId);
+            recvStreams.remove(streamId);
+        }
+    }
+
+    /** Counts DATA read from the sender, before it is buffered or forwarded. */
+    private void onDataRead(int streamId, boolean endStream, int length) {
+        synchronized (flowLock) {
+            recvConnectionUnacked += length;
+            recvConnectionUnmatched += length;
+            RecvStream stream = recvStreams.get(streamId);
+            if (stream == null) {
+                return; // Reset already; the bytes still count against the connection window
+            }
+            if (endStream) {
+                recvStreams.remove(streamId);
+            } else {
+                stream.unacked += length;
+                stream.unmatched += length;
+            }
+        }
+    }
+
+    /** Acknowledges the DATA read in this batch, so the sender never waits for bytes we are holding. */
+    private void writeWindowUpdates() {
+        ByteArrayOutputStream frames = new ByteArrayOutputStream();
+        synchronized (flowLock) {
+            for (Map.Entry<Integer, RecvStream> entry : recvStreams.entrySet()) {
+                RecvStream stream = entry.getValue();
+                if (stream.unacked > 0) {
+                    encodeWindowUpdateFrame(entry.getKey(), stream.unacked, frames);
+                    stream.unacked = 0;
+                }
+            }
+            if (recvConnectionUnacked > 0) {
+                encodeWindowUpdateFrame(0, recvConnectionUnacked, frames);
+                recvConnectionUnacked = 0;
+            }
+        }
+        if (frames.size() > 0) {
+            peer.writeDirect(frames.toByteArray());
+        }
+    }
+
+    private void encodeWindowUpdateFrame(int streamId, long increment, ByteArrayOutputStream out) {
+        ByteBuf frame = frameEncoder.encodeWindowUpdateFrame(streamId, (int) increment);
+        try {
+            forwardFrameBuf(frame, out);
+        } finally {
+            frame.release();
+        }
+    }
+
+    /** Applies a WINDOW_UPDATE from the receiver (read on the peer thread) and writes what it unblocks. */
+    private void onWindowUpdate(int streamId, int increment) {
+        synchronized (flowLock) {
+            if (streamId == 0) {
+                sendConnectionWindow += increment;
+            } else {
+                SendStream stream = sendStreams.get(streamId);
+                if (stream == null) {
+                    return; // Nothing left to write on this stream
+                }
+                stream.window += increment;
+            }
+            drain();
+        }
+    }
+
+    /**
+     * Returns the part of a WINDOW_UPDATE from the receiver that still has to reach the sender. Our acks already
+     * returned the window for every byte read, so the increment first pays back the bytes no WINDOW_UPDATE has
+     * matched yet; only the rest, which grows the window beyond what was consumed, is forwarded.
+     */
+    private int windowUpdateToForward(int streamId, int increment) {
+        synchronized (flowLock) {
+            if (streamId == 0) {
+                long matched = Math.min(increment, recvConnectionUnmatched);
+                recvConnectionUnmatched -= matched;
+                return (int) (increment - matched);
+            }
+            RecvStream stream = recvStreams.get(streamId);
+            if (stream == null) {
+                return 0; // The sender can no longer send DATA on this stream
+            }
+            long matched = Math.min(increment, stream.unmatched);
+            stream.unmatched -= matched;
+            return (int) (increment - matched);
+        }
+    }
+
+    /** Applies the receiver's SETTINGS (read on the peer thread) to the stream windows, RFC 9113 §6.9.2. */
+    private void onPeerSettingsEnd(HttpSettingsFrame httpSettingsFrame) {
+        log.debug("onPeerSettingsEnd server={}, frame={}", server, httpSettingsFrame);
+        if (!httpSettingsFrame.isSet(HttpSettingsFrame.SETTINGS_INITIAL_WINDOW_SIZE)) {
+            return;
+        }
+        synchronized (flowLock) {
+            int initialWindow = httpSettingsFrame.getValue(HttpSettingsFrame.SETTINGS_INITIAL_WINDOW_SIZE);
+            for (SendStream stream : sendStreams.values()) {
+                stream.window += initialWindow - sendInitialWindow;
+            }
+            sendInitialWindow = initialWindow;
+            drain();
+        }
+    }
+
+    private void sendData(int streamId, byte[] data, boolean endStream) {
+        sendFrames(streamId, null, data, endStream);
+    }
+
+    /**
+     * Queues HEADERS (if headersFrame is not null) and DATA (if data is not null) for a stream and writes as much as
+     * the receiver's windows allow. The frames go straight to the socket instead of through outputBuffer, so the
+     * wire order is the queue order whichever thread writes them.
+     */
+    private void sendFrames(int streamId, HttpHeadersFrame headersFrame, byte[] data, boolean endStream) {
+        synchronized (flowLock) {
+            SendStream stream = sendStreams.get(streamId);
+            if (stream == null) {
+                if (!server || headersFrame == null) {
+                    log.debug("sendFrames stream closed server={}, streamId={}", server, streamId);
+                    return;
+                }
+                // A request opens its stream toward the server
+                stream = new SendStream(sendInitialWindow);
+                sendStreams.put(streamId, stream);
+            }
+            if (headersFrame != null) {
+                stream.pending.add(new PendingFrame(headersFrame, null, headersFrame.isLast()));
+            }
+            if (data != null) {
+                if (headersFrame != null && headersFrame.isLast()) {
+                    // The HEADERS already end the stream, as for a fake response with an empty body
+                    if (data.length > 0) {
+                        log.warn("sendFrames drop DATA after END_STREAM server={}, streamId={}, length={}", server, streamId, data.length);
+                    }
+                } else {
+                    stream.pending.add(new PendingFrame(null, data, endStream));
+                }
+            }
+            drain();
+        }
+    }
+
+    /** Writes the queued frames the receiver's windows allow, oldest stream first; the caller holds flowLock. */
+    private void drain() {
+        ByteArrayOutputStream frames = new ByteArrayOutputStream();
+        sendStreams.entrySet().removeIf(entry -> drain(entry.getKey(), entry.getValue(), frames));
+        if (frames.size() > 0) {
+            if (Thread.currentThread() == forwardThread) {
+                flushOutputBuffer(); // Frames forwarded earlier in this batch go first
+            }
+            writeDirect(frames.toByteArray());
+        }
+    }
+
+    /** Returns true once the frame that ends the stream is written. */
+    private boolean drain(int streamId, SendStream stream, ByteArrayOutputStream frames) {
+        PendingFrame frame;
+        while ((frame = stream.pending.peek()) != null) {
+            if (frame.headersFrame != null) {
+                if (unopenedStreams.contains(streamId)) {
+                    if (unopenedStreams.first() != streamId) {
+                        return false; // Until the lower client streams are opened
+                    }
+                    unopenedStreams.remove(streamId);
+                }
+                encodeHeadersFrame(frame.headersFrame, frames);
+            } else {
+                int remaining = frame.data.length - frame.offset;
+                long window = Math.min(sendConnectionWindow, stream.window);
+                if (remaining > 0 && window <= 0) {
+                    return false; // Until the receiver's next WINDOW_UPDATE
+                }
+                int length = (int) Math.min(Math.min(remaining, DEFAULT_CHUNK_SIZE), Math.max(window, 0));
+                boolean last = length == remaining;
+                ByteBuf dataFrame = frameEncoder.encodeDataFrame(streamId, last && frame.endStream, Unpooled.wrappedBuffer(frame.data, frame.offset, length));
+                try {
+                    forwardFrameBuf(dataFrame, frames);
+                } finally {
+                    dataFrame.release();
+                }
+                frame.offset += length;
+                sendConnectionWindow -= length;
+                stream.window -= length;
+                if (!last) {
+                    continue;
+                }
+            }
+            stream.pending.poll();
+            if (frame.endStream) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void encodeHeadersFrame(HttpHeadersFrame headersFrame, ByteArrayOutputStream out) {
+        ByteBuf headerBlock;
+        try {
+            headerBlock = headerEncoder.encode(headersFrame);
+        } catch (IOException e) {
+            throw new IllegalStateException("encodeHeadersFrame frame=" + headersFrame, e);
+        }
+        ByteBuf frame = frameEncoder.encodeHeadersFrame(
+                headersFrame.getStreamId(),
+                headersFrame.isLast(),
+                headersFrame.isExclusive(),
+                headersFrame.getDependency(),
+                headersFrame.getWeight(),
+                headerBlock
+        );
+        try {
+            forwardFrameBuf(frame, out);
+        } finally {
+            frame.release();
         }
     }
 
@@ -794,7 +1107,13 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             }
         }
 
-        ByteBuf frame = frameEncoder.encodeWindowUpdateFrame(streamId, windowSizeIncrement);
+        peer.onWindowUpdate(streamId, windowSizeIncrement);
+        int increment = peer.windowUpdateToForward(streamId, windowSizeIncrement);
+        if (increment == 0) {
+            log.debug("readWindowUpdateFrame already acknowledged by us server={}, streamId={}, windowSizeIncrement={}", server, streamId, windowSizeIncrement);
+            return;
+        }
+        ByteBuf frame = frameEncoder.encodeWindowUpdateFrame(streamId, increment);
         try {
             forwardFrameBuf(frame, outputBuffer);
         } finally {
