@@ -53,6 +53,15 @@ int read_packet(const struct arguments *args) {
         if(ctx->read == 2) {
             uint16_t *ptr = (uint16_t *) ctx->packet;
             ctx->packet_size = ntohs(*ptr);
+            // ctx->packet holds get_mtu() bytes: a longer frame would be read past its end, corrupting the heap (sgsocks aborted in
+            // jni_done's free(ctx->packet) on 2026-11-02, "free(): invalid next size")
+            if(ctx->packet_size > get_mtu()) {
+                log_android(ANDROID_LOG_ERROR, "tun %d packet size %d over the %d byte buffer",
+                            args->tun, ctx->packet_size, get_mtu());
+                report_exit(args, "tun %d packet size %d over the %d byte buffer",
+                            args->tun, ctx->packet_size, get_mtu());
+                return -1;
+            }
         } else {
             if(ctx->read > 2) {
                 log_android(ANDROID_LOG_ERROR, "read packet size failed.");
