@@ -4,6 +4,7 @@ import com.github.netguard.ProxyVpn;
 import com.github.netguard.vpn.ClientOS;
 import com.github.netguard.vpn.InspectorVpn;
 import com.github.netguard.vpn.tcp.RootCert;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.IOUtils;
 import org.scijava.nativelib.NativeLoader;
 import org.slf4j.Logger;
@@ -18,9 +19,10 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketImpl;
 import java.net.SocketTimeoutException;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
 
@@ -121,7 +123,7 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
     }
 
-    private final Map<Integer, Application[]> applications = new HashMap<>();
+    private final Map<Integer, Application[]> applications = new ConcurrentHashMap<>();
 
     private class ApplicationDiscoverHandler implements Runnable, Closeable {
         private final DatagramSocket udp;
@@ -136,26 +138,22 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
         }
         @Override
         public void run() {
-            byte[] buffer = new byte[1024];
+            byte[] buffer = new byte[65535];
             try {
                 while (!canStop) {
+                    DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length);
                     try {
-                        DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length);
                         udp.receive(datagramPacket);
-                        DataInput dataInput = new DataInputStream(new ByteArrayInputStream(buffer));
-                        int type = dataInput.readUnsignedByte();
-                        if (type != 0x2) {
-                            throw new IllegalStateException("Invalid type=" + type);
-                        }
-                        int hash = dataInput.readInt();
-                        int size = dataInput.readUnsignedByte();
-                        Application[] applications = new Application[size];
-                        for (int i = 0; i < size; i++) {
-                            applications[i] = Application.decodeApps(dataInput);
-                        }
-                        ServiceSinkhole.this.applications.put(hash, applications);
-                        log.debug("applications={}", ServiceSinkhole.this.applications);
                     } catch (SocketTimeoutException ignored) {
+                        continue;
+                    }
+                    byte[] data = Arrays.copyOf(buffer, datagramPacket.getLength());
+                    try {
+                        ApplicationDiscoveryResponse response = ApplicationDiscoveryResponse.decode(data);
+                        ServiceSinkhole.this.applications.put(response.hash, response.applications);
+                        log.debug("applications={}", Arrays.toString(response.applications));
+                    } catch (IOException | RuntimeException e) {
+                        log.warn("Invalid application discovery response from {}: {}", datagramPacket.getSocketAddress(), Hex.encodeHexString(data), e);
                     }
                 }
             } catch (IOException e) {
@@ -180,7 +178,8 @@ public class ServiceSinkhole extends ProxyVpn implements InspectorVpn {
     protected void doRunVpn() {
         try {
             tunnelThread = Thread.currentThread();
-            if (!directAllowAll && clientOS == ClientOS.Android) {
+            // iOS clients answer through inspectorvpnd on jailbroken devices; without it the queries go unanswered.
+            if (!directAllowAll && (clientOS == ClientOS.Android || clientOS == ClientOS.iOS)) {
                 try {
                     applicationDiscoverHandler = new ApplicationDiscoverHandler();
                     executorService.submit(applicationDiscoverHandler);

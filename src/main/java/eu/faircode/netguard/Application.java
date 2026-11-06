@@ -13,7 +13,7 @@ public class Application {
     private final String label;
     private final long versionCode;
 
-    private Application(String packageName, String label, long versionCode) {
+    Application(String packageName, String label, long versionCode) {
         this.packageName = packageName;
         this.label = label;
         this.versionCode = versionCode;
