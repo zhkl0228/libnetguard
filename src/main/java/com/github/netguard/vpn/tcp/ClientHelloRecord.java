@@ -15,6 +15,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -203,16 +204,45 @@ public class ClientHelloRecord {
         this.ssl = ssl;
     }
 
+    /**
+     * Reads until the prologue holds <code>needPrologueCount</code> bytes.
+     * <p>
+     * Every byte taken from <code>dataInput</code> ends up in the returned prologue, because the
+     * connection is forwarded from that prologue and a dropped byte would corrupt the stream.
+     * So when the read times out, or the client closes after sending part of what was asked for,
+     * the returned record holds the bytes that did arrive and may be shorter than requested
+     * (or be this record, if nothing arrived before the timeout).
+     *
+     * @throws EOFException the client closed before sending any further byte
+     */
     public ClientHelloRecord readMorePrologue(DataInputStream dataInput, int needPrologueCount) throws IOException {
         int needPrologueLength = needPrologueCount - prologue.length;
         if(needPrologueLength <= 0) {
             throw new IllegalStateException("needPrologueLength=" + needPrologueLength);
         }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(needPrologueCount);
-        baos.write(prologue);
         byte[] buffer = new byte[needPrologueLength];
-        dataInput.readFully(buffer);
-        baos.write(buffer);
+        int read = 0;
+        try {
+            while (read < buffer.length) {
+                int count = dataInput.read(buffer, read, buffer.length - read);
+                if (count == -1) {
+                    if (read == 0) {
+                        throw new EOFException("readMorePrologue: client closed, prologueLength=" + prologue.length + ", needPrologueCount=" + needPrologueCount);
+                    }
+                    log.debug("readMorePrologue: client closed after {} more bytes, prologueLength={}, needPrologueCount={}", read, prologue.length, needPrologueCount);
+                    break;
+                }
+                read += count;
+            }
+        } catch (SocketTimeoutException e) {
+            log.debug("readMorePrologue: timed out after {} more bytes, prologueLength={}, needPrologueCount={}", read, prologue.length, needPrologueCount);
+        }
+        if (read == 0) {
+            return this;
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(prologue.length + read);
+        baos.write(prologue);
+        baos.write(buffer, 0, read);
         return new ClientHelloRecord(baos.toByteArray(), hostName, applicationLayerProtocols, httpRequest, ja3, cipherSuites, ssl);
     }
 

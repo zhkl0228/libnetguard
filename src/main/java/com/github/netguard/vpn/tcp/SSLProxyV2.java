@@ -393,9 +393,8 @@ public class SSLProxyV2 implements Runnable {
                         int soTimeout = local.getSoTimeout();
                         try {
                             local.setSoTimeout(800);
+                            // On timeout this returns the bytes that did arrive; acceptTcp is asked again with them
                             record = record.readMorePrologue(dataInput, result.needPrologueCount);
-                        } catch (SocketTimeoutException e) {
-                            log.debug("readMorePrologue", e);
                         } finally {
                             local.setSoTimeout(soTimeout);
                         }

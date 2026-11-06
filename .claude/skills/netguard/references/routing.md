@@ -144,8 +144,9 @@ if (Arrays.equals(Arrays.copyOf(head, MAGIC.length), MAGIC)) {
 
 - `n` 是**总长度**，必须大于当前 `getPrologue().length`，否则抛 `IllegalStateException`
   （被框架记成 `acceptTcp failed`）。
-- 框架最多等 800ms 去读。**等不到就带着原来的 prologue 再调一次 `acceptTcp`**——所以第二次进来时
-  长度可能还是不够，这时要做决定（直连 / 断开），不要无条件再要，否则会一直循环。
+- 框架最多等 800ms 去读。**等不到就带着这期间到达的字节（可能一个也没多）再调一次 `acceptTcp`**，
+  客户端发了一部分就关闭也一样，已经读到的字节不会丢——所以第二次进来时长度可能还是不够，这时要
+  做决定（直连 / 断开），不要无条件再要，否则会一直循环。
 - 非 TLS 连接的 `getPrologue()` 只有第一次调用时已经到达的字节（最多 128），可能只有 1 字节，
   所以按 magic 认协议前先判长度。
 - `acceptTcp` 要等客户端先发出至少一个字节才会被调用。服务端先说话的协议（客户端连上后等服务端
