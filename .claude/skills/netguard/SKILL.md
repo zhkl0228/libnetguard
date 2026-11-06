@@ -64,7 +64,7 @@ public class Main {
 
 | 接入方式 | 怎么开 | 设备侧 | 适用 |
 | --- | --- | --- | --- |
-| **VPN（首选）** | `enableBroadcast(30)` + 配套 VPN 客户端 | 装 iPhoneVPN / AndroidVPN / SwiftConnect(Mac) 等，连本服务端 | **网络隔离最精准**；Android 下还能 `connectRequest.queryApplications()` 拿到发起连接的 App 身份（包名/版本），按 App 精确分流 |
+| **VPN（首选）** | `enableBroadcast(30)` + 配套 VPN 客户端 | 装 iPhoneVPN / AndroidVPN / SwiftConnect(Mac) 等，连本服务端 | **网络隔离最精准**；Android 上，以及装了 `ios/inspectorvpnd` 的越狱 iOS 上，还能用 `connectRequest.queryApplications()` 拿到发起连接的 App 身份（包名 / bundle id），按 App 精确分流 |
 | socks5 / http 代理 | `enableProxy()` | 设备系统代理指向 `服务端IP:端口` | 快速验证、桌面程序；拿不到 App 身份 |
 
 **默认优先 VPN 接入**——它把该 App 的流量在网络层隔离出来，不会混进整机其它流量，按 App 过滤也更准。

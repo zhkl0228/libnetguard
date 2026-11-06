@@ -87,7 +87,7 @@ class MyDecoder extends PacketDecoder implements SessionFactory {
         if (tcp instanceof SSLProxySession) {
             String host = ((SSLSessionKey) tcp.getKey()).getHostName();
             String alpn = tcp.getSelectedApplicationProtocol();   // negotiated ALPN, may be null
-            String apps = tcp.getApplication();                   // comma-separated package names (VPN on Android), may be null
+            String apps = tcp.getApplication();                   // comma-separated package names / bundle ids, "" when unknown
             if ("push.example.com".equals(host)) {
                 return new MySession();
             }

@@ -108,7 +108,7 @@ return connectRequest.disconnect();
 | `getPrologue()` | 已读到的首部原始字节（`byte[]`）。用来嗅探非 HTTP/TLS 的专有协议 |
 | `readMorePrologue(n)` | 现有字节不够认协议时返回它，见下 |
 | `getTlsSignature()` | TLS 指纹 `TlsSignature`：`getJa3Text()`/`getJa3nText()`/`getJa4Text()`/`getPeetPrintText()`/`getScrapflyFP()`。可能为 null |
-| `queryApplications()` | **VPN 接入（Android）专有**：发起这条连接的 App 列表 `Application[]`，有 `getPackageName()`/`getLabel()`/`getVersionCode()`。socks/http 代理接入拿不到 |
+| `queryApplications()` | 发起这条连接的 App 列表 `Application[]`，有 `getPackageName()`/`getLabel()`/`getVersionCode()`。**拿不到时是空数组，不是 null**。只有 Android 和越狱 iOS 的 VPN 接入拿得到，见下 |
 | `getClientOS()` | 客户端平台 |
 | `isAppleHost()` / `isAndroidHost()` | 按主机名后缀的便捷判断（`.apple.com`/`.icloud.com`…；`.googleapis.com`/`.google.com`/`www.gstatic.com`）。`isAppleHost` 还认 `com.apple.` 开头的 User-Agent |
 | `getExtraData()` | 客户端带的附加数据 |
@@ -116,15 +116,30 @@ return connectRequest.disconnect();
 **按 App 身份精确分流**（VPN 接入的独特价值）：
 
 ```java
-Application[] apps = connectRequest.queryApplications();
-if (apps != null) {
-    for (Application app : apps) {
-        if ("com.example.app".equals(app.getPackageName())) {
-            return connectRequest.tryMITM(false).build();
-        }
+for (Application app : connectRequest.queryApplications()) {   // empty when the owner is unknown
+    if ("com.example.app".equals(app.getPackageName())) {       // Android package name, or iOS bundle id
+        return connectRequest.tryMITM(false).build();
     }
 }
 ```
+
+App 身份从哪来：
+
+- **Android**：配套的 AndroidVPN 客户端自己回答，`Application` 就是包名 / 应用名 / versionCode。
+  一条连接可能对应多个 App（共享 UID 的情况）。
+- **iOS**：App Store 版客户端在沙盒里查不到，要靠越狱设备（rootless：Dopamine / palera1n）上的守护进程
+  `inspectorvpnd`。用仓库里的 `ios/inspectorvpnd/build_deb.sh` 打成 deb 装上，客户端本身不用改；没装就
+  一直是空数组。拿到的元素是 `IOSApplication`（`Application` 的子类），每条连接一个：
+  - `getPackageName()` 是 bundle id，不在 bundle 里的可执行文件是进程名；`getLabel()` 是显示名。
+  - **`getVersionCode()` 是 pid**（iOS 没有整数版本号）；版本要强转后取 `getShortVersionString()` /
+    `getBundleVersion()`，另有 `getPid()`/`getProcessName()`/`getExecutablePath()`。
+  - 系统进程代 App 发起的连接（如 Safari 的流量实际由 `com.apple.WebKit.Networking` 发出）报的是
+    App 本身，真正持有 socket 的进程在 `getDelegate()` 里。所以按 bundle id 过滤能直接抓到 Safari 的流量。
+  - 只回答 TCP（IPv4）连接，`acceptUdp` 里的 `PacketRequest.queryApplications()` 在 iOS 上始终为空。
+    查不到时守护进程不应答，原因记在设备的 `/var/log/inspectorvpnd.log`（如 `No TCP flow ...`）。
+- 其它情况都拿不到：macOS / Windows 的 VPN 客户端，socks/http 代理、透明代理、SSL-VPN、Trojan 接入，
+  以及用了 `disableNetGuard()` 之后。
+- 查询在客户端发出 SYN 时就异步发出，`queryApplications()` 只是查一张表、不等待：应答还没回来时同样是空数组。
 
 **按首字节嗅探非 TLS 专有协议**：
 
