@@ -7,7 +7,8 @@ package com.github.netguard.vpn.tcp.ws;
 public interface WebSocketFilter {
 
     /**
-     * 是否对该主机的 WebSocket 连接启用过滤。
+     * Whether to filter WebSocket connections to this host. Other traffic to the host is not affected: on HTTP/1.1
+     * a connection whose first request is not an upgrade answered with 101 is relayed and decoded as usual.
      */
     boolean filterHost(String hostName);
 
@@ -26,7 +27,8 @@ public interface WebSocketFilter {
     WebSocketFrame onFrame(WebSocketSession session, boolean fromServer, WebSocketFrame frame);
 
     /**
-     * 连接关闭回调。
+     * Called once when the WebSocket ends (both directions finished, the HTTP/2 stream was reset, or the connection
+     * closed), and only for a session that {@link #onConnected} was called for.
      */
     void onClosed(WebSocketSession session);
 }

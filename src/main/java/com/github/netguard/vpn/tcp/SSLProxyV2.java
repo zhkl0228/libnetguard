@@ -328,12 +328,8 @@ public class SSLProxyV2 implements Runnable {
                     wsSession, wsFilter, packet, forwardHandler);
             com.github.netguard.vpn.tcp.ws.WebSocketStreamForward outboundWs = new com.github.netguard.vpn.tcp.ws.WebSocketStreamForward(socketIn, localOut, false, client, server, countDownLatch, socket, vpn, hostName,
                     wsSession, wsFilter, packet, forwardHandler);
-            com.github.netguard.vpn.tcp.ws.WebSocketInjector injector = com.github.netguard.vpn.tcp.ws.WebSocketStreamForward.newInjector(inboundWs, outboundWs, wsSession);
-            try {
-                wsFilter.onConnected(wsSession, injector);
-            } catch (Throwable t) {
-                log.warn("webSocket onConnected failed", t);
-            }
+            // outboundWs calls wsFilter.onConnected with this injector once it has relayed the 101 response
+            outboundWs.setInjector(com.github.netguard.vpn.tcp.ws.WebSocketStreamForward.newInjector(inboundWs, outboundWs, wsSession));
             inbound = inboundWs;
             outbound = outboundWs;
         } else {

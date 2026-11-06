@@ -12,19 +12,25 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * WebSocket 帧转发(MITM,HTTP/1.1 经典 Upgrade)。策略:
- * - 每帧原始字节按位透传(保真,免掩码/压缩重编码的坑);
- * - 同时解码一份副本(解掩码 + permessage-deflate 解压)喂 {@link WebSocketFilter} 观测;
- * - filter 对"单帧完整消息"可替换/丢弃;分片消息仅观测(先透传)。
- * inbound(server=true):client-&gt;server;outbound(server=false):server-&gt;client。
- * 帧编解码逻辑委托 {@link WebSocketCodec}(与 HTTP/2 RFC 8441 路径共用)。
+ * WebSocket frame forwarding for a MITM'd HTTP/1.1 connection to a host the {@link WebSocketFilter} asked for.
+ * <ul>
+ * <li>The connection becomes a WebSocket only if its first request is an upgrade and the server answers 101.
+ * Anything else (plain HTTP, a rejected upgrade, a protocol that is not HTTP) is relayed byte for byte.</li>
+ * <li>Each frame's original bytes are passed through unchanged, so masking and compression are never re-encoded.</li>
+ * <li>A decoded copy (unmasked, permessage-deflate inflated) goes to the {@link WebSocketFilter}, which may replace
+ * or drop a single-frame message; fragmented messages are passed through first and only observed.</li>
+ * </ul>
+ * inbound (server=true): client-&gt;server; outbound (server=false): server-&gt;client.
+ * Frame encoding and decoding is in {@link WebSocketCodec}, shared with the HTTP/2 (RFC 8441) path.
  */
 public class WebSocketStreamForward extends StreamForward {
 
@@ -55,11 +61,28 @@ public class WebSocketStreamForward extends StreamForward {
     }
 
     private void writeRaw(byte[] raw) throws IOException {
+        writeRaw(raw, raw.length);
+    }
+
+    private void writeRaw(byte[] raw, int length) throws IOException {
         synchronized (writeLock) {
-            outputStream.write(raw);
+            outputStream.write(raw, 0, length);
             outputStream.flush();
         }
     }
+
+    private WebSocketInjector injector;
+
+    /**
+     * Set on the server-to-client forward only. It is the side that sees the handshake response, so once it has
+     * relayed a 101 it marks the session established and hands this injector to {@link WebSocketFilter#onConnected}.
+     */
+    public void setInjector(WebSocketInjector injector) {
+        this.injector = injector;
+    }
+
+    private static final byte[] GET = "GET ".getBytes(StandardCharsets.ISO_8859_1);
+    private static final byte[] SWITCHING_PROTOCOLS = "HTTP/1.1 101 ".getBytes(StandardCharsets.ISO_8859_1);
 
     @Override
     protected boolean forward(byte[] buf) throws IOException {
@@ -68,9 +91,101 @@ public class WebSocketStreamForward extends StreamForward {
         } catch (Exception ignored) {
         }
         DataInputStream in = new DataInputStream(inputStream);
-        relayHandshake(in);
-        session.established = true;
+        if (server) {
+            forwardFromClient(in, buf);
+        } else {
+            forwardFromServer(in, buf);
+        }
+        return true;
+    }
 
+    /**
+     * Client to server. Only a connection whose first request is a WebSocket upgrade can become a WebSocket;
+     * anything else is relayed byte for byte and reported to the packet capture, like any other MITM connection.
+     */
+    private void forwardFromClient(DataInputStream in, byte[] buf) throws IOException {
+        byte[] head = readPrefix(in, GET);
+        if (Arrays.equals(head, GET)) {
+            head = readHead(in, head);
+        }
+        if (!isUpgradeRequest(head)) {
+            relayRaw(in, head, buf, true);
+            return;
+        }
+        session.upgradeRequested = true;
+        writeRaw(head);
+        try {
+            session.handshakeDone.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            InterruptedIOException ioe = new InterruptedIOException("Waiting for the WebSocket handshake response: session=" + session);
+            ioe.initCause(e);
+            throw ioe;
+        }
+        if (!session.established) {
+            // Rejected upgrade. The packet capture never saw this request, so it sees none of the connection.
+            relayRaw(in, new byte[0], buf, false);
+            return;
+        }
+        try {
+            relayFrames(in);
+        } finally {
+            session.endStream(filter);
+        }
+    }
+
+    /**
+     * Server to client. A 101 answering the upgrade request makes this a WebSocket; any other first response
+     * means the connection stays plain HTTP and is relayed byte for byte.
+     */
+    private void forwardFromServer(DataInputStream in, byte[] buf) throws IOException {
+        byte[] head;
+        try {
+            head = readPrefix(in, SWITCHING_PROTOCOLS);
+            if (session.upgradeRequested && Arrays.equals(head, SWITCHING_PROTOCOLS)) {
+                head = readHead(in, head);
+                writeRaw(head);
+                parseExtensions(new String(head, StandardCharsets.ISO_8859_1));
+                // Before the client-to-server side is released, so no client frame reaches the filter ahead of onConnected
+                session.connect(filter, injector);
+            }
+        } finally {
+            session.handshakeDone.countDown();
+        }
+        if (!session.established) {
+            relayRaw(in, head, buf, !session.upgradeRequested);
+            return;
+        }
+        try {
+            relayFrames(in);
+        } finally {
+            session.endStream(filter);
+        }
+    }
+
+    /**
+     * Relays the rest of the connection unchanged.
+     *
+     * @param head bytes already read from <code>in</code>, sent first
+     * @param notify also report the bytes to the packet capture, as {@link StreamForward} does
+     */
+    private void relayRaw(DataInputStream in, byte[] head, byte[] buf, boolean notify) throws IOException {
+        if (head.length > 0) {
+            if (notify) {
+                notifyForward(head, head.length);
+            }
+            writeRaw(head);
+        }
+        int read;
+        while ((read = in.read(buf)) != -1) {
+            if (notify) {
+                read = notifyForward(buf, read);
+            }
+            writeRaw(buf, read);
+        }
+    }
+
+    private void relayFrames(DataInputStream in) throws IOException {
         // 分片消息累积缓冲(仅用于观测)
         ByteArrayOutputStream msgBuf = null;
         boolean msgRsv1 = false;
@@ -133,18 +248,36 @@ public class WebSocketStreamForward extends StreamForward {
                 }
             }
         }
-        if (filter != null) {
-            try {
-                filter.onClosed(session);
-            } catch (Throwable ignored) {
-            }
-        }
-        return true;
     }
 
     // ==== 握手 ====
-    private void relayHandshake(DataInputStream in) throws IOException {
+    /**
+     * Reads bytes while they match <code>expected</code>. Stops at the first byte that differs (included in the
+     * result) or at EOF, so traffic that is not HTTP is never held back waiting for more bytes.
+     */
+    private static byte[] readPrefix(DataInputStream in, byte[] expected) throws IOException {
+        ByteArrayOutputStream read = new ByteArrayOutputStream(expected.length);
+        for (byte b : expected) {
+            int c = in.read();
+            if (c < 0) {
+                break;
+            }
+            read.write(c);
+            if (c != (b & 0xff)) {
+                break;
+            }
+        }
+        return read.toByteArray();
+    }
+
+    /**
+     * Reads the rest of an HTTP head, up to and including the blank line, or up to EOF.
+     *
+     * @param start what was already read of the head; contains no line break
+     */
+    private static byte[] readHead(DataInputStream in, byte[] start) throws IOException {
         ByteArrayOutputStream head = new ByteArrayOutputStream(256);
+        head.write(start);
         int c;
         int match = 0; // 匹配 \r\n\r\n
         while ((c = in.read()) >= 0) {
@@ -160,11 +293,22 @@ public class WebSocketStreamForward extends StreamForward {
                 break;
             }
         }
-        byte[] headerBytes = head.toByteArray();
-        writeRaw(headerBytes);
-        if (!server) {
-            parseExtensions(new String(headerBytes, StandardCharsets.ISO_8859_1));
+        return head.toByteArray();
+    }
+
+    /**
+     * An opening handshake carries "Upgrade: websocket" (RFC 6455 4.1). Header names and this token are
+     * case-insensitive.
+     */
+    private static boolean isUpgradeRequest(byte[] head) {
+        for (String line : new String(head, StandardCharsets.ISO_8859_1).split("\r\n")) {
+            int colon = line.indexOf(':');
+            if (colon > 0 && "upgrade".equalsIgnoreCase(line.substring(0, colon).trim()) &&
+                    "websocket".equalsIgnoreCase(line.substring(colon + 1).trim())) {
+                return true;
+            }
         }
+        return false;
     }
 
     private void parseExtensions(String responseHead) {

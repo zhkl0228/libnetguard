@@ -152,6 +152,14 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         } finally {
             byteBuf.release();
             this.peer = null;
+            if (wsFilter != null) {
+                // The connection is gone: WebSocket streams that never saw END_STREAM or RST_STREAM end here
+                for (Stream stream : streamMap.values()) {
+                    if (stream.webSocket) {
+                        stream.webSocketSession.close(wsFilter);
+                    }
+                }
+            }
         }
         return false;
     }
@@ -278,10 +286,7 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
         }
         if (endStream) {
             streamMap.remove(stream.httpHeadersFrame.getStreamId());
-            try {
-                wsFilter.onClosed(wsSession);
-            } catch (Throwable ignored) {
-            }
+            wsSession.endStream(wsFilter);
         }
     }
 
@@ -573,14 +578,9 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
                 stream.webSocketSession = wsSession;
                 stream.codec = new WebSocketCodec(wsSession, false);
                 WebSocketCodec.parseExtensions(httpHeadersFrame.headers().get("sec-websocket-extensions"), wsSession);
-                wsSession.markEstablished();
                 writeMessage(stream.httpHeadersFrame, null, false);
-                WebSocketInjector injector = newWebSocketInjector(peer, this, streamId, wsSession);
-                try {
-                    wsFilter.onConnected(wsSession, injector);
-                } catch (Throwable t) {
-                    log.warn("webSocket onConnected failed", t);
-                }
+                // After the 200 is queued, so frames injected in onConnected follow it
+                wsSession.connect(wsFilter, newWebSocketInjector(peer, this, streamId, wsSession));
             } else if (!server && peerStream != null && peerStream.longPolling) {
                 stream.longPolling = true;
                 writeMessage(stream.httpHeadersFrame, null, false);
@@ -634,10 +634,11 @@ public class HttpFrameForward extends StreamForward implements HttpFrameDecoderD
             }
         }
         Stream stream = streamMap.remove(streamId);
-        if (stream != null && stream.webSocket && wsFilter != null) {
-            try {
-                wsFilter.onClosed(stream.webSocketSession);
-            } catch (Throwable ignored) {
+        if (wsFilter != null) {
+            // Ends the stream in both directions, also when this side had already sent END_STREAM
+            Stream wsStream = stream == null ? peer.streamMap.get(streamId) : stream;
+            if (wsStream != null && wsStream.webSocket) {
+                wsStream.webSocketSession.close(wsFilter);
             }
         }
     }

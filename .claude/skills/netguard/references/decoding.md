@@ -165,7 +165,7 @@ class MyWsFilter implements WebSocketFilter {
 
     public boolean filterHost(String hostName) { return "ws.example.com".equals(hostName); }
     public void onConnected(WebSocketSession session, WebSocketInjector injector) {
-        this.injector = injector;   // check injector.isReady() before injecting
+        this.injector = injector;   // called once the handshake has completed; injector.isReady() is true from here
     }
     public WebSocketFrame onFrame(WebSocketSession session, boolean fromServer, WebSocketFrame frame) {
         // return the input itself = byte-exact pass-through; a new frame = replace (re-encoded); null = drop
@@ -175,9 +175,13 @@ class MyWsFilter implements WebSocketFilter {
 }
 ```
 
-- **`onConnected` 的时机分两种**：HTTP/1.1 时，TLS 连接一建立就调（早于 101 Upgrade 握手），而且这个
-  主机的**每条** TLS 连接都会调，不管它后来是不是 WebSocket；h2 上的 WebSocket（RFC 8441）则在握手
-  完成后才调。所以注入前一律先判 `injector.isReady()`。
+- 回调顺序固定：`onConnected` → 若干 `onFrame` → `onClosed`，各一次。`onConnected` 在握手完成后调用：
+  HTTP/1.1 是服务端回了 `101` 之后，h2 上的 WebSocket（RFC 8441）是 `:status 200` 之后。握手没成功就
+  一个回调都没有。`onClosed` 在两个方向都结束、h2 流被 RST、或整条连接断开时调用。
+- `filterHost` 为 true 只影响这个主机的 WebSocket。HTTP/1.1 下按连接判断：第一个请求是 `Upgrade: websocket`
+  且服务端回了 `101`，这条连接才走帧过滤；其它连接（普通请求、非 HTTP 流量）原样转发，照常进
+  `onRequest`/`onResponse`。升级被服务端拒绝的那条连接也原样转发，但 `PacketDecoder` 看不到它。
+  同一条 keep-alive 连接先发普通请求、后面才升级的，不会被过滤。
 - `WebSocketFrame`：`getOpcode()`（`OPCODE_TEXT`/`OPCODE_BINARY`/…常量）、`isFin()`、`isText()`/`isBinary()`/
   `isControl()`、`getPayload()`（已解掩码、已解压）、`text()`；构造用 `WebSocketFrame.text(s)` / `.binary(bytes)`。
 - `WebSocketInjector`：`sendToServer(frame)`/`sendToClient(frame)`，以及 `sendTextToServer`/`sendBinaryToServer`/
