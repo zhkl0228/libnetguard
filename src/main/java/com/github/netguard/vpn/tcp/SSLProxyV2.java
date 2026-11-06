@@ -37,6 +37,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class SSLProxyV2 implements Runnable {
 
@@ -436,9 +437,11 @@ public class SSLProxyV2 implements Runnable {
                     setApplicationProtocols(secureSocket, record.applicationLayerProtocols.toArray(new String[0]));
                 }
                 final CountDownLatch countDownLatch = new CountDownLatch(1);
+                // Set by the listener, which JSSE calls on another thread
+                final AtomicReference<X509Certificate> peerCertificateRef = new AtomicReference<>();
                 secureSocket.addHandshakeCompletedListener(event -> {
                     try {
-                        peerCertificate = (X509Certificate) event.getPeerCertificates()[0];
+                        peerCertificateRef.set((X509Certificate) event.getPeerCertificates()[0]);
                         SSLSession session = event.getSession();
                         log.debug("handshakeCompleted event={}, peerHost={}", event, session.getPeerHost());
                     } catch (SSLPeerUnverifiedException e) {
@@ -459,6 +462,7 @@ public class SSLProxyV2 implements Runnable {
                     log.warn("secureSocket={}", secureSocket, e);
                 }
                 log.debug("secureSocket={}, applicationProtocol={}", secureSocket, applicationProtocol);
+                X509Certificate peerCertificate = peerCertificateRef.get();
                 if (peerCertificate == null) {
                     throw new IOException("Handshake failed with: " + record.hostName + ", remote=" + remote);
                 }
@@ -542,8 +546,6 @@ public class SSLProxyV2 implements Runnable {
             }
         }
     }
-
-    private X509Certificate peerCertificate;
 
     private Allowed redirect() {
         return new Allowed("127.0.0.1", serverSocket.getLocalPort());
